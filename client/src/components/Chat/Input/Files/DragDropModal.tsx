@@ -1,29 +1,15 @@
 import React, { useMemo } from 'react';
-import { useRecoilValue } from 'recoil';
 import { OGDialog, OGDialogTemplate } from '@librechat/client';
-import {
-  ImageUpIcon,
-  FileSearch,
-  FileType2Icon,
-  FileImageIcon,
-  TerminalSquareIcon,
-} from 'lucide-react';
+import { ImageUpIcon, FileType2Icon, FileImageIcon } from 'lucide-react';
 import {
   Providers,
   inferMimeType,
   EToolResources,
   EModelEndpoint,
   isBedrockDocumentType,
-  defaultAgentCapabilities,
   isDocumentSupportedProvider,
 } from 'librechat-data-provider';
-import {
-  useAgentToolPermissions,
-  useAgentCapabilities,
-  useGetAgentsConfig,
-  useLocalize,
-} from '~/hooks';
-import { ephemeralAgentByConvoId } from '~/store';
+import { useLocalize } from '~/hooks';
 import { useDragDropContext } from '~/Providers';
 
 interface DragDropModalProps {
@@ -42,22 +28,11 @@ interface FileOption {
 
 const DragDropModal = ({ onOptionSelect, setShowModal, files, isVisible }: DragDropModalProps) => {
   const localize = useLocalize();
-  const { agentsConfig } = useGetAgentsConfig();
-  /** TODO: Ephemeral Agent Capabilities
-   * Allow defining agent capabilities on a per-endpoint basis
-   * Use definition for agents endpoint for ephemeral agents
-   * */
-  const capabilities = useAgentCapabilities(agentsConfig?.capabilities ?? defaultAgentCapabilities);
-  const { conversationId, agentId, endpoint, endpointType, useResponsesApi } = useDragDropContext();
-  const ephemeralAgent = useRecoilValue(ephemeralAgentByConvoId(conversationId ?? ''));
-  const { fileSearchAllowedByAgent, codeAllowedByAgent, provider } = useAgentToolPermissions(
-    agentId,
-    ephemeralAgent,
-  );
+  const { endpoint, endpointType, useResponsesApi } = useDragDropContext();
 
   const options = useMemo(() => {
     const _options: FileOption[] = [];
-    let currentProvider = provider || endpoint;
+    let currentProvider = endpoint;
 
     // This will be removed in a future PR to formally normalize Providers comparisons to be case insensitive
     if (currentProvider?.toLowerCase() === Providers.OPENROUTER) {
@@ -116,40 +91,14 @@ const DragDropModal = ({ onOptionSelect, setShowModal, files, isVisible }: DragD
         condition: files.every((file) => getFileType(file)?.startsWith('image/')),
       });
     }
-    if (capabilities.fileSearchEnabled && fileSearchAllowedByAgent) {
-      _options.push({
-        label: localize('com_ui_upload_file_search'),
-        value: EToolResources.file_search,
-        icon: <FileSearch className="icon-md" />,
-      });
-    }
-    if (capabilities.codeEnabled && codeAllowedByAgent) {
-      _options.push({
-        label: localize('com_ui_upload_code_environment'),
-        value: EToolResources.execute_code,
-        icon: <TerminalSquareIcon className="icon-md" />,
-      });
-    }
-    if (capabilities.contextEnabled) {
-      _options.push({
-        label: localize('com_ui_upload_ocr_text'),
-        value: EToolResources.context,
-        icon: <FileType2Icon className="icon-md" />,
-      });
-    }
+    _options.push({
+      label: localize('com_ui_upload_ocr_text'),
+      value: EToolResources.context,
+      icon: <FileType2Icon className="icon-md" />,
+    });
 
     return _options;
-  }, [
-    files,
-    localize,
-    provider,
-    endpoint,
-    endpointType,
-    capabilities,
-    useResponsesApi,
-    codeAllowedByAgent,
-    fileSearchAllowedByAgent,
-  ]);
+  }, [files, localize, endpoint, endpointType, useResponsesApi]);
 
   if (!isVisible) {
     return null;

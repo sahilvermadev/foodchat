@@ -1,7 +1,6 @@
 import { EModelEndpoint } from 'librechat-data-provider';
 import type { TCustomConfig, TAgentsEndpoint, TAnthropicEndpoint } from 'librechat-data-provider';
 import type { AppConfig } from '~/types';
-import { azureAssistantsDefaults, assistantsConfigSetup } from './assistants';
 import { agentsConfigSetup } from './agents';
 import { azureConfigSetup } from './azure';
 import { vertexConfigSetup } from './vertex';
@@ -20,26 +19,6 @@ export const loadEndpoints = (
 
   if (endpoints?.[EModelEndpoint.azureOpenAI]) {
     loadedEndpoints[EModelEndpoint.azureOpenAI] = azureConfigSetup(config);
-  }
-
-  if (endpoints?.[EModelEndpoint.azureOpenAI]?.assistants) {
-    loadedEndpoints[EModelEndpoint.azureAssistants] = azureAssistantsDefaults();
-  }
-
-  if (endpoints?.[EModelEndpoint.azureAssistants]) {
-    loadedEndpoints[EModelEndpoint.azureAssistants] = assistantsConfigSetup(
-      config,
-      EModelEndpoint.azureAssistants,
-      loadedEndpoints[EModelEndpoint.azureAssistants],
-    );
-  }
-
-  if (endpoints?.[EModelEndpoint.assistants]) {
-    loadedEndpoints[EModelEndpoint.assistants] = assistantsConfigSetup(
-      config,
-      EModelEndpoint.assistants,
-      loadedEndpoints[EModelEndpoint.assistants],
-    );
   }
 
   loadedEndpoints[EModelEndpoint.agents] = agentsConfigSetup(config, agentsDefaults);

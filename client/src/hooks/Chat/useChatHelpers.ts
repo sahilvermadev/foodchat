@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { QueryKeys, isAssistantsEndpoint } from 'librechat-data-provider';
+import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilState, useResetRecoilState, useSetRecoilState } from 'recoil';
 import type { TMessage } from 'librechat-data-provider';
@@ -122,24 +122,20 @@ export default function useChatHelpers(index = 0, paramId?: string) {
   }, [getMessages, ask]);
 
   /**
-   * Stop generation - for non-assistants endpoints, calls abort endpoint first.
+   * Stop generation - calls abort endpoint first.
    * The abort endpoint will cause the backend to emit a `done` event with `aborted: true`,
    * which will be handled by the SSE event handler to clean up UI.
-   * Assistants endpoint has its own abort mechanism via useEventHandlers.abortConversation.
    */
   const stopGenerating = useCallback(async () => {
     const actualEndpoint = endpointType ?? endpoint;
-    const isAssistants = isAssistantsEndpoint(actualEndpoint);
     console.log('[useChatHelpers] stopGenerating called', {
       conversationId,
       endpoint,
       endpointType,
       actualEndpoint,
-      isAssistants,
     });
 
-    // For non-assistants endpoints (using resumable streams), call abort endpoint first
-    if (conversationId && !isAssistants) {
+    if (conversationId) {
       queryClient.setQueryData<ActiveJobsResponse>([QueryKeys.activeJobs], (old) => ({
         activeJobIds: (old?.activeJobIds ?? []).filter((id) => id !== conversationId),
       }));
@@ -157,8 +153,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
         clearAllSubmissions();
       }
     } else {
-      // For assistants endpoints, just clear submissions (existing behavior)
-      console.log('[useChatHelpers] Assistants endpoint, just clearing submissions');
+      console.log('[useChatHelpers] Missing conversation id, clearing submissions');
       clearAllSubmissions();
     }
   }, [conversationId, endpoint, endpointType, abortMutation, clearAllSubmissions, queryClient]);

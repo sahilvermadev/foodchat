@@ -2,6 +2,7 @@ import { useCallback, useState, useEffect, useRef, memo, startTransition } from 
 import type { ReactNode } from 'react';
 import { useRecoilState } from 'recoil';
 import { useForm } from 'react-hook-form';
+import { useLocation } from 'react-router-dom';
 import { useMediaQuery } from '@librechat/client';
 import type { ChatFormValues } from '~/common';
 import { ChatContext, ChatFormProvider, ActivePanelProvider } from '~/Providers';
@@ -13,7 +14,7 @@ import Sidebar from './Sidebar';
 import { cn } from '~/utils';
 import store from '~/store';
 
-const COLLAPSED_WIDTH = 52;
+const COLLAPSED_WIDTH = 64;
 const EXPANDED_MIN = 360;
 const TRANSITION_MS = 300;
 const EASING = 'cubic-bezier(0.2, 0, 0, 1)';
@@ -41,6 +42,7 @@ function SidebarChatProvider({ children }: { children: ReactNode }) {
 
 function UnifiedSidebar() {
   const localize = useLocalize();
+  const location = useLocation();
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const [expanded, setExpanded] = useRecoilState(store.sidebarExpanded);
   const [sidebarWidth, setSidebarWidth] = useState(getInitialWidth);
@@ -48,6 +50,9 @@ function UnifiedSidebar() {
   const resizeHandlers = useRef<{ move: (e: MouseEvent) => void; up: () => void } | null>(null);
 
   const links = useUnifiedSidebarLinks();
+  const isRecipeRoute =
+    location.pathname === '/recipes' || location.pathname.startsWith('/recipes/');
+  const isCookingLandingRoute = location.pathname === '/cook';
 
   const handleCollapse = useCallback(() => {
     startTransition(() => {
@@ -111,6 +116,12 @@ function UnifiedSidebar() {
   }, []);
 
   useEffect(() => {
+    if (isRecipeRoute) {
+      setExpanded(false);
+    }
+  }, [isRecipeRoute, setExpanded]);
+
+  useEffect(() => {
     return () => {
       if (resizeHandlers.current) {
         document.removeEventListener('mousemove', resizeHandlers.current.move);
@@ -148,7 +159,11 @@ function UnifiedSidebar() {
         >
           <SidebarChatProvider>
             <ActivePanelProvider>
-              <ExpandedPanel links={links} onCollapse={handleCollapse} />
+              <ExpandedPanel
+                links={links}
+                transparent={isCookingLandingRoute}
+                onCollapse={handleCollapse}
+              />
               <nav className="min-h-0 flex-1 overflow-hidden bg-surface-primary-alt">
                 <SidePanelNav links={links} />
               </nav>
@@ -196,6 +211,7 @@ function UnifiedSidebar() {
             onExpand={handleExpand}
             onResizeStart={handleResizeStart}
             onResizeKeyboard={handleResizeKeyboard}
+            transparent={isCookingLandingRoute}
           />
         </aside>
       </ActivePanelProvider>

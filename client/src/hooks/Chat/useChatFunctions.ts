@@ -1,6 +1,6 @@
 import { v4 } from 'uuid';
 import { cloneDeep } from 'lodash';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSetRecoilState, useResetRecoilState, useRecoilValue, useRecoilCallback } from 'recoil';
 import {
@@ -12,7 +12,6 @@ import {
   isAgentsEndpoint,
   parseCompactConvo,
   replaceSpecialVars,
-  isAssistantsEndpoint,
   getDefaultParamsEndpoint,
 } from 'librechat-data-provider';
 import type {
@@ -31,6 +30,7 @@ import useGetSender from '~/hooks/Conversations/useGetSender';
 import { logger, createDualMessageContent } from '~/utils';
 import store, { useGetEphemeralAgent } from '~/store';
 import { startupConfigKey } from '~/data-provider';
+import { getCookingNewChatPath } from '~/components/Cooking/artifact';
 import useUserKey from '~/hooks/Input/useUserKey';
 import { useAuthContext } from '~/hooks';
 
@@ -65,6 +65,7 @@ export default function useChatFunctions({
   setLatestMessage?: SetterOrUpdater<TMessage | null>;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const getSender = useGetSender();
   const { user } = useAuthContext();
   const queryClient = useQueryClient();
@@ -160,12 +161,12 @@ export default function useChatFunctions({
      *    a prior turn, not compose a new one).
      *  - Fresh submit → drain the per-convo atom into the message.
      */
-    const manualSkills =
-      overrideManualSkills != null
-        ? overrideManualSkills
-        : isRegenerate || isContinued || isEdited
-          ? []
-          : drainPendingManualSkills(conversationId ?? Constants.NEW_CONVO);
+    let manualSkills: string[] = [];
+    if (overrideManualSkills != null) {
+      manualSkills = overrideManualSkills;
+    } else if (!isRegenerate && !isContinued && !isEdited) {
+      manualSkills = drainPendingManualSkills(conversationId ?? Constants.NEW_CONVO);
+    }
     const isEditOrContinue = isEdited || isContinued;
 
     let currentMessages: TMessage[] | null = overrideMessages ?? getMessages() ?? [];
@@ -176,7 +177,6 @@ export default function useChatFunctions({
         user,
       });
     }
-
     // construct the query message
     // this is not a real messageId, it is used as placeholder before real messageId returned
     const intermediateId = overrideUserMessageId ?? v4();
@@ -196,7 +196,12 @@ export default function useChatFunctions({
       parentMessageId = Constants.NO_PARENT;
       currentMessages = [];
       conversationId = null;
-      navigate('/c/new', { state: { focusChat: true } });
+      navigate(
+        location.pathname.startsWith('/cook') ? getCookingNewChatPath(location.pathname) : '/c/new',
+        {
+          state: { focusChat: true },
+        },
+      );
     }
 
     const targetParentMessageId = isRegenerate ? messageId : latestMessage?.parentMessageId;
@@ -238,6 +243,12 @@ export default function useChatFunctions({
       },
       convo,
     ) as TEndpointOption;
+    if (location.pathname.startsWith('/cook')) {
+      endpointOption.clientOptions = {
+        ...endpointOption.clientOptions,
+        cookingBridge: true,
+      };
+    }
     if (endpoint !== EModelEndpoint.agents) {
       endpointOption.key = getExpiry();
       endpointOption.thread_id = thread_id;
@@ -322,18 +333,7 @@ export default function useChatFunctions({
       manualSkills: manualSkills.length > 0 ? manualSkills : undefined,
     };
 
-    if (isAssistantsEndpoint(endpoint)) {
-      initialResponse.model = conversation?.assistant_id ?? '';
-      initialResponse.text = '';
-      initialResponse.content = [
-        {
-          type: ContentTypes.TEXT,
-          [ContentTypes.TEXT]: {
-            value: '',
-          },
-        },
-      ];
-    } else if (endpoint != null) {
+    if (endpoint != null) {
       initialResponse.model = isAgentsEndpoint(endpoint)
         ? (conversation?.agent_id ?? '')
         : (conversation?.model ?? '');

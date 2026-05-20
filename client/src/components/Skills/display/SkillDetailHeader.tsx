@@ -7,7 +7,6 @@ import type { TSkill } from 'librechat-data-provider';
 import type { TranslationKeys } from '~/hooks';
 import { useLocalize, useAuthContext } from '~/hooks';
 import DeleteSkill from '../dialogs/DeleteSkill';
-import { ShareSkill } from '../buttons';
 
 const invocationLabelMap: Record<InvocationMode, TranslationKeys> = {
   [InvocationMode.auto]: 'com_ui_invocation_auto',
@@ -86,7 +85,6 @@ const SkillDetailHeader = ({ skill, showActions = true }: SkillDetailHeaderProps
       </div>
       {showActions && (
         <div className="flex shrink-0 items-center gap-2">
-          <ShareSkill skill={skill} />
           {isOwner && (
             <>
               <TooltipAnchor

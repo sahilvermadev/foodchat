@@ -15,7 +15,7 @@ import Container from '~/components/Chat/Messages/Content/Container';
 import ToolCall from '~/components/Chat/Messages/Content/ToolCall';
 import { MessageContext } from '~/Providers/MessageContext';
 import { subagentProgressByToolCallId } from '~/store';
-import MessageIcon from '~/components/Share/MessageIcon';
+import MessageIcon from '~/components/Chat/Messages/MessageIcon';
 import { useAgentsMapContext } from '~/Providers';
 import { AttachmentGroup } from './Attachment';
 import { useLocalize } from '~/hooks';

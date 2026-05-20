@@ -3,11 +3,7 @@ import * as r from '../roles';
 import * as p from '../permissions';
 import {
   Tools,
-  Assistant,
-  AssistantCreateParams,
-  AssistantUpdateParams,
   FunctionTool,
-  AssistantDocument,
   Agent,
   AgentCreateParams,
   AgentUpdateParams,
@@ -52,70 +48,6 @@ export type TGenTitleRequest = {
 export type TGenTitleResponse = {
   title: string;
 };
-
-export type PresetDeleteResponse = {
-  acknowledged: boolean;
-  deletedCount: number;
-};
-
-export type UpdatePresetOptions = MutationOptions<types.TPreset, types.TPreset>;
-
-export type DeletePresetOptions = MutationOptions<PresetDeleteResponse, types.TPreset | undefined>;
-
-/* Assistant mutations */
-
-export type AssistantAvatarVariables = {
-  assistant_id: string;
-  model: string;
-  formData: FormData;
-  postCreation?: boolean;
-  endpoint: types.AssistantsEndpoint;
-  version: number | string;
-};
-
-export type UpdateActionVariables = {
-  assistant_id: string;
-  functions: FunctionTool[];
-  metadata: ActionMetadata;
-  action_id?: string;
-  model: string;
-  endpoint: types.AssistantsEndpoint;
-  version: number | string;
-};
-
-export type UploadAssistantAvatarOptions = MutationOptions<Assistant, AssistantAvatarVariables>;
-
-export type CreateAssistantMutationOptions = MutationOptions<Assistant, AssistantCreateParams>;
-
-export type UpdateAssistantVariables = {
-  assistant_id: string;
-  data: AssistantUpdateParams;
-};
-
-export type UpdateAssistantMutationOptions = MutationOptions<Assistant, UpdateAssistantVariables>;
-
-export type DeleteAssistantBody = {
-  assistant_id: string;
-  model: string;
-  endpoint: types.AssistantsEndpoint;
-};
-
-export type DeleteAssistantMutationOptions = MutationOptions<
-  void,
-  Pick<DeleteAssistantBody, 'assistant_id'>
->;
-
-export type UpdateActionResponse = [AssistantDocument, Assistant, Action];
-export type UpdateActionOptions = MutationOptions<UpdateActionResponse, UpdateActionVariables>;
-
-export type DeleteActionVariables = {
-  endpoint: types.AssistantsEndpoint;
-  assistant_id: string;
-  action_id: string;
-  model: string;
-};
-
-export type DeleteActionOptions = MutationOptions<void, DeleteActionVariables>;
 
 /* Agent mutations */
 
@@ -283,11 +215,9 @@ export type UpdatePermVars<T> = {
   updates: Partial<T>;
 };
 
-export type UpdatePromptPermVars = UpdatePermVars<p.TPromptPermissions>;
 export type UpdateMemoryPermVars = UpdatePermVars<p.TMemoryPermissions>;
 export type UpdateAgentPermVars = UpdatePermVars<p.TAgentPermissions>;
 export type UpdatePeoplePickerPermVars = UpdatePermVars<p.TPeoplePickerPermissions>;
-export type UpdateMCPServersPermVars = UpdatePermVars<p.TMcpServersPermissions>;
 export type UpdateSkillPermVars = UpdatePermVars<p.TSkillPermissions>;
 
 export type UpdatePermResponse = r.TRole;
@@ -328,13 +258,6 @@ export type DeleteSkillFileOptions = MutationOptions<
   TDeleteSkillFileVariables
 >;
 
-export type UpdatePromptPermOptions = MutationOptions<
-  UpdatePermResponse,
-  UpdatePromptPermVars,
-  unknown,
-  types.TError | null | undefined
->;
-
 export type UpdateMemoryPermOptions = MutationOptions<
   UpdatePermResponse,
   UpdateMemoryPermVars,
@@ -356,13 +279,6 @@ export type UpdatePeoplePickerPermOptions = MutationOptions<
   types.TError | null | undefined
 >;
 
-export type UpdateMCPServersPermOptions = MutationOptions<
-  UpdatePermResponse,
-  UpdateMCPServersPermVars,
-  unknown,
-  types.TError | null | undefined
->;
-
 export type UpdateSkillPermOptions = MutationOptions<
   UpdatePermResponse,
   UpdateSkillPermVars,
@@ -375,15 +291,6 @@ export type UpdateRemoteAgentsPermVars = UpdatePermVars<p.TRemoteAgentsPermissio
 export type UpdateRemoteAgentsPermOptions = MutationOptions<
   UpdatePermResponse,
   UpdateRemoteAgentsPermVars,
-  unknown,
-  types.TError | null | undefined
->;
-
-export type UpdateMarketplacePermVars = UpdatePermVars<p.TMarketplacePermissions>;
-
-export type UpdateMarketplacePermOptions = MutationOptions<
-  UpdatePermResponse,
-  UpdateMarketplacePermVars,
   unknown,
   types.TError | null | undefined
 >;

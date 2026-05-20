@@ -39,7 +39,7 @@ export default function SkillsView() {
   }
 
   if (!hasAccess) {
-    return <Navigate to="/c/new" replace />;
+    return <Navigate to="/cook" replace />;
   }
 
   // No skill selected — empty state

@@ -6,8 +6,6 @@ import { normalizeEndpointName } from './utils';
 export const supportsFiles = {
   [EModelEndpoint.openAI]: true,
   [EModelEndpoint.google]: true,
-  [EModelEndpoint.assistants]: true,
-  [EModelEndpoint.azureAssistants]: true,
   [EModelEndpoint.agents]: true,
   [EModelEndpoint.azureOpenAI]: true,
   [EModelEndpoint.anthropic]: true,
@@ -399,7 +397,7 @@ export const mbToBytes = (mb: number): number => mb * megabyte;
 const defaultSizeLimit = mbToBytes(512);
 const defaultSkillImportSizeLimit = mbToBytes(50);
 const defaultTokenLimit = 100000;
-const assistantsFileConfig = {
+const agentsFileConfig = {
   fileLimit: 10,
   fileSizeLimit: defaultSizeLimit,
   totalSizeLimit: defaultSizeLimit,
@@ -409,9 +407,7 @@ const assistantsFileConfig = {
 
 export const fileConfig = {
   endpoints: {
-    [EModelEndpoint.assistants]: assistantsFileConfig,
-    [EModelEndpoint.azureAssistants]: assistantsFileConfig,
-    [EModelEndpoint.agents]: assistantsFileConfig,
+    [EModelEndpoint.agents]: agentsFileConfig,
     [EModelEndpoint.anthropic]: {
       fileLimit: 10,
       fileSizeLimit: defaultSizeLimit,
@@ -575,8 +571,6 @@ export function getEndpointFileConfig(params: {
   const standardEndpoints = new Set([
     'default',
     EModelEndpoint.agents,
-    EModelEndpoint.assistants,
-    EModelEndpoint.azureAssistants,
     EModelEndpoint.openAI,
     EModelEndpoint.azureOpenAI,
     EModelEndpoint.anthropic,

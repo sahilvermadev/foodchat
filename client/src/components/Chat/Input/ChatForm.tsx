@@ -2,15 +2,10 @@ import { memo, useRef, useMemo, useEffect, useState, useCallback } from 'react';
 import { useWatch } from 'react-hook-form';
 import { TextareaAutosize } from '@librechat/client';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { Constants, isAssistantsEndpoint, isAgentsEndpoint } from 'librechat-data-provider';
+import { Constants, isAgentsEndpoint } from 'librechat-data-provider';
 import type { TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter, ConvoGenerator } from '~/common';
-import {
-  useChatContext,
-  useChatFormContext,
-  useAddedChatContext,
-  useAssistantsMapContext,
-} from '~/Providers';
+import { useChatContext, useChatFormContext, useAddedChatContext } from '~/Providers';
 import {
   useTextarea,
   useAutoSave,
@@ -28,7 +23,6 @@ import { cn, removeFocusRings } from '~/utils';
 import TextareaHeader from './TextareaHeader';
 import PendingManualSkillsChips from './PendingManualSkillsChips';
 import SkillsCommand from './SkillsCommand';
-import PromptsCommand from './PromptsCommand';
 import AudioRecorder from './AudioRecorder';
 import CollapseChat from './CollapseChat';
 import StreamAudio from './StreamAudio';
@@ -95,8 +89,6 @@ const ChatForm = memo(function ChatForm({
     conversation: addedConvo,
     setConversation: setAddedConvo,
   } = useAddedChatContext();
-  const assistantMap = useAssistantsMapContext();
-
   const endpoint = useMemo(
     () => conversation?.endpointType ?? conversation?.endpoint,
     [conversation?.endpointType, conversation?.endpoint],
@@ -110,17 +102,7 @@ const ChatForm = memo(function ChatForm({
     () => (chatDirection != null ? chatDirection?.toLowerCase() === 'rtl' : false),
     [chatDirection],
   );
-  const invalidAssistant = useMemo(
-    () =>
-      isAssistantsEndpoint(endpoint) &&
-      (!(conversation?.assistant_id ?? '') ||
-        !assistantMap?.[endpoint ?? '']?.[conversation?.assistant_id ?? '']),
-    [conversation?.assistant_id, endpoint, assistantMap],
-  );
-  const disableInputs = useMemo(
-    () => requiresKey || invalidAssistant,
-    [requiresKey, invalidAssistant],
-  );
+  const disableInputs = requiresKey === true;
 
   const handleContainerClick = useCallback(() => {
     /** Check if the device is a touchscreen */
@@ -153,7 +135,7 @@ const ChatForm = memo(function ChatForm({
     isSubmitting,
   });
 
-  const { submitMessage, submitPrompt } = useSubmitMessage();
+  const { submitMessage } = useSubmitMessage();
 
   const handleKeyUp = useHandleKeyUp({
     index,
@@ -247,7 +229,6 @@ const ChatForm = memo(function ChatForm({
             textAreaRef={textAreaRef}
             commandChar="+"
             placeholder="com_ui_add_model_preset"
-            includeAssistants={false}
           />
           <Mention
             index={index}
@@ -255,7 +236,6 @@ const ChatForm = memo(function ChatForm({
             newConversation={newConversation}
             textAreaRef={textAreaRef}
           />
-          <PromptsCommand index={index} textAreaRef={textAreaRef} submitPrompt={submitPrompt} />
           <SkillsCommand
             index={index}
             textAreaRef={textAreaRef}
@@ -354,9 +334,7 @@ const ChatForm = memo(function ChatForm({
                 />
               </div>
               <BadgeRow
-                showEphemeralBadges={
-                  !!endpoint && !isAgentsEndpoint(endpoint) && !isAssistantsEndpoint(endpoint)
-                }
+                showEphemeralBadges={!!endpoint && !isAgentsEndpoint(endpoint)}
                 isSubmitting={isSubmitting}
                 conversationId={conversationId}
                 specName={conversation?.spec}

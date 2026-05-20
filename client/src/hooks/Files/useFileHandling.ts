@@ -8,12 +8,10 @@ import {
   Constants,
   EToolResources,
   mergeFileConfig,
-  isAssistantsEndpoint,
   getEndpointFileConfig,
-  defaultAssistantsVersion,
 } from 'librechat-data-provider';
 import debounce from 'lodash/debounce';
-import type { EModelEndpoint, TEndpointsConfig, TError } from 'librechat-data-provider';
+import type { EModelEndpoint, TError } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter } from '~/common';
 import type { TConversation } from 'librechat-data-provider';
 import { logger, validateFiles, cachePreview, getCachedPreview, removePreviewEntry } from '~/utils';
@@ -64,7 +62,6 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
   const { resizeImageIfNeeded } = useClientResize();
 
   const agent_id = params?.additionalMetadata?.agent_id ?? '';
-  const assistant_id = params?.additionalMetadata?.assistant_id ?? '';
   const endpointOverride = params?.endpointOverride;
   const endpointTypeOverride = params?.endpointTypeOverride;
   const endpointType = useMemo(
@@ -77,7 +74,7 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
   );
 
   const { data: fileConfig = null } = useGetFileConfig({
-    select: (data) => mergeFileConfig(data),
+    select: (data) => mergeFileConfig(data as Parameters<typeof mergeFileConfig>[0]),
   });
 
   const displayToast = useCallback(() => {
@@ -129,7 +126,6 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
             progress: 0.9,
             filepath: data.filepath,
           },
-          assistant_id ? true : false,
         );
 
         setTimeout(() => {
@@ -152,7 +148,6 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
               source: data.source,
               embedded: data.embedded,
             },
-            assistant_id ? true : false,
           );
         }, 300);
       },
@@ -211,46 +206,15 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
       }
     }
 
-    if (!isAssistantsEndpoint(endpointType ?? endpoint)) {
-      if (!agent_id) {
-        formData.append('message_file', 'true');
-      }
-      const tool_resource = extendedFile.tool_resource;
-      if (tool_resource != null) {
-        formData.append('tool_resource', tool_resource);
-      }
-      if (conversation?.agent_id != null && formData.get('agent_id') == null) {
-        formData.append('agent_id', conversation.agent_id);
-      }
-
-      uploadFile.mutate(formData);
-      return;
-    }
-
-    const convoModel = conversation?.model ?? '';
-    const convoAssistantId = conversation?.assistant_id ?? '';
-
-    if (!assistant_id) {
+    if (!agent_id) {
       formData.append('message_file', 'true');
     }
-
-    const endpointsConfig = queryClient.getQueryData<TEndpointsConfig>([QueryKeys.endpoints]);
-    const version = endpointsConfig?.[endpoint]?.version ?? defaultAssistantsVersion[endpoint];
-
-    if (!assistant_id && convoAssistantId) {
-      formData.append('version', version);
-      formData.append('model', convoModel);
-      formData.append('assistant_id', convoAssistantId);
+    const tool_resource = extendedFile.tool_resource;
+    if (tool_resource != null) {
+      formData.append('tool_resource', tool_resource);
     }
-
-    const formVersion = (formData.get('version') ?? '') as string;
-    if (!formVersion) {
-      formData.append('version', version);
-    }
-
-    const formModel = (formData.get('model') ?? '') as string;
-    if (!formModel) {
-      formData.append('model', convoModel);
+    if (conversation?.agent_id != null && formData.get('agent_id') == null) {
+      formData.append('agent_id', conversation.agent_id);
     }
 
     uploadFile.mutate(formData);

@@ -6,25 +6,18 @@ export * from './cdn';
 export * from './auth';
 /* API Keys */
 export * from './apiKeys';
-/* MCP */
-export * from './mcp/registry/MCPServersRegistry';
-export * from './mcp/MCPManager';
-export * from './mcp/connection';
-export * from './mcp/oauth';
-export * from './mcp/auth';
-export * from './mcp/zod';
-export * from './mcp/errors';
-export * from './mcp/cache';
-export * from './mcp/tools';
+/* Runtime MCP support used by the agent/tooling runtime. */
+export { MCPManager } from './mcp/MCPManager';
+export { MCPServersRegistry } from './mcp/registry/MCPServersRegistry';
+export { OAuthReconnectionManager } from './mcp/oauth/OAuthReconnectionManager';
+export { createMCPToolCacheService } from './mcp/tools';
 /* Utilities */
-export * from './mcp/utils';
 export * from './utils';
 export { default as Tokenizer, countTokens } from './utils/tokenizer';
 export type { EncodingName } from './utils/tokenizer';
 export * from './db/utils';
 /* OAuth */
 export * from './oauth';
-export * from './mcp/oauth/OAuthReconnectionManager';
 /* Crypto */
 export * from './crypto';
 /* Flow */
@@ -35,10 +28,14 @@ export * from './middleware';
 export * from './memory';
 /* Agents */
 export * from './agents';
-/* Prompts */
-export * from './prompts';
 /* Skills */
 export * from './skills';
+/* Cooking */
+export * from './cooking';
+/* Recipes */
+export * from './recipes';
+/* Preferences */
+export * from './preferences';
 /* Endpoints */
 export * from './endpoints';
 /* Files */
@@ -56,6 +53,5 @@ export * from './stream';
 /* Diagnostics */
 export { memoryDiagnostics } from './utils/memory';
 /* types */
-export type * from './mcp/types';
 export type * from './flow/types';
 export type * from './types';

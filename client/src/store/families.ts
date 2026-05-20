@@ -87,12 +87,6 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
       onSet(async (newValue, oldValue) => {
         const index = Number(node.key.split('__')[1]);
         logger.log('conversation', 'Setting conversation:', { index, newValue, oldValue });
-        if (newValue?.assistant_id != null && newValue.assistant_id) {
-          localStorage.setItem(
-            `${LocalStorageKeys.ASST_ID_PREFIX}${index}${newValue.endpoint}`,
-            newValue.assistant_id,
-          );
-        }
         if (newValue?.agent_id != null && !isEphemeralAgentId(newValue.agent_id)) {
           localStorage.setItem(`${LocalStorageKeys.AGENT_ID_PREFIX}${index}`, newValue.agent_id);
         }
@@ -205,14 +199,6 @@ const conversationAgentIdByIndex = selectorFamily<string | null, string | number
     (index: string | number) =>
     ({ get }) =>
       get(conversationByIndex(index))?.agent_id ?? null,
-});
-
-const conversationAssistantIdByIndex = selectorFamily<string | null, string | number>({
-  key: 'conversationAssistantIdByIndex',
-  get:
-    (index: string | number) =>
-    ({ get }) =>
-      get(conversationByIndex(index))?.assistant_id ?? null,
 });
 
 const presetByIndex = atomFamily<TPreset | null, string | number>({
@@ -500,7 +486,6 @@ export default {
   conversationModelByIndex,
   conversationSpecByIndex,
   conversationAgentIdByIndex,
-  conversationAssistantIdByIndex,
   conversationByKeySelector,
   useClearConvoState,
   useCreateConversationAtom,

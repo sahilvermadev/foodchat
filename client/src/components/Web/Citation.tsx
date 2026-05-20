@@ -26,6 +26,11 @@ interface FileCitationSource {
   title?: string;
 }
 
+const toSourceData = (source: FileCitationSource) => ({
+  ...source,
+  link: source.link ?? '',
+});
+
 function getFileCitationData(source?: FileCitationSource) {
   const isFileType = source?.refType === 'file' && source.fileId != null;
 
@@ -107,7 +112,7 @@ export function CompositeCitation(props: CompositeCitationProps) {
   return (
     <>
       <SourceHovercard
-        source={currentSource}
+        source={toSourceData(currentSource)}
         label={getCitationLabel()}
         onMouseEnter={() => setHoveredCitationId(citationId || null)}
         onMouseLeave={() => setHoveredCitationId(null)}
@@ -329,7 +334,7 @@ export function Citation(props: CitationComponentProps) {
   return (
     <>
       <SourceHovercard
-        source={refData}
+        source={toSourceData(refData)}
         label={getCitationLabel()}
         onMouseEnter={() => setHoveredCitationId(citationId || null)}
         onMouseLeave={() => setHoveredCitationId(null)}

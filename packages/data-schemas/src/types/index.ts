@@ -38,3 +38,7 @@ export * from './admin';
 export * from './web';
 /* MCP Servers */
 export * from './mcp';
+/* Cooking */
+export * from './cooking';
+/* Preferences */
+export * from './preferences';

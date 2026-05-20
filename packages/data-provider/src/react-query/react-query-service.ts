@@ -5,8 +5,6 @@ import type {
   QueryObserverResult,
 } from '@tanstack/react-query';
 import { Constants, initialModelsConfig } from '../config';
-import { defaultOrderQuery } from '../types/assistants';
-import { MCPServerConnectionStatusResponse } from '../types/queries';
 import * as dataService from '../data-service';
 import * as m from '../types/mutations';
 import * as q from '../types/queries';
@@ -144,15 +142,6 @@ export const useRevokeUserKeyMutation = (name: string): UseMutationResult<unknow
     onSuccess: () => {
       queryClient.invalidateQueries([QueryKeys.name, name]);
       queryClient.invalidateQueries([QueryKeys.models]);
-      if (s.isAssistantsEndpoint(name)) {
-        queryClient.invalidateQueries([QueryKeys.assistants, name, defaultOrderQuery]);
-        queryClient.invalidateQueries([QueryKeys.assistantDocs]);
-        queryClient.invalidateQueries([QueryKeys.assistants]);
-        queryClient.invalidateQueries([QueryKeys.assistant]);
-        queryClient.invalidateQueries([QueryKeys.mcpTools]);
-        queryClient.invalidateQueries([QueryKeys.actions]);
-        queryClient.invalidateQueries([QueryKeys.tools]);
-      }
     },
   });
 };
@@ -162,22 +151,6 @@ export const useRevokeAllUserKeysMutation = (): UseMutationResult<unknown> => {
   return useMutation(() => dataService.revokeAllUserKeys(), {
     onSuccess: () => {
       queryClient.invalidateQueries([QueryKeys.name]);
-      queryClient.invalidateQueries([
-        QueryKeys.assistants,
-        s.EModelEndpoint.assistants,
-        defaultOrderQuery,
-      ]);
-      queryClient.invalidateQueries([
-        QueryKeys.assistants,
-        s.EModelEndpoint.azureAssistants,
-        defaultOrderQuery,
-      ]);
-      queryClient.invalidateQueries([QueryKeys.assistantDocs]);
-      queryClient.invalidateQueries([QueryKeys.assistants]);
-      queryClient.invalidateQueries([QueryKeys.assistant]);
-      queryClient.invalidateQueries([QueryKeys.mcpTools]);
-      queryClient.invalidateQueries([QueryKeys.actions]);
-      queryClient.invalidateQueries([QueryKeys.tools]);
       queryClient.invalidateQueries([QueryKeys.models]);
     },
   });
@@ -193,34 +166,6 @@ export const useGetModelsQuery = (
     refetchOnMount: false,
     staleTime: Infinity,
     ...config,
-  });
-};
-
-export const useCreatePresetMutation = (): UseMutationResult<
-  s.TPreset,
-  unknown,
-  s.TPreset,
-  unknown
-> => {
-  const queryClient = useQueryClient();
-  return useMutation((payload: s.TPreset) => dataService.createPreset(payload), {
-    onSuccess: () => {
-      queryClient.invalidateQueries([QueryKeys.presets]);
-    },
-  });
-};
-
-export const useDeletePresetMutation = (): UseMutationResult<
-  m.PresetDeleteResponse,
-  unknown,
-  s.TPreset | undefined,
-  unknown
-> => {
-  const queryClient = useQueryClient();
-  return useMutation((payload: s.TPreset | undefined) => dataService.deletePreset(payload), {
-    onSuccess: () => {
-      queryClient.invalidateQueries([QueryKeys.presets]);
-    },
   });
 };
 
@@ -323,44 +268,6 @@ export const useUpdateUserPluginsMutation = (
     onSuccess: (...args) => {
       queryClient.invalidateQueries([QueryKeys.user]);
       onSuccess?.(...args);
-      if (args[1]?.action === 'uninstall' && args[1]?.pluginKey?.startsWith(Constants.mcp_prefix)) {
-        const serverName = args[1]?.pluginKey?.substring(Constants.mcp_prefix.length);
-        queryClient.invalidateQueries([QueryKeys.mcpAuthValues, serverName]);
-      }
-    },
-  });
-};
-
-export const useReinitializeMCPServerMutation = (): UseMutationResult<
-  {
-    success: boolean;
-    message: string;
-    serverName: string;
-    oauthRequired?: boolean;
-    oauthUrl?: string;
-  },
-  unknown,
-  string,
-  unknown
-> => {
-  const queryClient = useQueryClient();
-  return useMutation((serverName: string) => dataService.reinitializeMCPServer(serverName), {
-    onSuccess: () => {
-      queryClient.invalidateQueries([QueryKeys.mcpTools]);
-    },
-  });
-};
-
-export const useCancelMCPOAuthMutation = (): UseMutationResult<
-  m.CancelMCPOAuthResponse,
-  unknown,
-  string,
-  unknown
-> => {
-  const queryClient = useQueryClient();
-  return useMutation((serverName: string) => dataService.cancelMCPOAuth(serverName), {
-    onSuccess: () => {
-      queryClient.invalidateQueries([QueryKeys.mcpConnectionStatus]);
     },
   });
 };
@@ -508,24 +415,6 @@ export const useGetAllEffectivePermissionsQuery = (
     staleTime: 30000,
     ...config,
   });
-};
-
-export const useMCPServerConnectionStatusQuery = (
-  serverName: string,
-  config?: UseQueryOptions<MCPServerConnectionStatusResponse>,
-): QueryObserverResult<MCPServerConnectionStatusResponse> => {
-  return useQuery<MCPServerConnectionStatusResponse>(
-    [QueryKeys.mcpConnectionStatus, serverName],
-    () => dataService.getMCPServerConnectionStatus(serverName),
-    {
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: false,
-      staleTime: 10000, // 10 seconds
-      enabled: !!serverName,
-      ...config,
-    },
-  );
 };
 
 export const useGetAgentApiKeysQuery = (

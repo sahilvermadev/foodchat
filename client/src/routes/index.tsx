@@ -8,18 +8,16 @@ import {
   TwoFactorScreen,
   RequestPasswordReset,
 } from '~/components/Auth';
-import { MarketplaceProvider } from '~/components/Agents/MarketplaceContext';
-import AgentMarketplace from '~/components/Agents/Marketplace';
 import { OAuthSuccess, OAuthError } from '~/components/OAuth';
 import { AuthContextProvider } from '~/hooks/AuthContext';
 import RouteErrorBoundary from './RouteErrorBoundary';
 import StartupLayout from './Layouts/Startup';
 import LoginLayout from './Layouts/Login';
-import dashboardRoutes from './Dashboard';
 import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
-import Search from './Search';
 import Root from './Root';
+import { CookingSession, RecipeDetail, RecipeLibrary } from '~/components/Cooking';
+import { PreferencesWorkspace } from '~/components/Preferences';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -27,11 +25,6 @@ const AuthLayout = () => (
     <ApiErrorWatcher />
   </AuthContextProvider>
 );
-
-const loadInlinePromptsView = () =>
-  import('~/components/Prompts/layouts/InlinePromptsView').then((m) => ({
-    Component: m.default,
-  }));
 
 const loadSkillsView = () =>
   import('~/components/Skills/layouts/SkillsView').then((m) => ({
@@ -104,34 +97,37 @@ export const router = createBrowserRouter(
             },
           ],
         },
-        dashboardRoutes,
         {
           path: '/',
           element: <Root />,
           children: [
             {
               index: true,
-              element: <Navigate to="/c/new" replace={true} />,
+              element: <Navigate to="/cook" replace={true} />,
             },
             {
-              path: 'c/:conversationId?',
-              element: <ChatRoute />,
+              path: 'cook',
+              element: <ChatRoute mode="cooking" />,
             },
             {
-              path: 'search',
-              element: <Search />,
+              path: 'cook/sessions/:sessionId',
+              element: <CookingSession />,
             },
             {
-              path: 'prompts',
-              element: <Navigate to="/prompts/new" replace={true} />,
+              path: 'cook/:conversationId',
+              element: <ChatRoute mode="cooking" />,
             },
             {
-              path: 'prompts/new',
-              lazy: loadInlinePromptsView,
+              path: 'recipes',
+              element: <RecipeLibrary />,
             },
             {
-              path: 'prompts/:promptId',
-              lazy: loadInlinePromptsView,
+              path: 'recipes/:recipeId',
+              element: <RecipeDetail />,
+            },
+            {
+              path: 'preferences',
+              element: <PreferencesWorkspace />,
             },
             {
               path: 'skills',
@@ -144,22 +140,6 @@ export const router = createBrowserRouter(
             {
               path: 'skills/:skillId/edit',
               lazy: loadSkillsView,
-            },
-            {
-              path: 'agents',
-              element: (
-                <MarketplaceProvider>
-                  <AgentMarketplace />
-                </MarketplaceProvider>
-              ),
-            },
-            {
-              path: 'agents/:category',
-              element: (
-                <MarketplaceProvider>
-                  <AgentMarketplace />
-                </MarketplaceProvider>
-              ),
             },
           ],
         },

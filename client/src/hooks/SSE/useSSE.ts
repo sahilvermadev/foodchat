@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { v4 } from 'uuid';
 import { SSE } from 'sse.js';
 import { useSetRecoilState } from 'recoil';
+import { useQueryClient } from '@tanstack/react-query';
 import { request, createPayload, removeNullishValues } from 'librechat-data-provider';
+import { QueryKeys } from 'librechat-data-provider';
 import type { TMessage, TPayload, TSubmission, EventSubmission } from 'librechat-data-provider';
 import type { EventHandlerParams } from './useEventHandlers';
 import type { TResData } from '~/common';
@@ -19,6 +21,7 @@ type ChatHelpers = Pick<
   | 'setConversation'
   | 'setIsSubmitting'
   | 'newConversation'
+  | 'setLatestMessage'
   | 'resetLatestMessage'
 >;
 
@@ -29,6 +32,7 @@ export default function useSSE(
   runIndex = 0,
 ) {
   const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
+  const queryClient = useQueryClient();
 
   const { token, isAuthenticated } = useAuthContext();
   const [completed, setCompleted] = useState(new Set());
@@ -41,6 +45,7 @@ export default function useSSE(
     setConversation,
     setIsSubmitting,
     newConversation,
+    setLatestMessage,
     resetLatestMessage,
   } = chatHelpers;
 
@@ -64,6 +69,7 @@ export default function useSSE(
     setIsSubmitting,
     newConversation,
     setShowStopButton,
+    setLatestMessage,
     resetLatestMessage,
   });
 
@@ -102,11 +108,21 @@ export default function useSSE(
 
     sse.addEventListener('message', (e: MessageEvent) => {
       const data = JSON.parse(e.data);
+      if (data.preferencesUpdated) {
+        queryClient.invalidateQueries([QueryKeys.preferences]);
+      }
 
       if (data.final != null) {
+        if (data.cookingDraftUpdated && data.conversation?.conversationId) {
+          queryClient.invalidateQueries([
+            QueryKeys.cookingDraft,
+            'conversation',
+            data.conversation.conversationId,
+          ]);
+        }
         clearAllDrafts(submission.conversation?.conversationId);
         try {
-          finalHandler(data, submission as EventSubmission);
+          finalHandler(data, { ...submission, userMessage } as EventSubmission);
         } catch (error) {
           console.error('Error in finalHandler:', error);
           setIsSubmitting(false);

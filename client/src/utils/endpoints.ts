@@ -7,7 +7,6 @@ import {
   getEndpointField,
   isAgentsEndpoint,
   isEphemeralAgentId,
-  isAssistantsEndpoint,
 } from 'librechat-data-provider';
 import type * as t from 'librechat-data-provider';
 import type { LocalizeFunction, IconsRecord } from '~/common';
@@ -160,11 +159,6 @@ export function getConvoSwitchLogic(params: ConversationInitParams): InitiatedTe
   // Clear model for non-ephemeral agents - agents use their configured model internally
   clearModelForNonEphemeralAgent(template);
 
-  const isAssistantSwitch =
-    isAssistantsEndpoint(newEndpoint) &&
-    isAssistantsEndpoint(currentEndpoint) &&
-    currentEndpoint === newEndpoint;
-
   const conversationId = conversation?.conversationId ?? '';
   const isExistingConversation = !!(conversationId && conversationId !== 'new');
 
@@ -176,14 +170,14 @@ export function getConvoSwitchLogic(params: ConversationInitParams): InitiatedTe
 
   const hasEndpoint = modularEndpoints.has(currentEndpoint ?? '');
   const hasCurrentEndpointType = modularEndpoints.has(currentEndpointType ?? '');
-  const isCurrentModular = hasEndpoint || hasCurrentEndpointType || isAssistantSwitch;
+  const isCurrentModular = hasEndpoint || hasCurrentEndpointType;
 
   const hasNewEndpoint = modularEndpoints.has(newEndpoint ?? '');
   const hasNewEndpointType = modularEndpoints.has(newEndpointType ?? '');
-  const isNewModular = hasNewEndpoint || hasNewEndpointType || isAssistantSwitch;
+  const isNewModular = hasNewEndpoint || hasNewEndpointType;
 
   const endpointsMatch = currentEndpoint === newEndpoint;
-  const shouldSwitch = endpointsMatch || modularChat || isAssistantSwitch;
+  const shouldSwitch = endpointsMatch || modularChat;
 
   return {
     template,
@@ -381,30 +375,21 @@ export function getIconKey({
 
 export const getEntity = ({
   endpoint,
-  assistant_id,
   agent_id,
   agentsMap,
-  assistantMap,
 }: {
   endpoint: EModelEndpoint | string | null | undefined;
-  assistant_id: string | undefined;
   agent_id: string | undefined;
   agentsMap: t.TAgentsMap | undefined;
-  assistantMap: t.TAssistantsMap | undefined;
 }): {
-  entity: t.Agent | t.Assistant | undefined | null;
+  entity: t.Agent | undefined | null;
   isAgent: boolean;
-  isAssistant: boolean;
 } => {
   const isAgent = isAgentsEndpoint(endpoint);
-  const isAssistant = isAssistantsEndpoint(endpoint);
 
   if (isAgent) {
     const agent = agentsMap?.[agent_id ?? ''];
-    return { entity: agent, isAgent, isAssistant };
-  } else if (isAssistant) {
-    const assistant = assistantMap?.[endpoint ?? '']?.[assistant_id ?? ''];
-    return { entity: assistant, isAgent, isAssistant };
+    return { entity: agent, isAgent };
   }
-  return { entity: null, isAgent, isAssistant };
+  return { entity: null, isAgent };
 };

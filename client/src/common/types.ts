@@ -7,7 +7,6 @@ import type { ColumnDef } from '@tanstack/react-table';
 import type * as t from 'librechat-data-provider';
 import type { LucideIcon } from 'lucide-react';
 import type { TranslationKeys } from '~/hooks';
-import { MCPServerDefinition } from '~/hooks/MCP/useMCPServerManager';
 
 export function isEphemeralAgent(agentId: string | null | undefined): boolean {
   return isEphemeralAgentId(agentId);
@@ -26,11 +25,6 @@ export type CodeBarProps = {
   allowExecution?: boolean;
   codeRef: RefObject<HTMLElement>;
 };
-
-export enum PromptsEditorMode {
-  SIMPLE = 'simple',
-  ADVANCED = 'advanced',
-}
 
 export enum STTEndpoints {
   browser = 'browser',
@@ -173,37 +167,6 @@ export type ActionWithNullableMetadata = Omit<t.Action, 'metadata'> & {
   metadata: t.ActionMetadata | null;
 };
 
-export type AssistantPanelProps = {
-  index?: number;
-  action?: ActionWithNullableMetadata;
-  actions?: t.Action[];
-  assistant_id?: string;
-  activePanel?: string;
-  endpoint: t.AssistantsEndpoint;
-  version: number | string;
-  documentsMap: Map<string, t.AssistantDocument> | null;
-  setAction: React.Dispatch<React.SetStateAction<t.Action | undefined>>;
-  setCurrentAssistantId: React.Dispatch<React.SetStateAction<string | undefined>>;
-  setActivePanel: React.Dispatch<React.SetStateAction<Panel>>;
-};
-
-export type AgentPanelProps = {
-  index?: number;
-  agent_id?: string;
-  activePanel?: string;
-  mcp?: t.MCP;
-  mcps?: t.MCP[];
-  action?: t.Action;
-  actions?: t.Action[];
-  createMutation: UseMutationResult<t.Agent, Error, t.AgentCreateParams>;
-  setActivePanel: React.Dispatch<React.SetStateAction<Panel>>;
-  setMcp: React.Dispatch<React.SetStateAction<t.MCP | undefined>>;
-  setAction: React.Dispatch<React.SetStateAction<t.Action | undefined>>;
-  endpointsConfig?: t.TEndpointsConfig;
-  setCurrentAgentId: React.Dispatch<React.SetStateAction<string | undefined>>;
-  agentsConfig?: t.TAgentsEndpoint | null;
-};
-
 export interface MCPServerInfo {
   serverName: string;
   tools: t.AgentToolType[];
@@ -212,35 +175,6 @@ export interface MCPServerInfo {
   consumeOnly?: boolean;
   metadata: t.TPlugin;
 }
-
-export type AgentPanelContextType = {
-  action?: t.Action;
-  actions?: t.Action[];
-  setAction: React.Dispatch<React.SetStateAction<t.Action | undefined>>;
-  mcp?: t.MCP;
-  mcps?: t.MCP[];
-  setMcp: React.Dispatch<React.SetStateAction<t.MCP | undefined>>;
-  setMcps: React.Dispatch<React.SetStateAction<t.MCP[] | undefined>>;
-  activePanel?: string;
-  regularTools?: t.TPlugin[];
-  setActivePanel: React.Dispatch<React.SetStateAction<Panel>>;
-  setCurrentAgentId: React.Dispatch<React.SetStateAction<string | undefined>>;
-  agent_id?: string;
-  startupConfig?: t.TStartupConfig | null;
-  agentsConfig?: t.TAgentsEndpoint | null;
-  endpointsConfig?: t.TEndpointsConfig | null;
-  /** Pre-computed MCP server information indexed by server key */
-  mcpServersMap: Map<string, MCPServerInfo>;
-  availableMCPServers: MCPServerDefinition[];
-  availableMCPServersMap: t.MCPServersListResponse | undefined;
-};
-
-export type AgentModelPanelProps = {
-  agent_id?: string;
-  providers: Option[];
-  models: Record<string, string[] | undefined>;
-  setActivePanel: React.Dispatch<React.SetStateAction<Panel>>;
-};
 
 export type AugmentedColumnDef<TData, TValue> = ColumnDef<TData, TValue> & DataColumnMeta;
 

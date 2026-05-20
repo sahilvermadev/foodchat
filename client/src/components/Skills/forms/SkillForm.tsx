@@ -13,10 +13,8 @@ import type { TSkill, TSkillWarning, TUpdateSkillPayload } from 'librechat-data-
 import { useGetSkillQuery, useUpdateSkillMutation } from '~/data-provider';
 import { useLocalize, useSkillPermissions } from '~/hooks';
 import SkillContentEditor from './SkillContentEditor';
-import InvocationModePicker from './InvocationModePicker';
 import CategorySelector from './CategorySelector';
 import DeleteSkill from '../dialogs/DeleteSkill';
-import { ShareSkill } from '../buttons';
 import { cn } from '~/utils';
 
 interface SkillFormValues {
@@ -219,7 +217,6 @@ export default function SkillForm({ skillId }: SkillFormProps) {
             />
             <div className="flex shrink-0 items-center gap-2">
               <CategorySelector />
-              <ShareSkill skill={skill} />
               {permissions.canDelete && (
                 <DeleteSkill
                   skillId={skill._id}

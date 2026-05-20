@@ -5,6 +5,30 @@ import { QueryKeys, dataService } from 'librechat-data-provider';
 import type * as t from 'librechat-data-provider';
 import { logger } from '~/utils';
 
+function isOptimisticAssistantPlaceholder(message: t.TMessage): boolean {
+  return (
+    message.isCreatedByUser === false &&
+    message.error !== true &&
+    (message.children?.length ?? 0) === 0 &&
+    message.messageId?.endsWith('_') === true &&
+    !message.text?.trim()
+  );
+}
+
+export function shouldKeepOptimisticMessages({
+  fetchedMessages,
+  currentMessages,
+}: {
+  fetchedMessages?: t.TMessage[];
+  currentMessages?: t.TMessage[];
+}): boolean {
+  if (!fetchedMessages || !currentMessages || currentMessages.length <= fetchedMessages.length) {
+    return false;
+  }
+
+  return currentMessages.some(isOptimisticAssistantPlaceholder);
+}
+
 export const useGetMessagesByConvoId = <TData = t.TMessage[]>(
   id: string,
   config?: UseQueryOptions<t.TMessage[], unknown, TData>,
@@ -15,8 +39,23 @@ export const useGetMessagesByConvoId = <TData = t.TMessage[]>(
     [QueryKeys.messages, id],
     async () => {
       const result = await dataService.getMessagesByConvoId(id);
+      const currentMessages = queryClient.getQueryData<t.TMessage[]>([QueryKeys.messages, id]);
+      if (
+        shouldKeepOptimisticMessages({
+          fetchedMessages: result,
+          currentMessages,
+        })
+      ) {
+        logger.warn(
+          'messages',
+          `Messages query for convo ${id} returned fewer than optimistic cache; path: "${location.pathname}"`,
+          result,
+          currentMessages,
+        );
+        return currentMessages as t.TMessage[];
+      }
+
       if (!location.pathname.includes('/c/new') && result?.length === 1) {
-        const currentMessages = queryClient.getQueryData<t.TMessage[]>([QueryKeys.messages, id]);
         if (currentMessages?.length === 1) {
           return result;
         }

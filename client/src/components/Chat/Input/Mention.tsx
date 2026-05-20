@@ -8,7 +8,6 @@ import type { MentionOption, ConvoGenerator } from '~/common';
 import { useGetConversation, useLocalize, TranslationKeys } from '~/hooks';
 import useInitPopoverInput from '~/hooks/Input/useInitPopoverInput';
 import useSelectMention from '~/hooks/Input/useSelectMention';
-import { useAssistantsMapContext } from '~/Providers';
 import useMentions from '~/hooks/Input/useMentions';
 import { removeCharIfLast } from '~/utils';
 import MentionItem from './MentionItem';
@@ -22,7 +21,6 @@ type MentionProps = {
   textAreaRef: React.MutableRefObject<HTMLTextAreaElement | null>;
   commandChar?: string;
   placeholder?: TranslationKeys;
-  includeAssistants?: boolean;
 };
 
 function MentionContent({
@@ -31,11 +29,9 @@ function MentionContent({
   textAreaRef,
   commandChar = '@',
   placeholder = 'com_ui_mention',
-  includeAssistants = true,
 }: Omit<MentionProps, 'index'>) {
   const localize = useLocalize();
   const getConversation = useGetConversation(0);
-  const assistantsMap = useAssistantsMapContext();
   const setShowPopover = useSetRecoilState(popoverAtom);
   const {
     options,
@@ -45,12 +41,10 @@ function MentionContent({
     agentsList,
     modelsConfig,
     endpointsConfig,
-    assistantListMap,
-  } = useMentions({ assistantMap: assistantsMap || {}, includeAssistants });
+  } = useMentions();
   const { onSelectMention } = useSelectMention({
     presets,
     modelSpecs,
-    assistantsMap,
     endpointsConfig,
     getConversation,
     newConversation,
@@ -93,16 +87,6 @@ function MentionContent({
     if (mention.type === 'endpoint' && mention.value === EModelEndpoint.agents) {
       setSearchValue('');
       setInputOptions(agentsList ?? []);
-      setActiveIndex(0);
-      inputRef.current?.focus();
-    } else if (mention.type === 'endpoint' && mention.value === EModelEndpoint.assistants) {
-      setSearchValue('');
-      setInputOptions(assistantListMap[EModelEndpoint.assistants] ?? []);
-      setActiveIndex(0);
-      inputRef.current?.focus();
-    } else if (mention.type === 'endpoint' && mention.value === EModelEndpoint.azureAssistants) {
-      setSearchValue('');
-      setInputOptions(assistantListMap[EModelEndpoint.azureAssistants] ?? []);
       setActiveIndex(0);
       inputRef.current?.focus();
     } else if (mention.type === 'endpoint') {

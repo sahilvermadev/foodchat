@@ -47,13 +47,14 @@ export function DeleteConversationDialog({
   const { showToast } = useToastContext();
   const { newConversation } = useNewConvo();
   const { conversationId: currentConvoId } = useParams();
+  const newConversationPath = '/cook';
 
   const deleteMutation = useDeleteConversationMutation({
     onSuccess: () => {
       setShowDeleteDialog(false);
       if (currentConvoId === conversationId || currentConvoId === 'new') {
         newConversation();
-        navigate('/c/new', { replace: true });
+        navigate(newConversationPath, { replace: true });
       }
       setMenuOpen?.(false);
       retainView();

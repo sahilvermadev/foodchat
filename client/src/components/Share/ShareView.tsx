@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useContext } from 'react';
+import { memo, useCallback, useContext, useState } from 'react';
 import Cookies from 'js-cookie';
 import { useRecoilState } from 'recoil';
 import { useParams } from 'react-router-dom';
@@ -27,7 +27,7 @@ import Footer from '../Chat/Footer';
 import { cn } from '~/utils';
 import store from '~/store';
 
-function SharedView() {
+function ShareView() {
   const localize = useLocalize();
   const { data: config } = useGetStartupConfig();
   const { theme, setTheme } = useContext(ThemeContext);
@@ -35,16 +35,12 @@ function SharedView() {
   const { data, isLoading } = useGetSharedMessages(shareId ?? '');
   const dataTree = data && buildTree({ messages: data.messages });
   const messagesTree = dataTree?.length === 0 ? null : (dataTree ?? null);
-
   const [langcode, setLangcode] = useRecoilState(store.lang);
 
-  // configure document title
-  let docTitle = '';
-  if (config?.appTitle != null && data?.title != null) {
-    docTitle = `${data.title} | ${config.appTitle}`;
-  } else {
-    docTitle = data?.title ?? config?.appTitle ?? document.title;
-  }
+  const docTitle =
+    config?.appTitle != null && data?.title != null
+      ? `${data.title} | ${config.appTitle}`
+      : (data?.title ?? config?.appTitle ?? document.title);
 
   useDocumentTitle(docTitle);
 
@@ -190,7 +186,7 @@ function ShareHeader({
 
   return (
     <section className="mx-auto w-full px-2 pb-3 pt-4 md:px-5 md:pb-4 md:pt-6">
-      <div className="bg-surface-primary/80 relative mx-auto flex w-full max-w-[60rem] flex-col gap-3 rounded-2xl border border-border-light px-4 py-4 shadow-xl backdrop-blur md:gap-4 md:rounded-3xl md:px-6 md:py-5">
+      <div className="relative mx-auto flex w-full max-w-[60rem] flex-col gap-3 rounded-lg border border-border-light bg-surface-primary/80 px-4 py-4 shadow-xl backdrop-blur md:gap-4 md:px-6 md:py-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="min-w-0 space-y-1.5 md:space-y-2">
             <h1 className="line-clamp-2 break-words text-2xl font-semibold text-text-primary md:text-4xl">
@@ -212,7 +208,7 @@ function ShareHeader({
                 variant="outline"
                 aria-label={settingsLabel}
                 className={cn(
-                  'rounded-full border-border-medium text-sm text-text-primary transition-colors',
+                  'border-border-medium text-sm text-text-primary transition-colors',
                   isMobile
                     ? 'absolute bottom-4 right-4 justify-center p-0 shadow-lg'
                     : 'gap-2 self-start px-4 py-2',
@@ -235,7 +231,7 @@ function ShareHeader({
                 <div className="relative focus-within:z-[100]">
                   <ThemeSelector theme={theme} onChange={onThemeChange} portal={false} />
                 </div>
-                <div className="bg-border-medium/60 h-px w-full" />
+                <div className="h-px w-full bg-border-medium/60" />
                 <div className="relative focus-within:z-[100]">
                   <LangSelector langcode={langcode} onChange={onLangChange} portal={false} />
                 </div>
@@ -248,4 +244,4 @@ function ShareHeader({
   );
 }
 
-export default memo(SharedView);
+export default memo(ShareView);

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
-import { EModelEndpoint, alternateName, isAssistantsEndpoint } from 'librechat-data-provider';
+import { EModelEndpoint, alternateName } from 'librechat-data-provider';
 import {
   useRevokeUserKeyMutation,
   useRevokeAllUserKeysMutation,
@@ -33,8 +33,6 @@ const endpointComponents = {
   [EModelEndpoint.openAI]: OpenAIConfig,
   [EModelEndpoint.custom]: CustomConfig,
   [EModelEndpoint.azureOpenAI]: OpenAIConfig,
-  [EModelEndpoint.assistants]: OpenAIConfig,
-  [EModelEndpoint.azureAssistants]: OpenAIConfig,
   default: OtherConfig,
 };
 
@@ -42,8 +40,6 @@ const formSet: Set<string> = new Set([
   EModelEndpoint.openAI,
   EModelEndpoint.custom,
   EModelEndpoint.azureOpenAI,
-  EModelEndpoint.assistants,
-  EModelEndpoint.azureAssistants,
 ]);
 
 const EXPIRY = {
@@ -213,8 +209,7 @@ const SetKeyDialog = ({
       // TODO: handle other user provided options besides baseURL and apiKey
       methods.handleSubmit((data) => {
         const isAzure = endpoint === EModelEndpoint.azureOpenAI;
-        const isOpenAIBase =
-          isAzure || endpoint === EModelEndpoint.openAI || isAssistantsEndpoint(endpoint);
+        const isOpenAIBase = isAzure || endpoint === EModelEndpoint.openAI;
         if (isAzure) {
           data.apiKey = 'n/a';
         }

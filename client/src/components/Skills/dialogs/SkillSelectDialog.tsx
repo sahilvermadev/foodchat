@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Search, Check, EarthIcon, User, Plus, Star, ListFilter, X } from 'lucide-react';
+import { Search, Check, EarthIcon, User, Plus, Star, ListFilter, X, Tags } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { OGDialog, OGDialogContent } from '@librechat/client';
@@ -14,7 +14,6 @@ import {
   useSkillFavorites,
 } from '~/hooks';
 import { useListSkillsQuery } from '~/data-provider';
-import { CategoryIcon } from '~/components/Prompts';
 import { cn } from '~/utils';
 
 interface SkillSelectDialogProps {
@@ -132,7 +131,7 @@ function SkillCard({
       <div className="mt-auto flex w-full items-center gap-1.5 pt-2">
         {skill.category && (
           <span className="inline-flex items-center gap-1 rounded-full bg-surface-tertiary px-2 py-0.5 text-[10px] text-text-tertiary">
-            <CategoryIcon category={skill.category} className="size-2.5" />
+            <Tags className="size-2.5" aria-hidden="true" />
             {skill.category}
           </span>
         )}

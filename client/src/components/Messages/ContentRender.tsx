@@ -7,6 +7,10 @@ import { useAttachments, useLocalize, useMessageActions, useContentMetadata } fr
 import { cn, getHeaderPrefixForScreenReader, getMessageAriaLabel } from '~/utils';
 import ContentParts from '~/components/Chat/Messages/Content/ContentParts';
 import PlaceholderRow from '~/components/Chat/Messages/ui/PlaceholderRow';
+import PromptSuggestions, {
+  getCookingPromptSuggestions,
+} from '~/components/Cooking/PromptSuggestions';
+import WebSources, { getCookingWebSources } from '~/components/Cooking/WebSources';
 import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
 import HoverButtons from '~/components/Chat/Messages/HoverButtons';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
@@ -80,7 +84,15 @@ function areContentRenderPropsEqual(prev: ContentRenderProps, next: ContentRende
     prevMsg.feedback?.rating === nextMsg.feedback?.rating &&
     (prevMsg.attachments?.length ?? 0) === (nextMsg.attachments?.length ?? 0) &&
     (prevMsg.manualSkills?.length ?? 0) === (nextMsg.manualSkills?.length ?? 0) &&
-    (prevMsg.alwaysAppliedSkills?.length ?? 0) === (nextMsg.alwaysAppliedSkills?.length ?? 0)
+    (prevMsg.alwaysAppliedSkills?.length ?? 0) === (nextMsg.alwaysAppliedSkills?.length ?? 0) &&
+    getCookingPromptSuggestions(prevMsg).join('\n') ===
+      getCookingPromptSuggestions(nextMsg).join('\n') &&
+    getCookingWebSources(prevMsg)
+      .map((source) => source.url)
+      .join('\n') ===
+      getCookingWebSources(nextMsg)
+        .map((source) => source.url)
+        .join('\n')
   );
 }
 
@@ -100,6 +112,7 @@ const ContentRender = memo(function ContentRender({
     attachments: msg?.attachments,
   });
   const {
+    ask,
     edit,
     index,
     agent,
@@ -226,6 +239,13 @@ const ContentRender = memo(function ContentRender({
               conversationId={conversation?.conversationId}
               content={msg.content as Array<TMessageContentParts | undefined>}
             />
+            <PromptSuggestions
+              ask={ask}
+              message={msg}
+              isSubmitting={chatContext.isSubmitting}
+              isLatestMessage={isLatestMessage}
+            />
+            <WebSources message={msg} />
           </div>
           {hasNoChildren && isSubmitting ? (
             <PlaceholderRow />

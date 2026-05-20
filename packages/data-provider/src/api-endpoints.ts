@@ -1,4 +1,3 @@
-import type { AssistantsEndpoint } from './schemas';
 import * as q from './types/queries';
 import { ResourceType } from './accessPermissions';
 
@@ -131,10 +130,6 @@ export const search = (q: string, cursor?: string | null) =>
 
 export const searchEnabled = () => `${BASE_URL}/api/search/enable`;
 
-export const presets = () => `${BASE_URL}/api/presets`;
-
-export const deletePreset = () => `${BASE_URL}/api/presets/delete`;
-
 export const aiEndpoints = () => `${BASE_URL}/api/endpoints`;
 
 export const models = () => `${BASE_URL}/api/models`;
@@ -194,64 +189,33 @@ export const resendVerificationEmail = () => `${BASE_URL}/api/user/verify/resend
 
 export const plugins = () => `${BASE_URL}/api/plugins`;
 
-export const mcpReinitialize = (serverName: string) =>
-  `${BASE_URL}/api/mcp/${serverName}/reinitialize`;
-export const mcpConnectionStatus = () => `${BASE_URL}/api/mcp/connection/status`;
-export const mcpServerConnectionStatus = (serverName: string) =>
-  `${BASE_URL}/api/mcp/connection/status/${serverName}`;
-export const mcpAuthValues = (serverName: string) => {
-  return `${BASE_URL}/api/mcp/${serverName}/auth-values`;
-};
-
-export const cancelMCPOAuth = (serverName: string) => {
-  return `${BASE_URL}/api/mcp/oauth/cancel/${serverName}`;
-};
-
-export const mcpOAuthBind = (serverName: string) => `${BASE_URL}/api/mcp/${serverName}/oauth/bind`;
-
 export const actionOAuthBind = (actionId: string) =>
   `${BASE_URL}/api/actions/${actionId}/oauth/bind`;
 
 export const config = () => `${BASE_URL}/api/config`;
 
-export const prompts = () => `${BASE_URL}/api/prompts`;
+export const preferences = () => `${BASE_URL}/api/preferences`;
+export const preferencesChat = () => `${BASE_URL}/api/preferences/chat`;
 
-export const addPromptToGroup = (groupId: string) =>
-  `${BASE_URL}/api/prompts/groups/${groupId}/prompts`;
+const cookingRoot = `${BASE_URL}/api/cooking`;
+const recipesRoot = `${BASE_URL}/api/recipes`;
 
-export const assistants = ({
-  path = '',
-  options,
-  version,
-  endpoint,
-  isAvatar,
-}: {
-  path?: string;
-  options?: object;
-  endpoint?: AssistantsEndpoint;
-  version: number | string;
-  isAvatar?: boolean;
-}) => {
-  let url = isAvatar === true ? `${images()}/assistants` : `${BASE_URL}/api/assistants/v${version}`;
-
-  if (path && path !== '') {
-    url += `/${path}`;
-  }
-
-  if (endpoint) {
-    options = {
-      ...(options ?? {}),
-      endpoint,
-    };
-  }
-
-  if (options && Object.keys(options).length > 0) {
-    const queryParams = new URLSearchParams(options as Record<string, string>).toString();
-    url += `?${queryParams}`;
-  }
-
-  return url;
-};
+export const cookingDraftsGenerate = () => `${cookingRoot}/drafts/generate`;
+export const cookingDraftByConversation = (conversationId: string) =>
+  `${cookingRoot}/drafts/by-conversation/${encodeURIComponent(conversationId)}`;
+export const cookingDraft = (draftId: string) =>
+  `${cookingRoot}/drafts/${encodeURIComponent(draftId)}`;
+export const cookingSessions = () => `${cookingRoot}/sessions`;
+export const cookingSession = (sessionId: string) =>
+  `${cookingRoot}/sessions/${encodeURIComponent(sessionId)}`;
+export const cookingSessionEvents = (sessionId: string) =>
+  `${cookingRoot}/sessions/${encodeURIComponent(sessionId)}/events`;
+export const cookingSessionComplete = (sessionId: string) =>
+  `${cookingRoot}/sessions/${encodeURIComponent(sessionId)}/complete`;
+export const recipes = (query = '') => `${recipesRoot}${query ? `?${query}` : ''}`;
+export const recipe = (recipeId: string) => `${recipesRoot}/${encodeURIComponent(recipeId)}`;
+export const recipeByDraft = (draftId: string) =>
+  `${recipesRoot}/by-draft/${encodeURIComponent(draftId)}`;
 
 export const agents = ({ path = '', options }: { path?: string; options?: object }) => {
   let url = `${BASE_URL}/api/agents`;
@@ -270,15 +234,6 @@ export const agents = ({ path = '', options }: { path?: string; options?: object
 
 export const activeJobs = () => `${BASE_URL}/api/agents/chat/active`;
 
-export const mcp = {
-  tools: `${BASE_URL}/api/mcp/tools`,
-  servers: `${BASE_URL}/api/mcp/servers`,
-};
-
-export const mcpServer = (serverName: string) => `${BASE_URL}/api/mcp/servers/${serverName}`;
-
-export const revertAgentVersion = (agent_id: string) => `${agents({ path: `${agent_id}/revert` })}`;
-
 export const files = () => `${BASE_URL}/api/files`;
 export const fileUpload = () => `${BASE_URL}/api/files`;
 export const fileDelete = () => `${BASE_URL}/api/files`;
@@ -290,7 +245,6 @@ export const fileDownload = (userId: string, fileId: string) =>
 export const filePreview = (fileId: string) =>
   `${BASE_URL}/api/files/${encodeURIComponent(fileId)}/preview`;
 export const fileConfig = () => `${BASE_URL}/api/files/config`;
-export const agentFiles = (agentId: string) => `${BASE_URL}/api/files/agent/${agentId}`;
 
 export const images = () => `${files()}/images`;
 
@@ -308,61 +262,7 @@ export const textToSpeechVoices = () => `${textToSpeech()}/voices`;
 
 export const getCustomConfigSpeech = () => `${speech()}/config/get`;
 
-export const getPromptGroup = (_id: string) => `${prompts()}/groups/${_id}`;
-
-export const getPromptGroupsWithFilters = (filter: object) => {
-  let url = `${prompts()}/groups`;
-  // Filter out undefined/null values
-  const cleanedFilter = Object.entries(filter).reduce(
-    (acc, [key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        acc[key] = value;
-      }
-      return acc;
-    },
-    {} as Record<string, string>,
-  );
-
-  if (Object.keys(cleanedFilter).length > 0) {
-    const queryParams = new URLSearchParams(cleanedFilter).toString();
-    url += `?${queryParams}`;
-  }
-  return url;
-};
-
-export const getPromptsWithFilters = (filter: object) => {
-  let url = prompts();
-  if (Object.keys(filter).length > 0) {
-    const queryParams = new URLSearchParams(filter as Record<string, string>).toString();
-    url += `?${queryParams}`;
-  }
-  return url;
-};
-
-export const getPrompt = (_id: string) => `${prompts()}/${_id}`;
-
-export const getRandomPrompts = (limit: number, skip: number) =>
-  `${prompts()}/random?limit=${limit}&skip=${skip}`;
-
-export const postPrompt = prompts;
-
-export const updatePromptGroup = getPromptGroup;
-
-export const recordPromptGroupUsage = (groupId: string) => `${prompts()}/groups/${groupId}/use`;
-
-export const updatePromptLabels = (_id: string) => `${getPrompt(_id)}/labels`;
-
-export const updatePromptTag = (_id: string) => `${getPrompt(_id)}/tags/production`;
-
-export const deletePromptGroup = getPromptGroup;
-
-export const deletePrompt = ({ _id, groupId }: { _id: string; groupId: string }) => {
-  return `${prompts()}/${_id}?groupId=${groupId}`;
-};
-
 export const getCategories = () => `${BASE_URL}/api/categories`;
-
-export const getAllPromptGroups = () => `${prompts()}/all`;
 
 /* Skills */
 export const skills = () => `${BASE_URL}/api/skills`;
@@ -412,17 +312,12 @@ export const skillStates = () => `${BASE_URL}/api/user/settings/skills/active`;
 export const roles = () => `${BASE_URL}/api/roles`;
 export const adminRoles = () => `${BASE_URL}/api/admin/roles`;
 export const getRole = (roleName: string) => `${roles()}/${encodeURIComponent(roleName)}`;
-export const updatePromptPermissions = (roleName: string) => `${getRole(roleName)}/prompts`;
 export const updateMemoryPermissions = (roleName: string) => `${getRole(roleName)}/memories`;
 export const updateAgentPermissions = (roleName: string) => `${getRole(roleName)}/agents`;
 export const updatePeoplePickerPermissions = (roleName: string) =>
   `${getRole(roleName)}/people-picker`;
-export const updateMCPServersPermissions = (roleName: string) => `${getRole(roleName)}/mcp-servers`;
 export const updateRemoteAgentsPermissions = (roleName: string) =>
   `${getRole(roleName)}/remote-agents`;
-
-export const updateMarketplacePermissions = (roleName: string) =>
-  `${getRole(roleName)}/marketplace`;
 export const updateSkillPermissions = (roleName: string) => `${getRole(roleName)}/skills`;
 
 /* Conversation Tags */

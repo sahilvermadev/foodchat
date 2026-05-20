@@ -3,12 +3,19 @@ import { useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';
 import { Spinner } from '@librechat/client';
 import { useParams } from 'react-router-dom';
-import { Constants, buildTree } from 'librechat-data-provider';
+import { Constants, ContentTypes, buildTree } from 'librechat-data-provider';
 import type { TMessage } from 'librechat-data-provider';
 import type { ChatFormValues } from '~/common';
 import { ChatContext, AddedChatContext, ChatFormProvider, useFileMapContext } from '~/Providers';
-import { useAddedResponse, useResumeOnLoad, useAdaptiveSSE, useChatHelpers } from '~/hooks';
+import {
+  useAddedResponse,
+  useResumeOnLoad,
+  useAdaptiveSSE,
+  useChatHelpers,
+  useLocalize,
+} from '~/hooks';
 import ConversationStarters from './Input/ConversationStarters';
+import { getCookingChatDisplayText } from '~/components/Cooking/artifact';
 import { useGetMessagesByConvoId } from '~/data-provider';
 import MessagesView from './Messages/MessagesView';
 import Presentation from './Presentation';
@@ -17,6 +24,7 @@ import Landing from './Landing';
 import Header from './Header';
 import Footer from './Footer';
 import { cn } from '~/utils';
+import { useCookingChat } from '~/components/Cooking/CookingChatContext';
 import store from '~/store';
 
 function LoadingSpinner() {
@@ -29,10 +37,46 @@ function LoadingSpinner() {
   );
 }
 
-function ChatView({ index = 0 }: { index?: number }) {
-  const { conversationId } = useParams();
+function readMessagePartText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value && typeof value === 'object' && 'value' in value) {
+    const textValue = (value as { value?: unknown }).value;
+    return typeof textValue === 'string' ? textValue : '';
+  }
+  return '';
+}
+
+function getMessageDisplayText(message: TMessage): string {
+  const text = message.text?.trim();
+  if (text) {
+    return text;
+  }
+
+  return (
+    message.content
+      ?.map((part) => ('text' in part ? readMessagePartText(part.text) : ''))
+      .join('\n')
+      .trim() ?? ''
+  );
+}
+
+function ChatView({
+  index = 0,
+  conversationId: conversationIdOverride,
+  collapseRecipeMessages = false,
+}: {
+  index?: number;
+  conversationId?: string;
+  collapseRecipeMessages?: boolean;
+}) {
+  const params = useParams();
+  const conversationId = conversationIdOverride ?? params.conversationId;
   const rootSubmission = useRecoilValue(store.submissionByIndex(index));
   const centerFormOnLanding = useRecoilValue(store.centerFormOnLanding);
+  const localize = useLocalize();
+  const { isCookingChat } = useCookingChat();
 
   const methods = useForm<ChatFormValues>({
     defaultValues: { text: '' },
@@ -43,10 +87,28 @@ function ChatView({ index = 0 }: { index?: number }) {
   const { data: messagesTree = null, isLoading } = useGetMessagesByConvoId(conversationId ?? '', {
     select: useCallback(
       (data: TMessage[]) => {
-        const dataTree = buildTree({ messages: data, fileMap });
+        const messages = collapseRecipeMessages
+          ? data.map((message) => {
+              const text = getMessageDisplayText(message);
+              const chatText = getCookingChatDisplayText(
+                text,
+                localize('com_cooking_recipe_added_to_canvas'),
+              );
+              if (message.isCreatedByUser || message.error || !chatText) {
+                return message;
+              }
+
+              return {
+                ...message,
+                text: chatText,
+                content: [{ type: ContentTypes.TEXT as const, text: chatText }],
+              };
+            })
+          : data;
+        const dataTree = buildTree({ messages, fileMap });
         return dataTree?.length === 0 ? null : (dataTree ?? null);
       },
-      [fileMap],
+      [collapseRecipeMessages, fileMap, localize],
     ),
     enabled: !!fileMap,
   });
@@ -80,13 +142,20 @@ function ChatView({ index = 0 }: { index?: number }) {
     <ChatFormProvider {...methods}>
       <ChatContext.Provider value={chatHelpers}>
         <AddedChatContext.Provider value={addedChatHelpers}>
-          <Presentation>
-            <div className="relative flex h-full w-full flex-col">
-              <Header />
+          <Presentation transparentBackground={isLandingPage && isCookingChat}>
+            <div
+              className={cn(
+                'relative flex h-full w-full flex-col overflow-hidden',
+                isLandingPage && isCookingChat && 'bg-presentation',
+              )}
+            >
+              <div className="relative z-10">
+                <Header />
+              </div>
               <>
                 <div
                   className={cn(
-                    'flex flex-col',
+                    'relative z-10 flex flex-col',
                     isLandingPage
                       ? 'flex-1 items-center justify-end sm:justify-center'
                       : 'h-full overflow-y-auto',
@@ -103,7 +172,11 @@ function ChatView({ index = 0 }: { index?: number }) {
                     {isLandingPage ? <ConversationStarters /> : <Footer />}
                   </div>
                 </div>
-                {isLandingPage && <Footer />}
+                {isLandingPage && (
+                  <div className="relative z-10">
+                    <Footer />
+                  </div>
+                )}
               </>
             </div>
           </Presentation>

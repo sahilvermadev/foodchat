@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import {
   useMediaQuery,
@@ -18,10 +18,7 @@ const DEFAULT_ARTIFACT_PANEL_SIZE = 40;
 const SHARE_ARTIFACT_PANEL_STORAGE_KEY = 'share:artifacts-panel-size';
 const SHARE_ARTIFACT_PANEL_DEFAULT_KEY = 'share:artifacts-panel-size-default';
 
-/**
- * Gets the initial artifact panel size from localStorage or returns default
- */
-const getInitialArtifactPanelSize = () => {
+function getInitialArtifactPanelSize() {
   if (typeof window === 'undefined') {
     return DEFAULT_ARTIFACT_PANEL_SIZE;
   }
@@ -38,7 +35,7 @@ const getInitialArtifactPanelSize = () => {
   const stored = window.localStorage.getItem(SHARE_ARTIFACT_PANEL_STORAGE_KEY);
   const parsed = Number(stored);
   return Number.isFinite(parsed) ? parsed : DEFAULT_ARTIFACT_PANEL_SIZE;
-};
+}
 
 interface ShareArtifactsContainerProps {
   messages: TMessage[];
@@ -46,9 +43,6 @@ interface ShareArtifactsContainerProps {
   mainContent: React.ReactNode;
 }
 
-/**
- * Container component that manages artifact visibility and layout for shared conversations
- */
 export function ShareArtifactsContainer({
   messages,
   conversationId,
@@ -68,12 +62,10 @@ export function ShareArtifactsContainer({
       return null;
     }
 
-    const latestMessageText = getLatestText(latestMessage);
-
     return {
       isSubmitting: false,
       latestMessageId: latestMessage.messageId ?? null,
-      latestMessageText,
+      latestMessageText: getLatestText(latestMessage),
       conversationId: conversationId ?? null,
     };
   }, [messages, conversationId]);
@@ -144,9 +136,6 @@ interface ShareArtifactsPanelProps {
   contextValue: ArtifactsContextValue;
 }
 
-/**
- * Panel that renders the artifacts UI within a resizable container
- */
 function ShareArtifactsPanel({ contextValue }: ShareArtifactsPanelProps) {
   return (
     <ArtifactsProvider value={contextValue}>
@@ -159,9 +148,6 @@ function ShareArtifactsPanel({ contextValue }: ShareArtifactsPanelProps) {
   );
 }
 
-/**
- * Mobile overlay that displays artifacts in a fixed position
- */
 function ShareArtifactsOverlay({ contextValue }: ShareArtifactsPanelProps) {
   return (
     <div

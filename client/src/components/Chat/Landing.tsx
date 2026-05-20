@@ -2,10 +2,11 @@ import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { easings } from '@react-spring/web';
 import { EModelEndpoint } from 'librechat-data-provider';
 import { BirthdayIcon, TooltipAnchor, SplitText } from '@librechat/client';
-import { useChatContext, useAgentsMapContext, useAssistantsMapContext } from '~/Providers';
+import { useChatContext, useAgentsMapContext } from '~/Providers';
 import { useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import ConvoIcon from '~/components/Endpoints/ConvoIcon';
 import { useLocalize, useAuthContext } from '~/hooks';
+import { useCookingChat } from '~/components/Cooking/CookingChatContext';
 import { getIconEndpoint, getEntity } from '~/utils';
 
 const containerClassName =
@@ -30,11 +31,11 @@ function getTextSizeClass(text: string | undefined | null) {
 export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: boolean }) {
   const { conversation } = useChatContext();
   const agentsMap = useAgentsMapContext();
-  const assistantMap = useAssistantsMapContext();
   const { data: startupConfig } = useGetStartupConfig();
   const { data: endpointsConfig } = useGetEndpointsQuery();
   const { user } = useAuthContext();
   const localize = useLocalize();
+  const { isCookingChat } = useCookingChat();
 
   const [textHasMultipleLines, setTextHasMultipleLines] = useState(false);
   const [lineCount, setLineCount] = useState(1);
@@ -53,12 +54,10 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     });
   }, [conversation?.endpoint, conversation?.iconURL, endpointsConfig]);
 
-  const { entity, isAgent, isAssistant } = getEntity({
+  const { entity, isAgent } = getEntity({
     endpoint: endpointType,
     agentsMap,
-    assistantMap,
     agent_id: conversation?.agent_id,
-    assistant_id: conversation?.assistant_id,
   });
 
   const name = entity?.name ?? '';
@@ -132,10 +131,15 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     return margin;
   }, [lineCount, description, textHasMultipleLines, contentHeight]);
 
-  const greetingText =
-    typeof startupConfig?.interface?.customWelcome === 'string'
-      ? getGreeting()
-      : getGreeting() + (user?.name ? ', ' + user.name : '');
+  const greetingText = useMemo(() => {
+    if (isCookingChat) {
+      return localize('com_cooking_chat_landing');
+    }
+    if (typeof startupConfig?.interface?.customWelcome === 'string') {
+      return getGreeting();
+    }
+    return getGreeting() + (user?.name ? ', ' + user.name : '');
+  }, [getGreeting, isCookingChat, localize, startupConfig?.interface?.customWelcome, user?.name]);
 
   return (
     <div
@@ -145,28 +149,31 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
         <div
           className={`flex ${textHasMultipleLines ? 'flex-col' : 'flex-col md:flex-row'} items-center justify-center gap-2`}
         >
-          <div className={`relative size-10 justify-center ${textHasMultipleLines ? 'mb-2' : ''}`}>
-            <ConvoIcon
-              agentsMap={agentsMap}
-              assistantMap={assistantMap}
-              conversation={conversation}
-              endpointsConfig={endpointsConfig}
-              containerClassName={containerClassName}
-              context="landing"
-              className="h-2/3 w-2/3 text-black dark:text-white"
-              size={41}
-            />
-            {startupConfig?.showBirthdayIcon && (
-              <TooltipAnchor
-                className="absolute bottom-[27px] right-2"
-                description={localize('com_ui_happy_birthday')}
-                aria-label={localize('com_ui_happy_birthday')}
-              >
-                <BirthdayIcon />
-              </TooltipAnchor>
-            )}
-          </div>
-          {((isAgent || isAssistant) && name) || name ? (
+          {!isCookingChat && (
+            <div
+              className={`relative size-10 justify-center ${textHasMultipleLines ? 'mb-2' : ''}`}
+            >
+              <ConvoIcon
+                agentsMap={agentsMap}
+                conversation={conversation}
+                endpointsConfig={endpointsConfig}
+                containerClassName={containerClassName}
+                context="landing"
+                className="h-2/3 w-2/3 text-black dark:text-white"
+                size={41}
+              />
+              {startupConfig?.showBirthdayIcon && (
+                <TooltipAnchor
+                  className="absolute bottom-[27px] right-2"
+                  description={localize('com_ui_happy_birthday')}
+                  aria-label={localize('com_ui_happy_birthday')}
+                >
+                  <BirthdayIcon />
+                </TooltipAnchor>
+              )}
+            </div>
+          )}
+          {(isAgent && name) || name ? (
             <div className="flex flex-col items-center gap-0 p-2">
               <SplitText
                 key={`split-text-${name}`}

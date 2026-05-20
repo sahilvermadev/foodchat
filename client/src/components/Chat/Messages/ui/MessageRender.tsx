@@ -5,6 +5,10 @@ import type { TMessage } from 'librechat-data-provider';
 import type { TMessageProps, TMessageIcon, TMessageChatContext } from '~/common';
 import { cn, getHeaderPrefixForScreenReader, getMessageAriaLabel } from '~/utils';
 import MessageContent from '~/components/Chat/Messages/Content/MessageContent';
+import PromptSuggestions, {
+  getCookingPromptSuggestions,
+} from '~/components/Cooking/PromptSuggestions';
+import WebSources, { getCookingWebSources } from '~/components/Cooking/WebSources';
 import { useLocalize, useMessageActions, useContentMetadata } from '~/hooks';
 import PlaceholderRow from '~/components/Chat/Messages/ui/PlaceholderRow';
 import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
@@ -80,7 +84,15 @@ function areMessageRenderPropsEqual(prev: MessageRenderProps, next: MessageRende
     prevMsg.endpoint === nextMsg.endpoint &&
     prevMsg.iconURL === nextMsg.iconURL &&
     prevMsg.feedback?.rating === nextMsg.feedback?.rating &&
-    (prevMsg.files?.length ?? 0) === (nextMsg.files?.length ?? 0)
+    (prevMsg.files?.length ?? 0) === (nextMsg.files?.length ?? 0) &&
+    getCookingPromptSuggestions(prevMsg).join('\n') ===
+      getCookingPromptSuggestions(nextMsg).join('\n') &&
+    getCookingWebSources(prevMsg)
+      .map((source) => source.url)
+      .join('\n') ===
+      getCookingWebSources(nextMsg)
+        .map((source) => source.url)
+        .join('\n')
   );
 }
 
@@ -233,6 +245,13 @@ const MessageRender = memo(function MessageRender({
                 setSiblingIdx={setSiblingIdx ?? (() => ({}))}
               />
             </MessageContext.Provider>
+            <PromptSuggestions
+              ask={ask}
+              message={msg}
+              isSubmitting={chatContext.isSubmitting}
+              isLatestMessage={isLatestMessage}
+            />
+            <WebSources message={msg} />
           </div>
           {hasNoChildren && isSubmitting ? (
             <PlaceholderRow />

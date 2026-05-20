@@ -47,10 +47,6 @@ export function createLoadConfigModels(deps: LoadConfigModelsDeps) {
       modelsConfig[EModelEndpoint.azureOpenAI] = modelNames;
     }
 
-    if (azureConfig?.assistants && azureConfig.assistantModels) {
-      modelsConfig[EModelEndpoint.azureAssistants] = azureConfig.assistantModels;
-    }
-
     const bedrockConfig = appConfig.endpoints?.[EModelEndpoint.bedrock];
     if (bedrockConfig?.models && Array.isArray(bedrockConfig.models)) {
       modelsConfig[EModelEndpoint.bedrock] = bedrockConfig.models;

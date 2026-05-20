@@ -89,7 +89,6 @@ function SourceItem({ source, expanded = false }: SourceItemProps) {
           </Ariakit.HovercardDisclosure>
 
           <Ariakit.Hovercard
-            animated
             gutter={16}
             className={cn(
               'z-[999] w-[320px] max-w-[calc(100vw-2rem)] rounded-xl border border-border-medium bg-surface-secondary p-3 text-text-primary shadow-lg',
@@ -213,7 +212,7 @@ const FileItem = React.memo(function FileItem({
   const { showToast } = useToastContext();
 
   const { refetch: downloadFile } = useFileDownload(user?.id ?? '', file.file_id, {
-    source: file.source,
+    source: (file as { source?: string }).source ?? '',
   });
 
   // Extract error message logic to avoid duplication

@@ -125,7 +125,10 @@ export function createSharePolicyMiddleware({ getRoleByName, hasCapability }: Sh
       return null;
     }
 
-    const resourcePerms = role.permissions[permissionType] ?? {};
+    const permissionsByType = role.permissions as Partial<
+      Record<PermissionTypes, ShareResourcePermissions>
+    >;
+    const resourcePerms = permissionsByType[permissionType] ?? {};
     req.sharePermissionContext = {
       cacheKey,
       resourcePerms,

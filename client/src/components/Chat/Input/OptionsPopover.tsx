@@ -1,28 +1,21 @@
 import { useRef } from 'react';
-import { Save } from 'lucide-react';
 import { Portal, Content } from '@radix-ui/react-popover';
 import { Button, CrossIcon, useOnClickOutside } from '@librechat/client';
 import type { ReactNode } from 'react';
 import { cn, removeFocusOutlines } from '~/utils';
-import { useLocalize } from '~/hooks';
 
 type TOptionsPopoverProps = {
   children: ReactNode;
   visible: boolean;
-  saveAsPreset: () => void;
   closePopover: () => void;
   PopoverButtons: ReactNode;
-  presetsDisabled: boolean;
 };
 
 export default function OptionsPopover({
   children,
-  // endpoint,
   visible,
-  saveAsPreset,
   closePopover,
   PopoverButtons,
-  presetsDisabled,
 }: TOptionsPopoverProps) {
   const popoverRef = useRef(null);
   useOnClickOutside(
@@ -31,18 +24,11 @@ export default function OptionsPopover({
     ['dialog-template-content', 'shadcn-button', 'advanced-settings'],
     (_target) => {
       const target = _target as Element;
-      if (
-        target.id === 'presets-button' ||
-        (target.parentNode instanceof Element && target.parentNode.id === 'presets-button')
-      ) {
-        return false;
-      }
       const tagName = target.tagName;
       return tagName === 'path' || tagName === 'svg' || tagName === 'circle';
     },
   );
 
-  const localize = useLocalize();
   const cardStyle =
     'shadow-xl rounded-md min-w-[75px] font-normal bg-white border-black/10 border dark:bg-gray-700 text-black dark:text-white';
 
@@ -62,16 +48,6 @@ export default function OptionsPopover({
             )}
           >
             <div className="flex w-full items-center bg-gray-50 px-2 py-2 dark:bg-gray-700">
-              {presetsDisabled ? null : (
-                <Button
-                  type="button"
-                  className="h-auto w-[150px] justify-start rounded-md border border-gray-300/50 bg-transparent px-2 py-1 text-xs font-normal text-black hover:bg-gray-100 hover:text-black focus-visible:ring-1 focus-visible:ring-ring-primary dark:border-gray-600 dark:bg-transparent dark:text-white dark:hover:bg-gray-600 dark:focus-visible:ring-white"
-                  onClick={saveAsPreset}
-                >
-                  <Save className="mr-1 w-[14px]" />
-                  {localize('com_endpoint_save_as_preset')}
-                </Button>
-              )}
               {PopoverButtons}
               <Button
                 type="button"

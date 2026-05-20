@@ -2,16 +2,10 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useRecoilValue } from 'recoil';
 import { Button } from '@librechat/client';
 import { TriangleAlert } from 'lucide-react';
-import {
-  Constants,
-  dataService,
-  actionDelimiter,
-  actionDomainSeparator,
-} from 'librechat-data-provider';
+import { Constants, dataService, actionDelimiter, actionDomainSeparator } from 'librechat-data-provider';
 import type { TAttachment } from 'librechat-data-provider';
 import { useLocalize, useProgress, useExpandCollapse } from '~/hooks';
 import { ToolIcon, getToolIconType, isError } from './ToolOutput';
-import { useMCPIconMap } from '~/hooks/MCP';
 import { AttachmentGroup } from './Parts';
 import ToolCallInfo from './ToolCallInfo';
 import ProgressText from './ProgressText';
@@ -104,8 +98,7 @@ export default function ToolCall({
   }, [name, parsedAuthUrl]);
 
   const toolIconType = useMemo(() => getToolIconType(name), [name]);
-  const mcpIconMap = useMCPIconMap();
-  const mcpIconUrl = isMCPToolCall ? mcpIconMap.get(mcpServerName) : undefined;
+  const mcpIconUrl = undefined;
 
   const actionId = useMemo(() => {
     if (isMCPToolCall || !parsedAuthUrl) {
@@ -121,9 +114,7 @@ export default function ToolCall({
       return;
     }
     try {
-      if (isMCPToolCall && mcpServerName) {
-        await dataService.bindMCPOAuth(mcpServerName);
-      } else if (actionId) {
+      if (!isMCPToolCall && actionId) {
         await dataService.bindActionOAuth(actionId);
       }
     } catch (e) {

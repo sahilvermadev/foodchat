@@ -14,7 +14,6 @@ const HANDLED_RESOURCE_TYPES = {
   [ResourceType.AGENT]: 'deleteUserAgents',
   [ResourceType.REMOTE_AGENT]: 'deleteUserAgents',
   [ResourceType.PROMPTGROUP]: 'deleteUserPrompts',
-  [ResourceType.MCPSERVER]: 'deleteUserMcpServers',
   [ResourceType.SKILL]: 'deleteUserSkills',
 };
 
@@ -24,7 +23,8 @@ const HANDLED_RESOURCE_TYPES = {
  * a justification to prevent silent omissions.
  */
 const NO_USER_CLEANUP_NEEDED = new Set([
-  // Example: ResourceType.SYSTEM_TEMPLATE — public/system; not user-owned
+  // MCP server management is not exposed in this product surface.
+  ResourceType.MCPSERVER,
 ]);
 
 describe('deleteUserController - resource type coverage guard', () => {

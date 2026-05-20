@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, useMemo, memo, lazy, Suspense, useRef } from 'react';
-import { useSetRecoilState, useRecoilValue } from 'recoil';
+import { useCallback, useState, useMemo, memo, lazy, Suspense, useRef } from 'react';
+import { useSetRecoilState } from 'recoil';
 import { useMediaQuery } from '@librechat/client';
 import { PermissionTypes, Permissions } from 'librechat-data-provider';
 import type { InfiniteQueryObserverResult } from '@tanstack/react-query';
@@ -14,7 +14,6 @@ import {
 } from '~/hooks';
 import { useConversationsInfiniteQuery, useTitleGeneration } from '~/data-provider';
 import { Conversations } from '~/components/Conversations';
-import SearchBar from '~/components/Nav/SearchBar';
 import store from '~/store';
 
 const BookmarkNav = lazy(() => import('~/components/Nav/Bookmarks/BookmarkNav'));
@@ -35,20 +34,16 @@ const ConversationsSection = memo(() => {
     permission: Permissions.USE,
   });
 
-  const search = useRecoilValue(store.search);
-
-  const { data, fetchNextPage, isFetchingNextPage, isLoading, isFetching } =
-    useConversationsInfiniteQuery(
-      {
-        tags: tags.length === 0 ? undefined : tags,
-        search: search.debouncedQuery || undefined,
-      },
-      {
-        enabled: isAuthenticated,
-        staleTime: 30000,
-        cacheTime: 300000,
-      },
-    );
+  const { data, fetchNextPage, isFetchingNextPage, isLoading } = useConversationsInfiniteQuery(
+    {
+      tags: tags.length === 0 ? undefined : tags,
+    },
+    {
+      enabled: isAuthenticated,
+      staleTime: 30000,
+      cacheTime: 300000,
+    },
+  );
 
   const computedHasNextPage = useMemo(() => {
     if (data?.pages && data.pages.length > 0) {
@@ -88,20 +83,6 @@ const ConversationsSection = memo(() => {
     fetchNextPage();
   }, [isFetchingNextPage, computedHasNextPage, fetchNextPage]);
 
-  const [isSearchLoading, setIsSearchLoading] = useState(
-    !!search.query && (search.isTyping || isLoading || isFetching),
-  );
-
-  useEffect(() => {
-    if (search.isTyping) {
-      setIsSearchLoading(true);
-    } else if (!isLoading && !isFetching) {
-      setIsSearchLoading(false);
-    } else if (!!search.query && (isLoading || isFetching)) {
-      setIsSearchLoading(true);
-    }
-  }, [search.query, search.isTyping, isLoading, isFetching]);
-
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden pb-3"
@@ -114,7 +95,6 @@ const ConversationsSection = memo(() => {
             <BookmarkNav tags={tags} setTags={setTags} />
           </Suspense>
         )}
-        {search.enabled && <SearchBar isSmallScreen={isSmallScreen} />}
       </div>
       <div className="flex min-h-0 flex-grow flex-col overflow-hidden">
         <Conversations
@@ -124,7 +104,6 @@ const ConversationsSection = memo(() => {
           containerRef={conversationsRef}
           loadMoreConversations={loadMoreConversations}
           isLoading={isFetchingNextPage || showLoading || isLoading}
-          isSearchLoading={isSearchLoading}
           isChatsExpanded={isChatsExpanded}
           setIsChatsExpanded={setIsChatsExpanded}
         />

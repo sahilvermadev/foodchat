@@ -2,17 +2,35 @@ import type { AxiosResponse } from 'axios';
 import type * as t from './types';
 import * as endpoints from './api-endpoints';
 import * as a from './types/assistants';
-import * as ag from './types/agents';
 import * as m from './types/mutations';
 import * as q from './types/queries';
 import * as f from './types/files';
 import * as sk from './types/skills';
-import * as mcp from './types/mcpServers';
 import * as config from './config';
 import request from './request';
 import * as s from './schemas';
 import * as r from './roles';
 import * as permissions from './accessPermissions';
+import type {
+  CookingDraft,
+  CookingSession,
+  CookingSessionEvent,
+  GenerateCookingDraftRequest,
+  UpdateCookingDraftRequest,
+  StartCookingSessionRequest,
+  CompleteCookingSessionRequest,
+  SavedRecipe,
+  SavedRecipesQuery,
+  SavedRecipesResponse,
+  SaveRecipeRequest,
+  UpdateSavedRecipeRequest,
+} from './types/cooking';
+import type {
+  PreferencesChatRequest,
+  PreferencesChatResponse,
+  PreferencesDocument,
+  UpdatePreferencesRequest,
+} from './types/preferences';
 
 export function revokeUserKey(name: string): Promise<unknown> {
   return request.delete(endpoints.revokeUserKey(name));
@@ -32,6 +50,88 @@ export function getFavorites(): Promise<q.TUserFavorite[]> {
 
 export function updateFavorites(favorites: q.TUserFavorite[]): Promise<q.TUserFavorite[]> {
   return request.post(`${endpoints.apiBaseUrl()}/api/user/settings/favorites`, { favorites });
+}
+
+export function getPreferences(): Promise<PreferencesDocument> {
+  return request.get(endpoints.preferences());
+}
+
+export function updatePreferences(payload: UpdatePreferencesRequest): Promise<PreferencesDocument> {
+  return request.put(endpoints.preferences(), payload);
+}
+
+export function chatPreferences(payload: PreferencesChatRequest): Promise<PreferencesChatResponse> {
+  return request.post(endpoints.preferencesChat(), payload);
+}
+
+export function generateCookingDraft(payload: GenerateCookingDraftRequest): Promise<CookingDraft> {
+  return request.post(endpoints.cookingDraftsGenerate(), payload);
+}
+
+export function getCookingDraftByConversation(conversationId: string): Promise<CookingDraft> {
+  return request.get(endpoints.cookingDraftByConversation(conversationId));
+}
+
+export function updateCookingDraft(
+  draftId: string,
+  payload: UpdateCookingDraftRequest,
+): Promise<CookingDraft> {
+  return request.patch(endpoints.cookingDraft(draftId), payload);
+}
+
+export function startCookingSession(payload: StartCookingSessionRequest): Promise<CookingSession> {
+  return request.post(endpoints.cookingSessions(), payload);
+}
+
+export function getCookingSession(sessionId: string): Promise<CookingSession> {
+  return request.get(endpoints.cookingSession(sessionId));
+}
+
+export function appendCookingSessionEvent(
+  sessionId: string,
+  event: CookingSessionEvent,
+): Promise<CookingSession> {
+  return request.post(endpoints.cookingSessionEvents(sessionId), { event });
+}
+
+export function completeCookingSession(
+  sessionId: string,
+  payload: CompleteCookingSessionRequest,
+): Promise<CookingSession> {
+  return request.post(endpoints.cookingSessionComplete(sessionId), payload);
+}
+
+function savedRecipesQueryString(params: SavedRecipesQuery): string {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && String(value).trim()) {
+      query.set(key, String(value));
+    }
+  });
+  return query.toString();
+}
+
+export function saveRecipe(payload: SaveRecipeRequest): Promise<SavedRecipe> {
+  return request.post(endpoints.recipes(), payload);
+}
+
+export function getRecipes(params: SavedRecipesQuery = {}): Promise<SavedRecipesResponse> {
+  return request.get(endpoints.recipes(savedRecipesQueryString(params)));
+}
+
+export function getRecipe(recipeId: string): Promise<SavedRecipe> {
+  return request.get(endpoints.recipe(recipeId));
+}
+
+export function getSavedRecipeByDraft(draftId: string): Promise<SavedRecipe> {
+  return request.get(endpoints.recipeByDraft(draftId));
+}
+
+export function updateSavedRecipe(
+  recipeId: string,
+  payload: UpdateSavedRecipeRequest,
+): Promise<SavedRecipe> {
+  return request.patch(endpoints.recipe(recipeId), payload);
 }
 
 /**
@@ -114,22 +214,6 @@ export function deleteAgentApiKey(id: string): Promise<void> {
   return request.delete(endpoints.apiKeyById(id));
 }
 
-export function getPresets(): Promise<s.TPreset[]> {
-  return request.get(endpoints.presets());
-}
-
-export function createPreset(payload: s.TPreset): Promise<s.TPreset> {
-  return request.post(endpoints.presets(), payload);
-}
-
-export function updatePreset(payload: s.TPreset): Promise<s.TPreset> {
-  return request.post(endpoints.presets(), payload);
-}
-
-export function deletePreset(arg: s.TPreset | undefined): Promise<m.PresetDeleteResponse> {
-  return request.post(endpoints.deletePreset(), arg);
-}
-
 export function getSearchEnabled(): Promise<boolean> {
   return request.get(endpoints.searchEnabled());
 }
@@ -193,35 +277,9 @@ export const updateUserPlugins = (payload: t.TUpdateUserPlugins) => {
   return request.post(endpoints.userPlugins(), payload);
 };
 
-export const reinitializeMCPServer = (serverName: string) => {
-  return request.post(endpoints.mcpReinitialize(serverName));
-};
-
-export const bindMCPOAuth = (serverName: string): Promise<{ success: boolean }> => {
-  return request.post(endpoints.mcpOAuthBind(serverName));
-};
-
 export const bindActionOAuth = (actionId: string): Promise<{ success: boolean }> => {
   return request.post(endpoints.actionOAuthBind(actionId));
 };
-
-export const getMCPConnectionStatus = (): Promise<q.MCPConnectionStatusResponse> => {
-  return request.get(endpoints.mcpConnectionStatus());
-};
-
-export const getMCPServerConnectionStatus = (
-  serverName: string,
-): Promise<q.MCPServerConnectionStatusResponse> => {
-  return request.get(endpoints.mcpServerConnectionStatus(serverName));
-};
-
-export const getMCPAuthValues = (serverName: string): Promise<q.MCPAuthValuesResponse> => {
-  return request.get(endpoints.mcpAuthValues(serverName));
-};
-
-export function cancelMCPOAuth(serverName: string): Promise<m.CancelMCPOAuthResponse> {
-  return request.post(endpoints.cancelMCPOAuth(serverName), {});
-}
 
 /* Config */
 
@@ -239,152 +297,6 @@ export const getAIEndpoints = (): Promise<t.TEndpointsConfig> => {
 
 export const getModels = async (): Promise<t.TModelsConfig> => {
   return request.get(endpoints.models());
-};
-
-/* Assistants */
-
-export const createAssistant = ({
-  version,
-  ...data
-}: a.AssistantCreateParams): Promise<a.Assistant> => {
-  return request.post(endpoints.assistants({ version }), data);
-};
-
-export const getAssistantById = ({
-  endpoint,
-  assistant_id,
-  version,
-}: {
-  endpoint: s.AssistantsEndpoint;
-  assistant_id: string;
-  version: number | string | number;
-}): Promise<a.Assistant> => {
-  return request.get(
-    endpoints.assistants({
-      path: assistant_id,
-      endpoint,
-      version,
-    }),
-  );
-};
-
-export const updateAssistant = ({
-  assistant_id,
-  data,
-  version,
-}: {
-  assistant_id: string;
-  data: a.AssistantUpdateParams;
-  version: number | string;
-}): Promise<a.Assistant> => {
-  return request.patch(
-    endpoints.assistants({
-      path: assistant_id,
-      version,
-    }),
-    data,
-  );
-};
-
-export const deleteAssistant = ({
-  assistant_id,
-  model,
-  endpoint,
-  version,
-}: m.DeleteAssistantBody & { version: number | string }): Promise<void> => {
-  return request.delete(
-    endpoints.assistants({
-      path: assistant_id,
-      options: { model, endpoint },
-      version,
-    }),
-  );
-};
-
-export const listAssistants = (
-  params: a.AssistantListParams,
-  version: number | string,
-): Promise<a.AssistantListResponse> => {
-  return request.get(
-    endpoints.assistants({
-      version,
-      options: params,
-    }),
-  );
-};
-
-export function getAssistantDocs({
-  endpoint,
-  version,
-}: {
-  endpoint: s.AssistantsEndpoint | string;
-  version: number | string;
-}): Promise<a.AssistantDocument[]> {
-  if (!s.isAssistantsEndpoint(endpoint)) {
-    return Promise.resolve([]);
-  }
-  return request.get(
-    endpoints.assistants({
-      path: 'documents',
-      version,
-      options: { endpoint },
-      endpoint: endpoint as s.AssistantsEndpoint,
-    }),
-  );
-}
-
-/* Tools */
-
-export const getAvailableTools = (
-  _endpoint: s.AssistantsEndpoint | s.EModelEndpoint.agents,
-  version?: number | string,
-): Promise<s.TPlugin[]> => {
-  let path = '';
-  if (s.isAssistantsEndpoint(_endpoint)) {
-    const endpoint = _endpoint as s.AssistantsEndpoint;
-    path = endpoints.assistants({
-      path: 'tools',
-      endpoint: endpoint,
-      version: version ?? config.defaultAssistantsVersion[endpoint],
-    });
-  } else {
-    path = endpoints.agents({
-      path: 'tools',
-    });
-  }
-
-  return request.get(path);
-};
-
-/* MCP Tools - Decoupled from regular tools */
-
-export const getMCPTools = (): Promise<q.MCPServersResponse> => {
-  return request.get(endpoints.mcp.tools);
-};
-
-export const getVerifyAgentToolAuth = (
-  params: q.VerifyToolAuthParams,
-): Promise<q.VerifyToolAuthResponse> => {
-  return request.get(
-    endpoints.agents({
-      path: `tools/${params.toolId}/auth`,
-    }),
-  );
-};
-
-export const callTool = <T extends m.ToolId>({
-  toolId,
-  toolParams,
-}: {
-  toolId: T;
-  toolParams: m.ToolParams<T>;
-}): Promise<m.ToolCallResponse> => {
-  return request.post(
-    endpoints.agents({
-      path: `tools/${toolId}/call`,
-    }),
-    toolParams,
-  );
 };
 
 export const getToolCalls = (params: q.GetToolCallParams): Promise<q.ToolCallResults> => {
@@ -418,10 +330,6 @@ export const getFilePreview = (fileId: string): Promise<f.TFilePreview> => {
   return request.get(endpoints.filePreview(fileId));
 };
 
-export const getAgentFiles = (agentId: string): Promise<f.TFile[]> => {
-  return request.get(endpoints.agentFiles(agentId));
-};
-
 export const getFileConfig = (): Promise<f.FileConfig> => {
   return request.get(`${endpoints.files()}/config`);
 };
@@ -439,222 +347,6 @@ export const uploadFile = (data: FormData, signal?: AbortSignal | null): Promise
   return request.postMultiPart(endpoints.files(), data, requestConfig);
 };
 
-/* actions */
-
-export const updateAction = (data: m.UpdateActionVariables): Promise<m.UpdateActionResponse> => {
-  const { assistant_id, version, ...body } = data;
-  return request.post(
-    endpoints.assistants({
-      path: `actions/${assistant_id}`,
-      version,
-    }),
-    body,
-  );
-};
-
-export function getActions(): Promise<ag.Action[]> {
-  return request.get(
-    endpoints.agents({
-      path: 'actions',
-    }),
-  );
-}
-
-export const deleteAction = async ({
-  assistant_id,
-  action_id,
-  model,
-  version,
-  endpoint,
-}: m.DeleteActionVariables & { version: number | string }): Promise<void> =>
-  request.delete(
-    endpoints.assistants({
-      path: `actions/${assistant_id}/${action_id}/${model}`,
-      version,
-      endpoint,
-    }),
-  );
-
-/**
- * Agents
- */
-
-export const createAgent = ({ ...data }: a.AgentCreateParams): Promise<a.Agent> => {
-  return request.post(endpoints.agents({}), data);
-};
-
-export const getAgentById = ({ agent_id }: { agent_id: string }): Promise<a.Agent> => {
-  return request.get(
-    endpoints.agents({
-      path: agent_id,
-    }),
-  );
-};
-
-export const getExpandedAgentById = ({ agent_id }: { agent_id: string }): Promise<a.Agent> => {
-  return request.get(
-    endpoints.agents({
-      path: `${agent_id}/expanded`,
-    }),
-  );
-};
-
-export const updateAgent = ({
-  agent_id,
-  data,
-}: {
-  agent_id: string;
-  data: a.AgentUpdateParams;
-}): Promise<a.Agent> => {
-  return request.patch(
-    endpoints.agents({
-      path: agent_id,
-    }),
-    data,
-  );
-};
-
-export const duplicateAgent = ({
-  agent_id,
-}: m.DuplicateAgentBody): Promise<{ agent: a.Agent; actions: ag.Action[] }> => {
-  return request.post(
-    endpoints.agents({
-      path: `${agent_id}/duplicate`,
-    }),
-  );
-};
-
-export const deleteAgent = ({ agent_id }: m.DeleteAgentBody): Promise<void> => {
-  return request.delete(
-    endpoints.agents({
-      path: agent_id,
-    }),
-  );
-};
-
-export const listAgents = (params: a.AgentListParams): Promise<a.AgentListResponse> => {
-  return request.get(
-    endpoints.agents({
-      options: params,
-    }),
-  );
-};
-
-export const revertAgentVersion = ({
-  agent_id,
-  version_index,
-}: {
-  agent_id: string;
-  version_index: number;
-}): Promise<a.Agent> => request.post(endpoints.revertAgentVersion(agent_id), { version_index });
-
-/* Marketplace */
-
-/**
- * Get agent categories with counts for marketplace tabs
- */
-export const getAgentCategories = (): Promise<t.TMarketplaceCategory[]> => {
-  return request.get(endpoints.agents({ path: 'categories' }));
-};
-
-/**
- * Unified marketplace agents endpoint with query string controls
- */
-export const getMarketplaceAgents = (params: {
-  requiredPermission: number;
-  category?: string;
-  search?: string;
-  limit?: number;
-  cursor?: string;
-  promoted?: 0 | 1;
-}): Promise<a.AgentListResponse> => {
-  return request.get(
-    endpoints.agents({
-      // path: 'marketplace',
-      options: params,
-    }),
-  );
-};
-
-/* Tools */
-
-export const getAvailableAgentTools = (): Promise<s.TPlugin[]> => {
-  return request.get(
-    endpoints.agents({
-      path: 'tools',
-    }),
-  );
-};
-
-/* Actions */
-
-export const updateAgentAction = (
-  data: m.UpdateAgentActionVariables,
-): Promise<m.UpdateAgentActionResponse> => {
-  const { agent_id, ...body } = data;
-  return request.post(
-    endpoints.agents({
-      path: `actions/${agent_id}`,
-    }),
-    body,
-  );
-};
-
-export const deleteAgentAction = async ({
-  agent_id,
-  action_id,
-}: m.DeleteAgentActionVariables): Promise<void> =>
-  request.delete(
-    endpoints.agents({
-      path: `actions/${agent_id}/${action_id}`,
-    }),
-  );
-
-/**
- * MCP Servers
- */
-
-/**
- *
- * Ensure and List loaded mcp server configs from the cache Enriched with effective permissions.
- */
-export const getMCPServers = async (): Promise<mcp.MCPServersListResponse> => {
-  return request.get(endpoints.mcp.servers);
-};
-
-/**
- * Get a single MCP server by ID
- */
-export const getMCPServer = async (serverName: string): Promise<mcp.MCPServerDBObjectResponse> => {
-  return request.get(endpoints.mcpServer(serverName));
-};
-
-/**
- * Create a new MCP server
- */
-export const createMCPServer = async (
-  data: mcp.MCPServerCreateParams,
-): Promise<mcp.MCPServerDBObjectResponse> => {
-  return request.post(endpoints.mcp.servers, data);
-};
-
-/**
- * Update an existing MCP server
- */
-export const updateMCPServer = async (
-  serverName: string,
-  data: mcp.MCPServerUpdateParams,
-): Promise<mcp.MCPServerDBObjectResponse> => {
-  return request.patch(endpoints.mcpServer(serverName), data);
-};
-
-/**
- * Delete an MCP server
- */
-export const deleteMCPServer = async (serverName: string): Promise<{ success: boolean }> => {
-  return request.delete(endpoints.mcpServer(serverName));
-};
-
 /**
  * Imports a conversations file.
  *
@@ -667,25 +359,6 @@ export const importConversationsFile = (data: FormData): Promise<t.TImportRespon
 
 export const uploadAvatar = (data: FormData): Promise<f.AvatarUploadResponse> => {
   return request.postMultiPart(endpoints.avatar(), data);
-};
-
-export const uploadAssistantAvatar = (data: m.AssistantAvatarVariables): Promise<a.Assistant> => {
-  return request.postMultiPart(
-    endpoints.assistants({
-      isAvatar: true,
-      path: `${data.assistant_id}/avatar`,
-      options: { model: data.model, endpoint: data.endpoint },
-      version: data.version,
-    }),
-    data.formData,
-  );
-};
-
-export const uploadAgentAvatar = (data: m.AgentAvatarVariables): Promise<a.Agent> => {
-  return request.postMultiPart(
-    `${endpoints.images()}/agents/${data.agent_id}/avatar`,
-    data.formData,
-  );
 };
 
 export const getFileDownload = async (userId: string, file_id: string): Promise<AxiosResponse> => {
@@ -836,75 +509,8 @@ export function getMessagesByConvoId(conversationId: string): Promise<s.TMessage
   return request.get(endpoints.messages({ conversationId }));
 }
 
-export function getPrompt(id: string): Promise<{ prompt: t.TPrompt }> {
-  return request.get(endpoints.getPrompt(id));
-}
-
-export function getPrompts(filter: t.TPromptsWithFilterRequest): Promise<t.TPrompt[]> {
-  return request.get(endpoints.getPromptsWithFilters(filter));
-}
-
-export function getAllPromptGroups(): Promise<q.AllPromptGroupsResponse> {
-  return request.get(endpoints.getAllPromptGroups());
-}
-
-export function getPromptGroups(
-  filter: t.TPromptGroupsWithFilterRequest,
-): Promise<t.PromptGroupListResponse> {
-  return request.get(endpoints.getPromptGroupsWithFilters(filter));
-}
-
-export function getPromptGroup(id: string): Promise<t.TPromptGroup> {
-  return request.get(endpoints.getPromptGroup(id));
-}
-
-export function createPrompt(payload: t.TCreatePrompt): Promise<t.TCreatePromptResponse> {
-  return request.post(endpoints.postPrompt(), payload);
-}
-
-export function addPromptToGroup(
-  groupId: string,
-  payload: t.TCreatePrompt,
-): Promise<t.TCreatePromptResponse> {
-  return request.post(endpoints.addPromptToGroup(groupId), payload);
-}
-
-export function updatePromptGroup(
-  variables: t.TUpdatePromptGroupVariables,
-): Promise<t.TUpdatePromptGroupResponse> {
-  return request.patch(endpoints.updatePromptGroup(variables.id), variables.payload);
-}
-
-export function recordPromptGroupUsage(groupId: string): Promise<{ numberOfGenerations: number }> {
-  return request.post(endpoints.recordPromptGroupUsage(groupId));
-}
-
-export function deletePrompt(payload: t.TDeletePromptVariables): Promise<t.TDeletePromptResponse> {
-  return request.delete(endpoints.deletePrompt(payload));
-}
-
-export function makePromptProduction(id: string): Promise<t.TMakePromptProductionResponse> {
-  return request.patch(endpoints.updatePromptTag(id));
-}
-
-export function updatePromptLabels(
-  variables: t.TUpdatePromptLabelsRequest,
-): Promise<t.TUpdatePromptLabelsResponse> {
-  return request.patch(endpoints.updatePromptLabels(variables.id), variables.payload);
-}
-
-export function deletePromptGroup(id: string): Promise<t.TDeletePromptGroupResponse> {
-  return request.delete(endpoints.deletePromptGroup(id));
-}
-
 export function getCategories(): Promise<t.TGetCategoriesResponse> {
   return request.get(endpoints.getCategories());
-}
-
-export function getRandomPrompts(
-  variables: t.TGetRandomPromptsRequest,
-): Promise<t.TGetRandomPromptsResponse> {
-  return request.get(endpoints.getRandomPrompts(variables.limit, variables.skip));
 }
 
 /* Skills */
@@ -1053,12 +659,6 @@ export function getRole(roleName: string): Promise<r.TRole> {
   return request.get(endpoints.getRole(roleName));
 }
 
-export function updatePromptPermissions(
-  variables: m.UpdatePromptPermVars,
-): Promise<m.UpdatePermResponse> {
-  return request.put(endpoints.updatePromptPermissions(variables.roleName), variables.updates);
-}
-
 export function updateAgentPermissions(
   variables: m.UpdateAgentPermVars,
 ): Promise<m.UpdatePermResponse> {
@@ -1080,12 +680,6 @@ export function updatePeoplePickerPermissions(
   );
 }
 
-export function updateMCPServersPermissions(
-  variables: m.UpdateMCPServersPermVars,
-): Promise<m.UpdatePermResponse> {
-  return request.put(endpoints.updateMCPServersPermissions(variables.roleName), variables.updates);
-}
-
 export function updateRemoteAgentsPermissions(
   variables: m.UpdateRemoteAgentsPermVars,
 ): Promise<m.UpdatePermResponse> {
@@ -1093,12 +687,6 @@ export function updateRemoteAgentsPermissions(
     endpoints.updateRemoteAgentsPermissions(variables.roleName),
     variables.updates,
   );
-}
-
-export function updateMarketplacePermissions(
-  variables: m.UpdateMarketplacePermVars,
-): Promise<m.UpdatePermResponse> {
-  return request.put(endpoints.updateMarketplacePermissions(variables.roleName), variables.updates);
 }
 
 export function updateSkillPermissions(

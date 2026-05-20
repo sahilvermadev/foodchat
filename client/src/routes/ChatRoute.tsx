@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useRecoilCallback, useRecoilValue } from 'recoil';
 import { Spinner, useToastContext } from '@librechat/client';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Constants, EModelEndpoint } from 'librechat-data-provider';
+import { Constants } from 'librechat-data-provider';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
 import type { TPreset } from 'librechat-data-provider';
 import {
@@ -10,25 +10,38 @@ import {
   processValidSettings,
   getDefaultModelSpec,
   getModelSpecPreset,
+  getMiseDefaultPreset,
+  ensureMiseDefaultModelPreference,
   isNotFoundError,
   logger,
 } from '~/utils';
 import {
-  useAssistantListMap,
   useIdChangeEffect,
   useAppStartup,
   useNewConvo,
   useLocalize,
 } from '~/hooks';
-import { useGetConvoIdQuery, useGetStartupConfig, useGetEndpointsQuery } from '~/data-provider';
+import {
+  useCookingDraftByConversationQuery,
+  useGetConvoIdQuery,
+  useGetStartupConfig,
+  useGetEndpointsQuery,
+} from '~/data-provider';
 import { ToolCallsMapProvider } from '~/Providers';
 import ChatView from '~/components/Chat/ChatView';
+import CookingWorkspace from '~/components/Cooking/Workspace';
+import { CookingChatProvider } from '~/components/Cooking/CookingChatContext';
+import { getCookingCanvasMarkdown } from '~/components/Cooking/artifact';
 import { NotificationSeverity } from '~/common';
+import {
+  getActiveCookingConversationId,
+  getNewCookingConversationTemplate,
+} from './cookingRouteState';
 import useAuthRedirect from './useAuthRedirect';
 import temporaryStore from '~/store/temporary';
 import store from '~/store';
 
-export default function ChatRoute() {
+export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking' }) {
   const { data: startupConfig } = useGetStartupConfig();
   const { isAuthenticated, user, roles } = useAuthRedirect();
 
@@ -44,12 +57,27 @@ export default function ChatRoute() {
 
   const index = 0;
   const [searchParams] = useSearchParams();
-  const { conversationId = '' } = useParams();
+  const { conversationId: routeConversationId = '' } = useParams();
+  const isCookingMode = mode === 'cooking';
+  const conversationId = routeConversationId || (isCookingMode ? Constants.NEW_CONVO : '');
   useIdChangeEffect(conversationId);
   const { hasSetConversation, conversation } = store.useCreateConversationAtom(index);
   const { newConversation } = useNewConvo();
   const { showToast } = useToastContext();
   const localize = useLocalize();
+  const isSubmitting = useRecoilValue(store.isSubmittingFamily(index));
+  const activeConversationId = getActiveCookingConversationId({
+    isCookingMode,
+    routeConversationId,
+    stateConversationId: conversation?.conversationId,
+  });
+  const draftQuery = useCookingDraftByConversationQuery(activeConversationId, {
+    enabled: isCookingMode && Boolean(activeConversationId),
+  });
+  const activeDraft =
+    activeConversationId && draftQuery.data?.conversationId === activeConversationId
+      ? draftQuery.data
+      : undefined;
 
   const modelsQuery = useGetModelsQuery({
     enabled: isAuthenticated,
@@ -60,11 +88,14 @@ export default function ChatRoute() {
       isAuthenticated && conversationId !== Constants.NEW_CONVO && !hasSetConversation.current,
   });
   const endpointsQuery = useGetEndpointsQuery({ enabled: isAuthenticated });
-  const assistantListMap = useAssistantListMap();
 
   const isTemporaryChat = conversation && conversation.expiredAt ? true : false;
 
   useEffect(() => {
+    if (isCookingMode) {
+      setIsTemporary(false);
+      return;
+    }
     if (conversationId === Constants.NEW_CONVO) {
       setIsTemporary(defaultTemporaryChat);
     } else if (isTemporaryChat) {
@@ -72,7 +103,31 @@ export default function ChatRoute() {
     } else {
       setIsTemporary(false);
     }
-  }, [conversationId, isTemporaryChat, setIsTemporary, defaultTemporaryChat]);
+  }, [conversationId, isCookingMode, isTemporaryChat, setIsTemporary, defaultTemporaryChat]);
+
+  useEffect(() => {
+    if (
+      !isCookingMode ||
+      conversationId !== Constants.NEW_CONVO ||
+      !modelsQuery.data ||
+      !endpointsQuery.data
+    ) {
+      return;
+    }
+
+    const changed = ensureMiseDefaultModelPreference();
+    if (!changed) {
+      return;
+    }
+
+    newConversation({
+      modelsData: modelsQuery.data,
+      preset: getMiseDefaultPreset(),
+      template: getNewCookingConversationTemplate(),
+      keepLatestMessage: true,
+      routeBase: '/cook',
+    });
+  }, [conversationId, endpointsQuery.data, isCookingMode, modelsQuery.data, newConversation]);
 
   /** This effect is mainly for the first conversation state change on first load of the page.
    *  Adjusting this may have unintended consequences on the conversation state.
@@ -93,7 +148,12 @@ export default function ChatRoute() {
     const getNewConvoPreset = () => {
       const result = getDefaultModelSpec(startupConfig);
       const spec = result?.default ?? result?.last;
-      const specPreset = spec ? getModelSpecPreset(spec) : undefined;
+      let specPreset: TPreset | undefined;
+      if (isCookingMode) {
+        specPreset = getMiseDefaultPreset();
+      } else if (spec) {
+        specPreset = getModelSpecPreset(spec);
+      }
 
       const queryParams: Record<string, string> = {};
       searchParams.forEach((value, key) => {
@@ -115,7 +175,12 @@ export default function ChatRoute() {
       logger.log('conversation', 'ChatRoute, new convo effect', conversation);
       newConversation({
         modelsData: modelsQuery.data,
-        template: conversation ? conversation : undefined,
+        template: isCookingMode
+          ? getNewCookingConversationTemplate()
+          : conversation
+            ? conversation
+            : undefined,
+        routeBase: isCookingMode ? '/cook' : undefined,
         ...(preset ? { preset } : {}),
       });
 
@@ -153,32 +218,6 @@ export default function ChatRoute() {
         ...(spec ? { preset: getModelSpecPreset(spec) } : {}),
       });
       hasSetConversation.current = true;
-    } else if (
-      isNewConvo &&
-      assistantListMap[EModelEndpoint.assistants] &&
-      assistantListMap[EModelEndpoint.azureAssistants]
-    ) {
-      const preset = getNewConvoPreset();
-
-      logger.log('conversation', 'ChatRoute new convo, assistants effect', conversation);
-      newConversation({
-        modelsData: modelsQuery.data,
-        template: conversation ? conversation : undefined,
-        ...(preset ? { preset } : {}),
-      });
-      hasSetConversation.current = true;
-    } else if (
-      assistantListMap[EModelEndpoint.assistants] &&
-      assistantListMap[EModelEndpoint.azureAssistants]
-    ) {
-      logger.log('conversation', 'ChatRoute convo, assistants effect', initialConvoQuery.data);
-      newConversation({
-        template: initialConvoQuery.data,
-        preset: initialConvoQuery.data as TPreset,
-        modelsData: modelsQuery.data,
-        keepLatestMessage: true,
-      });
-      hasSetConversation.current = true;
     }
     /* Creates infinite render if all dependencies included due to newConversation invocations exceeding call stack before hasSetConversation.current becomes truthy */
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,7 +228,6 @@ export default function ChatRoute() {
     initialConvoQuery.isError,
     endpointsQuery.data,
     modelsQuery.data,
-    assistantListMap,
   ]);
 
   if (endpointsQuery.isLoading || modelsQuery.isLoading) {
@@ -219,7 +257,21 @@ export default function ChatRoute() {
 
   return (
     <ToolCallsMapProvider conversationId={conversation.conversationId ?? ''}>
-      <ChatView index={index} />
+      {isCookingMode ? (
+        <CookingChatProvider value={{ isCookingChat: true }}>
+          <CookingWorkspace
+            index={index}
+            conversationId={conversationId}
+            draft={activeDraft}
+            markdown={getCookingCanvasMarkdown({
+              draftMarkdown: activeDraft?.documentMarkdown,
+            })}
+            isPreparingDraft={isSubmitting || draftQuery.isLoading}
+          />
+        </CookingChatProvider>
+      ) : (
+        <ChatView index={index} />
+      )}
     </ToolCallsMapProvider>
   );
 }

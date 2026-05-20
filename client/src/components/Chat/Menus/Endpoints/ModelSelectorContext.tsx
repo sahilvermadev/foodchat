@@ -1,17 +1,11 @@
 import debounce from 'lodash/debounce';
 import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
-import { EModelEndpoint, isAgentsEndpoint, isAssistantsEndpoint } from 'librechat-data-provider';
+import { isAgentsEndpoint } from 'librechat-data-provider';
 import type * as t from 'librechat-data-provider';
 import type { Endpoint, SelectedValues } from '~/common';
-import {
-  useAgentDefaultPermissionLevel,
-  useSelectorEffects,
-  useKeyDialog,
-  useEndpoints,
-  useLocalize,
-} from '~/hooks';
-import { useAgentsMapContext, useAssistantsMapContext, useLiveAnnouncer } from '~/Providers';
-import { useGetEndpointsQuery, useListAgentsQuery } from '~/data-provider';
+import { useSelectorEffects, useKeyDialog, useEndpoints, useLocalize } from '~/hooks';
+import { useAgentsMapContext, useLiveAnnouncer } from '~/Providers';
+import { useGetEndpointsQuery } from '~/data-provider';
 import { useModelSelectorChatContext } from './ModelSelectorChatContext';
 import useSelectMention from '~/hooks/Input/useSelectMention';
 import { filterItems } from './utils';
@@ -26,7 +20,6 @@ type ModelSelectorContextType = {
   modelSpecs: t.TModelSpec[];
   mappedEndpoints: Endpoint[];
   agentsMap: t.TAgentsMap | undefined;
-  assistantsMap: t.TAssistantsMap | undefined;
   endpointsConfig: t.TEndpointsConfig;
 
   // Functions
@@ -56,42 +49,18 @@ interface ModelSelectorProviderProps {
 
 export function ModelSelectorProvider({ children, startupConfig }: ModelSelectorProviderProps) {
   const agentsMap = useAgentsMapContext();
-  const assistantsMap = useAssistantsMapContext();
   const { data: endpointsConfig } = useGetEndpointsQuery();
-  const { endpoint, model, spec, agent_id, assistant_id, getConversation, newConversation } =
+  const { endpoint, model, spec, agent_id, getConversation, newConversation } =
     useModelSelectorChatContext();
   const localize = useLocalize();
   const { announcePolite } = useLiveAnnouncer();
   const modelSpecs = useMemo(() => {
     const specs = startupConfig?.modelSpecs?.list ?? [];
-    if (!agentsMap) {
-      return specs;
-    }
-
-    /**
-     * Filter modelSpecs to only include agents the user has access to.
-     * Use agentsMap which already contains permission-filtered agents (consistent with other components).
-     */
-    return specs.filter((spec) => {
-      if (spec.preset?.endpoint === EModelEndpoint.agents && spec.preset?.agent_id) {
-        return spec.preset.agent_id in agentsMap;
-      }
-      /** Keep non-agent modelSpecs */
-      return true;
-    });
-  }, [startupConfig, agentsMap]);
-
-  const permissionLevel = useAgentDefaultPermissionLevel();
-  const { data: agents = null } = useListAgentsQuery(
-    { requiredPermission: permissionLevel },
-    {
-      select: (data) => data?.data,
-    },
-  );
+    return specs.filter((spec) => !isAgentsEndpoint(spec.preset?.endpoint));
+  }, [startupConfig]);
 
   const { mappedEndpoints, endpointRequiresUserKey } = useEndpoints({
-    agents,
-    assistantsMap,
+    agents: null,
     startupConfig,
     endpointsConfig,
   });
@@ -100,10 +69,6 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
     (endpoint: Endpoint, model: string): string => {
       if (isAgentsEndpoint(endpoint.value)) {
         return endpoint.agentNames?.[model] ?? agentsMap?.[model]?.name ?? model;
-      }
-
-      if (isAssistantsEndpoint(endpoint.value)) {
-        return endpoint.assistantNames?.[model] ?? model;
       }
 
       return model;
@@ -115,7 +80,6 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
     // presets,
     modelSpecs,
     getConversation,
-    assistantsMap,
     endpointsConfig,
     newConversation,
     returnHandlers: true,
@@ -126,8 +90,6 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
     let initialModel = model || '';
     if (isAgentsEndpoint(endpoint) && agent_id) {
       initialModel = agent_id;
-    } else if (isAssistantsEndpoint(endpoint) && assistant_id) {
-      initialModel = assistant_id;
     }
     return {
       endpoint: endpoint || '',
@@ -143,10 +105,8 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
           model: model ?? null,
           spec: spec ?? null,
           agent_id: agent_id ?? null,
-          assistant_id: assistant_id ?? null,
         } as any)
       : null,
-    assistantsMap,
     setSelectedValues,
   });
 
@@ -161,8 +121,8 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       return null;
     }
     const allItems = [...modelSpecs, ...mappedEndpoints];
-    return filterItems(allItems, searchValue, agentsMap, assistantsMap || {});
-  }, [searchValue, modelSpecs, mappedEndpoints, agentsMap, assistantsMap]);
+    return filterItems(allItems, searchValue, agentsMap);
+  }, [searchValue, modelSpecs, mappedEndpoints, agentsMap]);
 
   const setDebouncedSearchValue = useMemo(
     () =>
@@ -184,8 +144,6 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       onSelectSpec?.(spec);
       if (isAgentsEndpoint(spec.preset.endpoint)) {
         model = spec.preset.agent_id ?? '';
-      } else if (isAssistantsEndpoint(spec.preset.endpoint)) {
-        model = spec.preset.assistant_id ?? '';
       }
       setSelectedValues({
         endpoint: spec.preset.endpoint,
@@ -219,11 +177,6 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
           agent_id: model,
           model: agentsMap?.[model]?.model ?? '',
         });
-      } else if (isAssistantsEndpoint(endpoint.value)) {
-        onSelectEndpoint?.(endpoint.value, {
-          assistant_id: model,
-          model: assistantsMap?.[endpoint.value]?.[model]?.model ?? '',
-        });
       } else if (endpoint.value) {
         onSelectEndpoint?.(endpoint.value, { model });
       }
@@ -237,7 +190,7 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       const announcement = localize('com_ui_model_selected', { 0: modelDisplayName });
       announcePolite({ message: announcement, isStatus: true });
     },
-    [agentsMap, announcePolite, assistantsMap, getModelDisplayName, localize, onSelectEndpoint],
+    [agentsMap, announcePolite, getModelDisplayName, localize, onSelectEndpoint],
   );
 
   const value = useMemo(
@@ -248,7 +201,6 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       endpointSearchValues,
       agentsMap,
       modelSpecs,
-      assistantsMap,
       mappedEndpoints,
       endpointsConfig,
       handleSelectSpec,
@@ -267,7 +219,6 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
       endpointSearchValues,
       agentsMap,
       modelSpecs,
-      assistantsMap,
       mappedEndpoints,
       endpointsConfig,
       handleSelectSpec,

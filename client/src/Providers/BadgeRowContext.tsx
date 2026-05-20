@@ -1,28 +1,77 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
-import { useSetRecoilState } from 'recoil';
-import { Tools, Constants, LocalStorageKeys, AgentCapabilities } from 'librechat-data-provider';
-import type { TAgentsEndpoint } from 'librechat-data-provider';
-import {
-  useMCPServerManager,
-  useSearchApiKeyForm,
-  useGetAgentsConfig,
-  useToolToggle,
-} from '~/hooks';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import debounce from 'lodash/debounce';
+import { useRecoilState, useSetRecoilState } from 'recoil';
+import { Constants, LocalStorageKeys, AgentCapabilities } from 'librechat-data-provider';
 import { getTimestampedValue } from '~/utils/timestamps';
 import { useGetStartupConfig } from '~/data-provider';
+import useLocalStorage from '~/hooks/useLocalStorageAlt';
 import { ephemeralAgentByConvoId } from '~/store';
+
+type ToolValue = boolean | string;
+
+function useCapabilityToggle({
+  conversationId,
+  storageContextKey,
+  toolKey,
+  localStorageKey,
+}: {
+  conversationId?: string | null;
+  storageContextKey?: string;
+  toolKey: string;
+  localStorageKey: LocalStorageKeys;
+}) {
+  const key = conversationId ?? Constants.NEW_CONVO;
+  const [ephemeralAgent, setEphemeralAgent] = useRecoilState(ephemeralAgentByConvoId(key));
+  const [isPinned, setIsPinned] = useLocalStorage<boolean>(`${localStorageKey}pinned`, false);
+  const storageKey = `${localStorageKey}${key}`;
+  const toolValue = ephemeralAgent?.[toolKey] ?? false;
+  const isToolEnabled = typeof toolValue === 'string' ? toolValue.length > 0 : toolValue === true;
+
+  useEffect(() => {
+    const value = ephemeralAgent?.[toolKey];
+    if (value !== undefined) {
+      localStorage.setItem(storageKey, JSON.stringify(value));
+    }
+  }, [ephemeralAgent, storageKey, toolKey]);
+
+  const handleChange = useCallback(
+    ({ value }: { e?: React.ChangeEvent<HTMLInputElement>; value: ToolValue }) => {
+      setEphemeralAgent((prev) => ({
+        ...(prev || {}),
+        [toolKey]: value,
+      }));
+
+      if (storageContextKey) {
+        localStorage.setItem(`${localStorageKey}${storageContextKey}`, JSON.stringify(value));
+      }
+    },
+    [localStorageKey, setEphemeralAgent, storageContextKey, toolKey],
+  );
+
+  const debouncedChange = useMemo(
+    () => debounce(handleChange, 50, { leading: true }),
+    [handleChange],
+  );
+
+  return {
+    toggleState: toolValue,
+    handleChange,
+    isToolEnabled,
+    toolValue,
+    setToggleState: (value: ToolValue) => handleChange({ value }),
+    ephemeralAgent,
+    debouncedChange,
+    setEphemeralAgent,
+    authData: undefined,
+    isPinned,
+    setIsPinned,
+  };
+}
 
 interface BadgeRowContextType {
   conversationId?: string | null;
   storageContextKey?: string;
-  agentsConfig?: TAgentsEndpoint | null;
-  skills: ReturnType<typeof useToolToggle>;
-  webSearch: ReturnType<typeof useToolToggle>;
-  artifacts: ReturnType<typeof useToolToggle>;
-  fileSearch: ReturnType<typeof useToolToggle>;
-  codeInterpreter: ReturnType<typeof useToolToggle>;
-  searchApiKeyForm: ReturnType<typeof useSearchApiKeyForm>;
-  mcpServerManager: ReturnType<typeof useMCPServerManager>;
+  skills: ReturnType<typeof useCapabilityToggle>;
 }
 
 const BadgeRowContext = createContext<BadgeRowContextType | undefined>(undefined);
@@ -46,7 +95,6 @@ export default function BadgeRowProvider({
 }: BadgeRowProviderProps) {
   const lastContextKeyRef = useRef<string>('');
   const hasInitializedRef = useRef(false);
-  const { agentsConfig } = useGetAgentsConfig();
   const { data: startupConfig } = useGetStartupConfig();
   const key = conversationId ?? Constants.NEW_CONVO;
   const hasModelSpecs = (startupConfig?.modelSpecs?.list?.length ?? 0) > 0;
@@ -95,51 +143,11 @@ export default function BadgeRowProvider({
       hasInitializedRef.current = true;
       lastContextKeyRef.current = storageSuffix;
 
-      const codeToggleKey = `${LocalStorageKeys.LAST_CODE_TOGGLE_}${storageSuffix}`;
-      const webSearchToggleKey = `${LocalStorageKeys.LAST_WEB_SEARCH_TOGGLE_}${storageSuffix}`;
-      const fileSearchToggleKey = `${LocalStorageKeys.LAST_FILE_SEARCH_TOGGLE_}${storageSuffix}`;
-      const artifactsToggleKey = `${LocalStorageKeys.LAST_ARTIFACTS_TOGGLE_}${storageSuffix}`;
       const skillsToggleKey = `${LocalStorageKeys.LAST_SKILLS_TOGGLE_}${storageSuffix}`;
 
-      const codeToggleValue = getTimestampedValue(codeToggleKey);
-      const webSearchToggleValue = getTimestampedValue(webSearchToggleKey);
-      const fileSearchToggleValue = getTimestampedValue(fileSearchToggleKey);
-      const artifactsToggleValue = getTimestampedValue(artifactsToggleKey);
       const skillsToggleValue = getTimestampedValue(skillsToggleKey);
 
       const initialValues: Record<string, boolean | string> = {};
-
-      if (codeToggleValue !== null) {
-        try {
-          initialValues[Tools.execute_code] = JSON.parse(codeToggleValue);
-        } catch (e) {
-          console.error('Failed to parse code toggle value:', e);
-        }
-      }
-
-      if (webSearchToggleValue !== null) {
-        try {
-          initialValues[Tools.web_search] = JSON.parse(webSearchToggleValue);
-        } catch (e) {
-          console.error('Failed to parse web search toggle value:', e);
-        }
-      }
-
-      if (fileSearchToggleValue !== null) {
-        try {
-          initialValues[Tools.file_search] = JSON.parse(fileSearchToggleValue);
-        } catch (e) {
-          console.error('Failed to parse file search toggle value:', e);
-        }
-      }
-
-      if (artifactsToggleValue !== null) {
-        try {
-          initialValues[AgentCapabilities.artifacts] = JSON.parse(artifactsToggleValue);
-        } catch (e) {
-          console.error('Failed to parse artifacts toggle value:', e);
-        }
-      }
 
       if (skillsToggleValue !== null) {
         try {
@@ -151,30 +159,11 @@ export default function BadgeRowProvider({
 
       const hasOverrides = Object.keys(initialValues).length > 0;
 
-      /** Read persisted MCP values from localStorage */
-      let mcpOverrides: string[] | null = null;
-      const mcpStorageKey = `${LocalStorageKeys.LAST_MCP_}${storageSuffix}`;
-      const mcpRaw = localStorage.getItem(mcpStorageKey);
-      if (mcpRaw !== null) {
-        try {
-          const parsed = JSON.parse(mcpRaw);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            mcpOverrides = parsed;
-          }
-        } catch (e) {
-          console.error('Failed to parse MCP values:', e);
-        }
-      }
-
       setEphemeralAgent((prev) => {
         if (prev == null) {
           /** ephemeralAgent is null — use localStorage defaults */
-          if (hasOverrides || mcpOverrides) {
-            const result = { ...initialValues };
-            if (mcpOverrides) {
-              result.mcp = mcpOverrides;
-            }
-            return result;
+          if (hasOverrides) {
+            return { ...initialValues };
           }
           return prev;
         }
@@ -188,81 +177,23 @@ export default function BadgeRowProvider({
             changed = true;
           }
         }
-        if (mcpOverrides && result.mcp === undefined) {
-          result.mcp = mcpOverrides;
-          changed = true;
-        }
         return changed ? result : prev;
       });
     }
   }, [storageSuffix, specName, isSubmitting, setEphemeralAgent]);
 
-  /** CodeInterpreter hook — sandbox auth is handled server-side by the
-   *  agents library, so the toggle no longer has an auth dialog gate. */
-  const codeInterpreter = useToolToggle({
-    conversationId,
-    storageContextKey,
-    toolKey: Tools.execute_code,
-    localStorageKey: LocalStorageKeys.LAST_CODE_TOGGLE_,
-    isAuthenticated: true,
-  });
-
-  /** WebSearch hooks */
-  const searchApiKeyForm = useSearchApiKeyForm({});
-  const { setIsDialogOpen: setWebSearchDialogOpen } = searchApiKeyForm;
-
-  const webSearch = useToolToggle({
-    conversationId,
-    storageContextKey,
-    toolKey: Tools.web_search,
-    localStorageKey: LocalStorageKeys.LAST_WEB_SEARCH_TOGGLE_,
-    setIsDialogOpen: setWebSearchDialogOpen,
-    authConfig: {
-      toolId: Tools.web_search,
-      queryOptions: { retry: 1 },
-    },
-  });
-
-  /** FileSearch hook */
-  const fileSearch = useToolToggle({
-    conversationId,
-    storageContextKey,
-    toolKey: Tools.file_search,
-    localStorageKey: LocalStorageKeys.LAST_FILE_SEARCH_TOGGLE_,
-    isAuthenticated: true,
-  });
-
-  /** Artifacts hook - using a custom key since it's not a Tool but a capability */
-  const artifacts = useToolToggle({
-    conversationId,
-    storageContextKey,
-    toolKey: AgentCapabilities.artifacts,
-    localStorageKey: LocalStorageKeys.LAST_ARTIFACTS_TOGGLE_,
-    isAuthenticated: true,
-  });
-
   /** Skills hook - using a custom key since it's not a Tool but a capability */
-  const skills = useToolToggle({
+  const skills = useCapabilityToggle({
     conversationId,
     storageContextKey,
     toolKey: AgentCapabilities.skills,
     localStorageKey: LocalStorageKeys.LAST_SKILLS_TOGGLE_,
-    isAuthenticated: true,
   });
-
-  const mcpServerManager = useMCPServerManager({ conversationId, storageContextKey });
 
   const value: BadgeRowContextType = {
     skills,
-    webSearch,
-    artifacts,
-    fileSearch,
-    agentsConfig,
     conversationId,
     storageContextKey,
-    codeInterpreter,
-    searchApiKeyForm,
-    mcpServerManager,
   };
 
   return <BadgeRowContext.Provider value={value}>{children}</BadgeRowContext.Provider>;

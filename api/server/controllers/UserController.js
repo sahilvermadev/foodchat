@@ -1,28 +1,16 @@
-const mongoose = require('mongoose');
 const { logger, webSearchKeys } = require('@librechat/data-schemas');
 const {
   getNewS3URL,
   needsRefresh,
-  MCPOAuthHandler,
-  MCPTokenStorage,
   normalizeHttpError,
   extractWebSearchEnvVars,
 } = require('@librechat/api');
-const {
-  Tools,
-  CacheKeys,
-  Constants,
-  FileSources,
-  ResourceType,
-} = require('librechat-data-provider');
+const { Tools, FileSources } = require('librechat-data-provider');
 const { updateUserPluginAuth, deleteUserPluginAuth } = require('~/server/services/PluginService');
 const { verifyOTPOrBackupCode } = require('~/server/services/twoFactorService');
 const { verifyEmail, resendVerificationEmail } = require('~/server/services/AuthService');
-const { getMCPManager, getFlowStateManager, getMCPServersRegistry } = require('~/config');
-const { invalidateCachedTools } = require('~/server/services/Config/getCachedTools');
 const { processDeleteRequest } = require('~/server/services/Files/process');
 const { getAppConfig } = require('~/server/services/Config');
-const { getLogStores } = require('~/cache');
 const db = require('~/models');
 
 const getUserController = async (req, res) => {
@@ -91,79 +79,6 @@ const deleteUserFiles = async (req) => {
   }
 };
 
-/**
- * Deletes MCP servers solely owned by the user and cleans up their ACLs.
- * Disconnects live sessions for deleted servers before removing DB records.
- * Servers with other owners are left intact; the caller is responsible for
- * removing the user's own ACL principal entries separately.
- *
- * Also handles legacy (pre-ACL) MCP servers that only have the author field set,
- * ensuring they are not orphaned if no permission migration has been run.
- * @param {string} userId - The ID of the user.
- */
-const deleteUserMcpServers = async (userId) => {
-  try {
-    const MCPServer = mongoose.models.MCPServer;
-    const AclEntry = mongoose.models.AclEntry;
-    if (!MCPServer) {
-      return;
-    }
-
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-    const soleOwnedIds = await db.getSoleOwnedResourceIds(userObjectId, ResourceType.MCPSERVER);
-
-    const authoredServers = await MCPServer.find({ author: userObjectId })
-      .select('_id serverName')
-      .lean();
-
-    const migratedEntries =
-      authoredServers.length > 0
-        ? await AclEntry.find({
-            resourceType: ResourceType.MCPSERVER,
-            resourceId: { $in: authoredServers.map((s) => s._id) },
-          })
-            .select('resourceId')
-            .lean()
-        : [];
-    const migratedIds = new Set(migratedEntries.map((e) => e.resourceId.toString()));
-    const legacyServers = authoredServers.filter((s) => !migratedIds.has(s._id.toString()));
-    const legacyServerIds = legacyServers.map((s) => s._id);
-
-    const allServerIdsToDelete = [...soleOwnedIds, ...legacyServerIds];
-
-    if (allServerIdsToDelete.length === 0) {
-      return;
-    }
-
-    const aclOwnedServers =
-      soleOwnedIds.length > 0
-        ? await MCPServer.find({ _id: { $in: soleOwnedIds } })
-            .select('serverName')
-            .lean()
-        : [];
-    const allServersToDelete = [...aclOwnedServers, ...legacyServers];
-
-    const mcpManager = getMCPManager();
-    if (mcpManager) {
-      await Promise.all(
-        allServersToDelete.map(async (s) => {
-          await mcpManager.disconnectUserConnection(userId, s.serverName);
-          await invalidateCachedTools({ userId, serverName: s.serverName });
-        }),
-      );
-    }
-
-    await AclEntry.deleteMany({
-      resourceType: ResourceType.MCPSERVER,
-      resourceId: { $in: allServerIdsToDelete },
-    });
-
-    await MCPServer.deleteMany({ _id: { $in: allServerIdsToDelete } });
-  } catch (error) {
-    logger.error('[deleteUserMcpServers] General error:', error);
-  }
-};
-
 const updateUserPluginsController = async (req, res) => {
   const appConfig = await getAppConfig({ role: req.user?.role, tenantId: req.user?.tenantId });
   const { user } = req;
@@ -180,18 +95,7 @@ const updateUserPluginsController = async (req, res) => {
     let keys = Object.keys(auth);
     const values = Object.values(auth); // Used in 'install' block
 
-    const isMCPTool = pluginKey.startsWith('mcp_') || pluginKey.includes(Constants.mcp_delimiter);
-
-    // Early exit condition:
-    // If keys are empty (meaning auth: {} was likely sent for uninstall, or auth was empty for install)
-    // AND it's not web_search (which has special key handling to populate `keys` for uninstall)
-    // AND it's NOT (an uninstall action FOR an MCP tool - we need to proceed for this case to clear all its auth)
-    // THEN return.
-    if (
-      keys.length === 0 &&
-      pluginKey !== Tools.web_search &&
-      !(action === 'uninstall' && isMCPTool)
-    ) {
+    if (keys.length === 0 && pluginKey !== Tools.web_search) {
       return res.status(200).send();
     }
 
@@ -220,65 +124,16 @@ const updateUserPluginsController = async (req, res) => {
         }
       }
     } else if (action === 'uninstall') {
-      // const isMCPTool was defined earlier
-      if (isMCPTool && keys.length === 0) {
-        // This handles the case where auth: {} is sent for an MCP tool uninstall.
-        // It means "delete all credentials associated with this MCP pluginKey".
-        authService = await deleteUserPluginAuth(user.id, null, true, pluginKey);
+      for (let i = 0; i < keys.length; i++) {
+        authService = await deleteUserPluginAuth(user.id, keys[i]);
         if (authService instanceof Error) {
-          logger.error(
-            `[authService] Error deleting all auth for MCP tool ${pluginKey}:`,
-            authService,
-          );
+          logger.error('[authService] Error deleting specific auth key:', authService);
           ({ status, message } = normalizeHttpError(authService));
-        }
-        try {
-          // if the MCP server uses OAuth, perform a full cleanup and token revocation
-          await maybeUninstallOAuthMCP(user.id, pluginKey, appConfig);
-        } catch (error) {
-          logger.error(
-            `[updateUserPluginsController] Error uninstalling OAuth MCP for ${pluginKey}:`,
-            error,
-          );
-        }
-      } else {
-        // This handles:
-        // 1. Web_search uninstall (keys will be populated with all webSearchKeys if auth was {}).
-        // 2. Other tools uninstall (if keys were provided).
-        // 3. MCP tool uninstall if specific keys were provided in `auth` (not current frontend behavior).
-        // If keys is empty for non-MCP tools (and not web_search), this loop won't run, and nothing is deleted.
-        for (let i = 0; i < keys.length; i++) {
-          authService = await deleteUserPluginAuth(user.id, keys[i]); // Deletes by authField name
-          if (authService instanceof Error) {
-            logger.error('[authService] Error deleting specific auth key:', authService);
-            ({ status, message } = normalizeHttpError(authService));
-          }
         }
       }
     }
 
     if (status === 200) {
-      // If auth was updated successfully, disconnect MCP sessions as they might use these credentials
-      if (pluginKey.startsWith(Constants.mcp_prefix)) {
-        try {
-          const mcpManager = getMCPManager();
-          if (mcpManager) {
-            // Extract server name from pluginKey (format: "mcp_<serverName>")
-            const serverName = pluginKey.replace(Constants.mcp_prefix, '');
-            logger.info(
-              `[updateUserPluginsController] Attempting disconnect of MCP server "${serverName}" for user ${user.id} after plugin auth update.`,
-            );
-            await mcpManager.disconnectUserConnection(user.id, serverName);
-            await invalidateCachedTools({ userId: user.id, serverName });
-          }
-        } catch (disconnectError) {
-          logger.error(
-            `[updateUserPluginsController] Error disconnecting MCP connection for user ${user.id} after plugin auth update:`,
-            disconnectError,
-          );
-          // Do not fail the request for this, but log it.
-        }
-      }
       return res.status(status).send();
     }
 
@@ -334,7 +189,6 @@ const deleteUserController = async (req, res) => {
     await db.deleteAllUserMemories(user.id);
     await db.deleteUserPrompts(user.id);
     await db.deleteUserSkills(user.id);
-    await deleteUserMcpServers(user.id);
     await db.deleteActions({ user: user.id });
     await db.deleteTokens({ userId: user.id });
     await db.removeUserFromAllGroups(user.id);
@@ -375,169 +229,6 @@ const resendVerificationController = async (req, res) => {
   }
 };
 
-/** Best-effort cleanup of stored MCP OAuth tokens and flow state. */
-const clearStoredMCPOAuthState = async (userId, serverName) => {
-  try {
-    await MCPTokenStorage.deleteUserTokens({
-      userId,
-      serverName,
-      deleteToken: async (filter) => {
-        await db.deleteTokens(filter);
-      },
-    });
-  } catch (error) {
-    logger.warn(
-      `[clearStoredMCPOAuthState] Failed to delete MCP OAuth tokens for ${serverName}:`,
-      error,
-    );
-  }
-
-  try {
-    const flowsCache = getLogStores(CacheKeys.FLOWS);
-    const flowManager = getFlowStateManager(flowsCache);
-    const flowId = MCPOAuthHandler.generateFlowId(userId, serverName);
-    const results = await Promise.allSettled([
-      flowManager.deleteFlow(flowId, 'mcp_get_tokens'),
-      flowManager.deleteFlow(flowId, 'mcp_oauth'),
-    ]);
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        logger.warn(
-          `[clearStoredMCPOAuthState] Failed to clear MCP OAuth flow state for ${serverName}:`,
-          result.reason,
-        );
-      }
-    }
-  } catch (error) {
-    logger.warn(
-      `[clearStoredMCPOAuthState] Failed to clear MCP OAuth flow state for ${serverName}:`,
-      error,
-    );
-  }
-};
-
-/** Revokes MCP OAuth tokens at the provider when possible, then clears local state. */
-const maybeUninstallOAuthMCP = async (userId, pluginKey, appConfig) => {
-  if (!pluginKey.startsWith(Constants.mcp_prefix)) {
-    // this is not an MCP server, so nothing to do here
-    return;
-  }
-
-  const serverName = pluginKey.replace(Constants.mcp_prefix, '');
-  const serverConfig =
-    (await getMCPServersRegistry().getServerConfig(serverName, userId)) ??
-    appConfig?.mcpServers?.[serverName];
-  const oauthServers = await getMCPServersRegistry().getOAuthServers(userId);
-  if (!oauthServers.has(serverName) || !serverConfig) {
-    await clearStoredMCPOAuthState(userId, serverName);
-    return;
-  }
-
-  // 1. get client info used for revocation (client id, secret)
-  let clientTokenData = null;
-  try {
-    clientTokenData = await MCPTokenStorage.getClientInfoAndMetadata({
-      userId,
-      serverName,
-      findToken: db.findToken,
-    });
-  } catch (error) {
-    logger.warn(
-      `[maybeUninstallOAuthMCP] Unable to load OAuth client metadata for ${serverName}; clearing local MCP OAuth state only.`,
-      error,
-    );
-    await clearStoredMCPOAuthState(userId, serverName);
-    return;
-  }
-  if (clientTokenData == null) {
-    logger.info(
-      `[maybeUninstallOAuthMCP] Missing OAuth client metadata for ${serverName}; clearing local MCP OAuth state only.`,
-    );
-    await clearStoredMCPOAuthState(userId, serverName);
-    return;
-  }
-  const { clientInfo, clientMetadata } = clientTokenData;
-
-  // 2. get decrypted tokens before deletion
-  let tokens = null;
-  try {
-    tokens = await MCPTokenStorage.getTokens({
-      userId,
-      serverName,
-      findToken: db.findToken,
-    });
-  } catch (error) {
-    logger.warn(
-      `[maybeUninstallOAuthMCP] Unable to load OAuth tokens for ${serverName}; clearing local token state.`,
-      error,
-    );
-  }
-
-  // 3. revoke OAuth tokens at the provider
-  const revocationEndpoint =
-    serverConfig.oauth?.revocation_endpoint ?? clientMetadata.revocation_endpoint;
-  const revocationEndpointAuthMethodsSupported =
-    serverConfig.oauth?.revocation_endpoint_auth_methods_supported ??
-    clientMetadata.revocation_endpoint_auth_methods_supported;
-  const oauthHeaders = serverConfig.oauth_headers ?? {};
-  const registry = getMCPServersRegistry();
-  const allowedDomains = registry.getAllowedDomains();
-  const allowedAddresses = registry.getAllowedAddresses();
-
-  if (tokens?.access_token) {
-    try {
-      await MCPOAuthHandler.revokeOAuthToken(
-        serverName,
-        tokens.access_token,
-        'access',
-        {
-          serverUrl: serverConfig.url,
-          clientId: clientInfo.client_id,
-          clientSecret: clientInfo.client_secret ?? '',
-          revocationEndpoint,
-          revocationEndpointAuthMethodsSupported,
-        },
-        oauthHeaders,
-        allowedDomains,
-        allowedAddresses,
-      );
-    } catch (error) {
-      logger.error(
-        `[maybeUninstallOAuthMCP] Error revoking OAuth access token for ${serverName}:`,
-        error,
-      );
-    }
-  }
-
-  if (tokens?.refresh_token) {
-    try {
-      await MCPOAuthHandler.revokeOAuthToken(
-        serverName,
-        tokens.refresh_token,
-        'refresh',
-        {
-          serverUrl: serverConfig.url,
-          clientId: clientInfo.client_id,
-          clientSecret: clientInfo.client_secret ?? '',
-          revocationEndpoint,
-          revocationEndpointAuthMethodsSupported,
-        },
-        oauthHeaders,
-        allowedDomains,
-        allowedAddresses,
-      );
-    } catch (error) {
-      logger.error(
-        `[maybeUninstallOAuthMCP] Error revoking OAuth refresh token for ${serverName}:`,
-        error,
-      );
-    }
-  }
-
-  // 4. delete tokens from the DB and clear the flow state after revocation attempts
-  await clearStoredMCPOAuthState(userId, serverName);
-};
-
 module.exports = {
   getUserController,
   getTermsStatusController,
@@ -546,6 +237,4 @@ module.exports = {
   verifyEmailController,
   updateUserPluginsController,
   resendVerificationController,
-  deleteUserMcpServers,
-  maybeUninstallOAuthMCP,
 };

@@ -24,10 +24,8 @@ export default function createPayload(submission: t.TSubmission) {
 
   const endpoint = _e as s.EModelEndpoint;
   let server = `${EndpointURLs[s.EModelEndpoint.agents]}/${endpoint}`;
-  if (s.isAssistantsEndpoint(endpoint)) {
-    server =
-      EndpointURLs[(endpointType ?? endpoint) as 'assistants' | 'azureAssistants'] +
-      (isEdited ? '/modify' : '');
+  if (endpointOption.clientOptions?.cookingBridge === true) {
+    server = `${EndpointURLs[s.EModelEndpoint.agents].replace(/\/agents\/chat$/, '')}/cooking/chat`;
   }
 
   const payload: t.TPayload = {
@@ -40,8 +38,8 @@ export default function createPayload(submission: t.TSubmission) {
     editedContent,
     conversationId,
     isContinued: !!(isEdited && isContinued),
-    ephemeralAgent: s.isAssistantsEndpoint(endpoint) ? undefined : ephemeralAgent,
-    manualSkills: s.isAssistantsEndpoint(endpoint) ? undefined : manualSkills,
+    ephemeralAgent,
+    manualSkills,
   };
 
   return { server, payload };

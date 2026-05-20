@@ -220,8 +220,6 @@ export interface GetOpenAIModelsOptions {
   user?: string;
   /** Whether to fetch from Azure */
   azure?: boolean;
-  /** Whether to fetch models for the Assistants endpoint */
-  assistants?: boolean;
   /** OpenAI API key (if not using environment variable) */
   openAIApiKey?: string;
   /** Skip MODEL_QUERIES cache (e.g., for user-provided keys) */
@@ -248,9 +246,7 @@ export async function fetchOpenAIModels(
   let baseURL = openaiBaseURL;
   let reverseProxyUrl = process.env.OPENAI_REVERSE_PROXY;
 
-  if (opts.assistants && process.env.ASSISTANTS_BASE_URL) {
-    reverseProxyUrl = process.env.ASSISTANTS_BASE_URL;
-  } else if (opts.azure) {
+  if (opts.azure) {
     return models;
   }
 
@@ -293,16 +289,12 @@ export async function fetchOpenAIModels(
 export async function getOpenAIModels(opts: GetOpenAIModelsOptions = {}): Promise<string[]> {
   let models = defaultModels[EModelEndpoint.openAI];
 
-  if (opts.assistants) {
-    models = defaultModels[EModelEndpoint.assistants];
-  } else if (opts.azure) {
-    models = defaultModels[EModelEndpoint.azureAssistants];
+  if (opts.azure) {
+    models = defaultModels[EModelEndpoint.openAI];
   }
 
   let key: string;
-  if (opts.assistants) {
-    key = 'ASSISTANTS_MODELS';
-  } else if (opts.azure) {
+  if (opts.azure) {
     key = 'AZURE_OPENAI_MODELS';
   } else {
     key = 'OPENAI_MODELS';

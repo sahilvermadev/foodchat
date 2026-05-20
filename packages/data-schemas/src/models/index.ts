@@ -30,6 +30,13 @@ import { createAclEntryModel } from './aclEntry';
 import { createSystemGrantModel } from './systemGrant';
 import { createGroupModel } from './group';
 import { createConfigModel } from './config';
+import { createPreferencesModel } from './preferences';
+import {
+  createSavedRecipeModel,
+  createCookingDraftModel,
+  createCookingSessionModel,
+  createCookingSessionEventModel,
+} from './cooking';
 
 /**
  * Creates all database models for all collections
@@ -68,5 +75,10 @@ export function createModels(mongoose: typeof import('mongoose')) {
     SystemGrant: createSystemGrantModel(mongoose),
     Group: createGroupModel(mongoose),
     Config: createConfigModel(mongoose),
+    Preferences: createPreferencesModel(mongoose),
+    SavedRecipe: createSavedRecipeModel(mongoose),
+    CookingDraft: createCookingDraftModel(mongoose),
+    CookingSession: createCookingSessionModel(mongoose),
+    CookingSessionEvent: createCookingSessionEventModel(mongoose),
   };
 }

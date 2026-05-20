@@ -33,20 +33,6 @@ describe('createChatSearchParams', () => {
       expect(modelOnly.has('model')).toBe(true);
     });
 
-    it('includes assistant_id when endpoint is assistants', () => {
-      const withAssistantId = createChatSearchParams({
-        endpoint: EModelEndpoint.assistants,
-        model: 'gpt-4',
-        assistant_id: 'asst_123',
-        temperature: 0.7,
-      } as TConversation);
-
-      expect(withAssistantId.get('assistant_id')).toBe('asst_123');
-      expect(withAssistantId.has('endpoint')).toBe(false);
-      expect(withAssistantId.has('model')).toBe(false);
-      expect(withAssistantId.has('temperature')).toBe(false);
-    });
-
     it('includes agent_id when endpoint is agents', () => {
       const withAgentId = createChatSearchParams({
         endpoint: EModelEndpoint.agents,
@@ -59,21 +45,6 @@ describe('createChatSearchParams', () => {
       expect(withAgentId.has('endpoint')).toBe(false);
       expect(withAgentId.has('model')).toBe(false);
       expect(withAgentId.has('temperature')).toBe(false);
-    });
-
-    it('excludes all parameters except assistant_id when endpoint is assistants', () => {
-      const withAssistantId = createChatSearchParams({
-        endpoint: EModelEndpoint.assistants,
-        model: 'gpt-4',
-        assistant_id: 'asst_123',
-        temperature: 0.7,
-      } as TConversation);
-
-      expect(withAssistantId.get('assistant_id')).toBe('asst_123');
-      expect(withAssistantId.has('endpoint')).toBe(false);
-      expect(withAssistantId.has('model')).toBe(false);
-      expect(withAssistantId.has('temperature')).toBe(false);
-      expect([...withAssistantId.entries()].length).toBe(1);
     });
 
     it('excludes all parameters except agent_id when endpoint is agents', () => {
@@ -94,17 +65,6 @@ describe('createChatSearchParams', () => {
     it('returns empty params when agent endpoint has no agent_id', () => {
       const result = createChatSearchParams({
         endpoint: EModelEndpoint.agents,
-        model: 'gpt-4',
-        temperature: 0.7,
-      } as TConversation);
-
-      expect(result.toString()).toBe('');
-      expect([...result.entries()].length).toBe(0);
-    });
-
-    it('returns empty params when assistants endpoint has no assistant_id', () => {
-      const result = createChatSearchParams({
-        endpoint: EModelEndpoint.assistants,
         model: 'gpt-4',
         temperature: 0.7,
       } as TConversation);

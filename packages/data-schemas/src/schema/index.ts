@@ -26,3 +26,11 @@ export { default as memorySchema } from './memory';
 export { default as groupSchema } from './group';
 export { default as systemGrantSchema } from './systemGrant';
 export { default as configSchema } from './config';
+export { preferencesSchema } from './preferences';
+export {
+  cookingDraftSchema,
+  savedRecipeSchema,
+  cookingSessionSchema,
+  structuredRecipeSchema,
+  cookingSessionEventSchema,
+} from './cooking';

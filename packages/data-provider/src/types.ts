@@ -740,3 +740,5 @@ export type TUpdateSkillNodeRequest = {
   parentId?: string | null;
   order?: number;
 };
+
+export * from './types/cooking';

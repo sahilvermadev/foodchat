@@ -20,7 +20,7 @@ async function loadDefaultModels(req) {
       req.config ?? (await getAppConfig({ role: req.user?.role, tenantId: req.user?.tenantId }));
     const vertexConfig = appConfig?.endpoints?.[EModelEndpoint.anthropic]?.vertexConfig;
 
-    const [openAI, anthropic, azureOpenAI, assistants, azureAssistants, google, bedrock] =
+    const [openAI, anthropic, azureOpenAI, google, bedrock] =
       await Promise.all([
         getOpenAIModels({ user: req.user.id }).catch((error) => {
           logger.error('Error fetching OpenAI models:', error);
@@ -34,14 +34,6 @@ async function loadDefaultModels(req) {
         ),
         getOpenAIModels({ user: req.user.id, azure: true }).catch((error) => {
           logger.error('Error fetching Azure OpenAI models:', error);
-          return [];
-        }),
-        getOpenAIModels({ assistants: true }).catch((error) => {
-          logger.error('Error fetching OpenAI Assistants API models:', error);
-          return [];
-        }),
-        getOpenAIModels({ azureAssistants: true }).catch((error) => {
-          logger.error('Error fetching Azure OpenAI Assistants API models:', error);
           return [];
         }),
         Promise.resolve(getGoogleModels()).catch((error) => {
@@ -59,8 +51,6 @@ async function loadDefaultModels(req) {
       [EModelEndpoint.google]: google,
       [EModelEndpoint.anthropic]: anthropic,
       [EModelEndpoint.azureOpenAI]: azureOpenAI,
-      [EModelEndpoint.assistants]: assistants,
-      [EModelEndpoint.azureAssistants]: azureAssistants,
       [EModelEndpoint.bedrock]: bedrock,
     };
   } catch (error) {

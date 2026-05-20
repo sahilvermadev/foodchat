@@ -45,7 +45,7 @@ export function supportsClientResize(): boolean {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
-    return !!(ctx && ctx.drawImage && canvas.toBlob);
+    return !!ctx && typeof canvas.toBlob === 'function';
   } catch {
     return false;
   }

@@ -35,6 +35,7 @@ type ChatHelpers = Pick<
   | 'setConversation'
   | 'setIsSubmitting'
   | 'newConversation'
+  | 'setLatestMessage'
   | 'resetLatestMessage'
 >;
 
@@ -102,6 +103,7 @@ export default function useResumableSSE(
     setConversation,
     setIsSubmitting,
     newConversation,
+    setLatestMessage,
     resetLatestMessage,
   } = chatHelpers;
 
@@ -125,6 +127,7 @@ export default function useResumableSSE(
     setIsSubmitting,
     newConversation,
     setShowStopButton,
+    setLatestMessage,
     resetLatestMessage,
   });
 

@@ -15,7 +15,7 @@ import {
  */
 export const useClientResize = () => {
   const { data: fileConfig = null } = useGetFileConfig({
-    select: (data) => mergeFileConfig(data),
+    select: (data) => mergeFileConfig(data as Parameters<typeof mergeFileConfig>[0]),
   });
 
   // Safe access to clientImageResize config with fallbacks

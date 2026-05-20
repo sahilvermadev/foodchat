@@ -11,9 +11,11 @@ function Sidebar({
   onExpand,
   onResizeStart,
   onResizeKeyboard,
+  transparent = false,
 }: {
   links: NavLink[];
   expanded: boolean;
+  transparent?: boolean;
   onCollapse: () => void;
   onExpand: () => void;
   onResizeStart: (e: React.MouseEvent) => void;
@@ -25,6 +27,7 @@ function Sidebar({
         <ExpandedPanel
           links={links}
           expanded={expanded}
+          transparent={transparent}
           onCollapse={onCollapse}
           onExpand={onExpand}
         />

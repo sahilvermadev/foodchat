@@ -1,6 +1,7 @@
 import { useState, memo, useRef } from 'react';
 import * as Menu from '@ariakit/react/menu';
-import { FileText, LogOut } from 'lucide-react';
+import { FileText, LogOut, SlidersHorizontal } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { LinkIcon, GearIcon, DropdownMenuSeparator, Avatar } from '@librechat/client';
 import { MyFilesModal } from '~/components/Chat/Input/Files/MyFilesModal';
 import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
@@ -10,6 +11,7 @@ import Settings from './Settings';
 
 function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
   const localize = useLocalize();
+  const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuthContext();
   const { data: startupConfig } = useGetStartupConfig();
   const balanceQuery = useGetUserBalance({
@@ -27,15 +29,15 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
         data-testid="nav-user"
         className={
           collapsed
-            ? 'flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-surface-active-alt aria-[expanded=true]:bg-surface-active-alt'
+            ? 'flex h-12 w-12 items-center justify-center rounded-lg transition-colors hover:bg-surface-active-alt aria-[expanded=true]:bg-surface-active-alt'
             : 'mt-text-sm flex h-auto w-full items-center gap-2 rounded-xl p-2 text-sm transition-all duration-200 ease-in-out hover:bg-surface-active-alt aria-[expanded=true]:bg-surface-active-alt'
         }
       >
         <div
-          className={collapsed ? 'size-7 flex-shrink-0' : '-ml-0.9 -mt-0.8 h-8 w-8 flex-shrink-0'}
+          className={collapsed ? 'size-10 flex-shrink-0' : '-ml-0.9 -mt-0.8 h-8 w-8 flex-shrink-0'}
         >
           <div className="relative flex">
-            <Avatar user={user} size={collapsed ? 28 : 32} />
+            <Avatar user={user} size={collapsed ? 40 : 32} />
           </div>
         </div>
         {!collapsed && (
@@ -50,7 +52,6 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
       <Menu.Menu
         portal
         className="account-settings-popover popover-ui z-[125] w-[305px] rounded-lg md:w-[244px]"
-        placement={collapsed ? 'right-end' : undefined}
         style={{
           transformOrigin: collapsed ? 'left bottom' : 'bottom',
           translate: collapsed ? '4px 0' : '0 -4px',
@@ -72,6 +73,10 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
         <Menu.MenuItem onClick={() => setShowFiles(true)} className="select-item text-sm">
           <FileText className="icon-md" aria-hidden="true" />
           {localize('com_nav_my_files')}
+        </Menu.MenuItem>
+        <Menu.MenuItem onClick={() => navigate('/preferences')} className="select-item text-sm">
+          <SlidersHorizontal className="icon-md" aria-hidden="true" />
+          {localize('com_nav_preferences')}
         </Menu.MenuItem>
         {startupConfig?.helpAndFaqURL !== '/' && (
           <Menu.MenuItem

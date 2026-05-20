@@ -1,9 +1,8 @@
 import { useRecoilValue } from 'recoil';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileSources, QueryKeys, DynamicQueryKeys, dataService } from 'librechat-data-provider';
+import { FileSources, QueryKeys, dataService } from 'librechat-data-provider';
 import type { QueryObserverResult, UseQueryOptions } from '@tanstack/react-query';
 import type t from 'librechat-data-provider';
-import { isEphemeralAgent } from '~/common';
 import { addFileToCache } from '~/utils';
 import store from '~/store';
 
@@ -18,24 +17,6 @@ export const useGetFiles = <TData = t.TFile[] | boolean>(
     ...config,
     enabled: (config?.enabled ?? true) === true && queriesEnabled,
   });
-};
-
-export const useGetAgentFiles = <TData = t.TFile[]>(
-  agentId: string | undefined,
-  config?: UseQueryOptions<t.TFile[], unknown, TData>,
-): QueryObserverResult<TData, unknown> => {
-  const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
-  return useQuery<t.TFile[], unknown, TData>(
-    DynamicQueryKeys.agentFiles(agentId ?? ''),
-    () => (agentId ? dataService.getAgentFiles(agentId) : Promise.resolve([])),
-    {
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: false,
-      ...config,
-      enabled: (config?.enabled ?? true) === true && queriesEnabled && !isEphemeralAgent(agentId),
-    },
-  );
 };
 
 export const useGetFileConfig = <TData = t.FileConfig>(

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
-import { Constants, tMessageSchema, isAssistantsEndpoint } from 'librechat-data-provider';
+import { Constants, tMessageSchema } from 'librechat-data-provider';
 import type { TMessage, TConversation, TSubmission, Agents } from 'librechat-data-provider';
 import { useStreamStatus } from '~/data-provider';
 import store from '~/store';
@@ -105,10 +105,7 @@ export default function useResumeOnLoad(
   const setSubmission = useSetRecoilState(store.submissionByIndex(runIndex));
   const currentSubmission = useRecoilValue(store.submissionByIndex(runIndex));
   const currentConversation = useRecoilValue(store.conversationByIndex(runIndex));
-  const endpoint = currentConversation?.endpoint;
-  const endpointType = currentConversation?.endpointType;
-  const actualEndpoint = endpointType ?? endpoint;
-  const resumableEnabled = !isAssistantsEndpoint(actualEndpoint);
+  const resumableEnabled = true;
   // Track conversations we've already processed (either resumed or skipped)
   const processedConvoRef = useRef<string | null>(null);
 

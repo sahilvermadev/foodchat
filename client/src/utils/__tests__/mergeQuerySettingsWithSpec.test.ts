@@ -41,22 +41,6 @@ describe('mergeQuerySettingsWithSpec', () => {
       expect(result.temperature).toBe(0.7);
     });
 
-    it('clears spec display fields for assistant share links', () => {
-      const querySettings: TPreset = {
-        assistant_id: 'asst_abc',
-        endpoint: EModelEndpoint.assistants,
-      };
-
-      const result = mergeQuerySettingsWithSpec(specPreset, querySettings);
-
-      expect(result.assistant_id).toBe('asst_abc');
-      expect(result.endpoint).toBe(EModelEndpoint.assistants);
-      expect(result.spec).toBeNull();
-      expect(result.iconURL).toBeNull();
-      expect(result.modelLabel).toBeNull();
-      expect(result.greeting).toBeUndefined();
-    });
-
     it('clears spec display fields for model override links', () => {
       const querySettings: TPreset = {
         model: 'claude-sonnet-4-20250514',

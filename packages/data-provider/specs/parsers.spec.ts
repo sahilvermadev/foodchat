@@ -235,24 +235,6 @@ describe('parseCompactConvo', () => {
       expect(result?.model).toBe('gemini-pro');
     });
 
-    test('should strip iconURL from assistants endpoint conversation input', () => {
-      const maliciousIconURL = 'https://evil.com/track.png';
-      const conversation: Partial<TConversation> = {
-        assistant_id: 'asst_123',
-        iconURL: maliciousIconURL,
-        endpoint: EModelEndpoint.assistants,
-      };
-
-      const result = parseCompactConvo({
-        endpoint: EModelEndpoint.assistants,
-        conversation,
-      });
-
-      expect(result).not.toBeNull();
-      expect(result?.['iconURL']).toBeUndefined();
-      expect(result?.assistant_id).toBe('asst_123');
-    });
-
     test('should preserve other conversation properties while stripping iconURL', () => {
       const conversation: Partial<TConversation> = {
         model: 'gpt-4',

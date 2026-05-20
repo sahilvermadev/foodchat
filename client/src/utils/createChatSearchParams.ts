@@ -1,9 +1,4 @@
-import {
-  EModelEndpoint,
-  isAgentsEndpoint,
-  tQueryParamsSchema,
-  isAssistantsEndpoint,
-} from 'librechat-data-provider';
+import { EModelEndpoint, isAgentsEndpoint, tQueryParamsSchema } from 'librechat-data-provider';
 import type { TPreset, TConversation } from 'librechat-data-provider';
 import type { ZodAny } from 'zod';
 import { isEphemeralAgent } from '~/common';
@@ -23,8 +18,7 @@ const parseQueryValue = (value: string) => {
 
 /**
  * Processes and validates URL query parameters using schema definitions.
- * Extracts valid settings based on tQueryParamsSchema and handles special endpoint cases
- * for assistants and agents.
+ * Extracts valid settings based on tQueryParamsSchema and handles special endpoint cases for agents.
  */
 export function processValidSettings(queryParams: Record<string, string>) {
   const validSettings = {} as TPreset;
@@ -42,13 +36,6 @@ export function processValidSettings(queryParams: Record<string, string>) {
     }
   }
 
-  if (
-    validSettings.assistant_id != null &&
-    validSettings.assistant_id &&
-    !isAssistantsEndpoint(validSettings.endpoint)
-  ) {
-    validSettings.endpoint = EModelEndpoint.assistants;
-  }
   if (
     validSettings.agent_id != null &&
     validSettings.agent_id &&
@@ -90,11 +77,7 @@ export default function createChatSearchParams(
     !isEphemeralAgent(conversation.agent_id)
   ) {
     return new URLSearchParams({ agent_id: String(conversation.agent_id) });
-  } else if (isAssistantsEndpoint(endpoint) && conversation.assistant_id) {
-    return new URLSearchParams({ assistant_id: String(conversation.assistant_id) });
   } else if (isAgentsEndpoint(endpoint) && !conversation.agent_id) {
-    return params;
-  } else if (isAssistantsEndpoint(endpoint) && !conversation.assistant_id) {
     return params;
   }
 

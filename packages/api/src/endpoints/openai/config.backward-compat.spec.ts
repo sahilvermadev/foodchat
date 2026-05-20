@@ -87,8 +87,8 @@ describe('getOpenAIConfig - Backward Compatibility', () => {
           baseURL: 'https://gateway.ai.cloudflare.com/v1/account-id/gateway-id/openrouter',
           defaultHeaders: {
             'HTTP-Referer': 'https://librechat.ai',
-            'X-Title': 'LibreChat',
-            'X-OpenRouter-Title': 'LibreChat',
+            'X-Title': 'Mise',
+            'X-OpenRouter-Title': 'Mise',
             'X-OpenRouter-Categories': 'general-chat,personal-agent',
             'x-librechat-thread-id': '{{LIBRECHAT_BODY_CONVERSATIONID}}',
             'x-test-key': '{{TESTING_USER_VAR}}',

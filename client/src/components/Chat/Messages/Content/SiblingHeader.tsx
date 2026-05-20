@@ -4,7 +4,7 @@ import { useToastContext } from '@librechat/client';
 import { EModelEndpoint, parseEphemeralAgentId, stripAgentIdSuffix } from 'librechat-data-provider';
 import type { TMessage, Agent } from 'librechat-data-provider';
 import { useBranchMessageMutation } from '~/data-provider/Messages';
-import MessageIcon from '~/components/Share/MessageIcon';
+import MessageIcon from '~/components/Chat/Messages/MessageIcon';
 import { useAgentsMapContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';

@@ -1,13 +1,6 @@
 import React, { useRef, useState, useMemo, useCallback } from 'react';
-import { useRecoilState } from 'recoil';
 import * as Ariakit from '@ariakit/react';
-import {
-  FileSearch,
-  ImageUpIcon,
-  FileType2Icon,
-  FileImageIcon,
-  TerminalSquareIcon,
-} from 'lucide-react';
+import { ImageUpIcon, FileType2Icon, FileImageIcon } from 'lucide-react';
 import {
   FileUpload,
   TooltipAnchor,
@@ -20,23 +13,15 @@ import {
   EToolResources,
   EModelEndpoint,
   isPermissiveMimeConfig,
-  defaultAgentCapabilities,
   bedrockDocumentExtensions,
   isDocumentSupportedProvider,
 } from 'librechat-data-provider';
 import type { EndpointFileConfig, TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter } from '~/common';
-import {
-  useAgentToolPermissions,
-  useAgentCapabilities,
-  useGetAgentsConfig,
-  useFileHandlingNoChatContext,
-  useLocalize,
-} from '~/hooks';
+import { useFileHandlingNoChatContext, useLocalize } from '~/hooks';
 import { useSharePointFileHandlingNoChatContext } from '~/hooks/Files/useSharePointFileHandling';
 import { SharePointPickerDialog } from '~/components/SharePoint';
 import { useGetStartupConfig } from '~/data-provider';
-import { ephemeralAgentByConvoId } from '~/store';
 import { MenuItemProps } from '~/common';
 import { cn } from '~/utils';
 
@@ -62,11 +47,9 @@ interface AttachFileMenuProps {
 }
 
 const AttachFileMenu = ({
-  agentId,
   endpoint,
   disabled,
   endpointType,
-  conversationId,
   endpointFileConfig,
   useResponsesApi,
   files,
@@ -78,9 +61,6 @@ const AttachFileMenu = ({
   const isUploadDisabled = disabled ?? false;
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPopoverActive, setIsPopoverActive] = useState(false);
-  const [ephemeralAgent, setEphemeralAgent] = useRecoilState(
-    ephemeralAgentByConvoId(conversationId),
-  );
   const toolResourceRef = useRef<EToolResources | undefined>();
   const { handleFileChange } = useFileHandlingNoChatContext(undefined, {
     files,
@@ -94,22 +74,10 @@ const AttachFileMenu = ({
       { files, setFiles, setFilesLoading, conversation },
     );
 
-  const { agentsConfig } = useGetAgentsConfig();
   const { data: startupConfig } = useGetStartupConfig();
   const sharePointEnabled = startupConfig?.sharePointFilePickerEnabled;
 
   const [isSharePointDialogOpen, setIsSharePointDialogOpen] = useState(false);
-
-  /** TODO: Ephemeral Agent Capabilities
-   * Allow defining agent capabilities on a per-endpoint basis
-   * Use definition for agents endpoint for ephemeral agents
-   * */
-  const capabilities = useAgentCapabilities(agentsConfig?.capabilities ?? defaultAgentCapabilities);
-
-  const { fileSearchAllowedByAgent, codeAllowedByAgent, provider } = useAgentToolPermissions(
-    agentId,
-    ephemeralAgent,
-  );
 
   const handleUploadClick = useCallback(
     (fileType?: FileUploadType) => {
@@ -149,7 +117,7 @@ const AttachFileMenu = ({
     const createMenuItems = (onAction: (fileType?: FileUploadType) => void) => {
       const items: MenuItemProps[] = [];
 
-      let currentProvider = provider || endpoint;
+      let currentProvider = endpoint;
 
       // This will be removed in a future PR to formally normalize Providers comparisons to be case insensitive
       if (currentProvider?.toLowerCase() === Providers.OPENROUTER) {
@@ -194,46 +162,14 @@ const AttachFileMenu = ({
         });
       }
 
-      if (capabilities.contextEnabled) {
-        items.push({
-          label: localize('com_ui_upload_ocr_text'),
-          onClick: () => {
-            setToolResource(EToolResources.context);
-            onAction();
-          },
-          icon: <FileType2Icon className="icon-md" />,
-        });
-      }
-
-      if (capabilities.fileSearchEnabled && fileSearchAllowedByAgent) {
-        items.push({
-          label: localize('com_ui_upload_file_search'),
-          onClick: () => {
-            setToolResource(EToolResources.file_search);
-            setEphemeralAgent((prev) => ({
-              ...prev,
-              [EToolResources.file_search]: true,
-            }));
-            onAction();
-          },
-          icon: <FileSearch className="icon-md" />,
-        });
-      }
-
-      if (capabilities.codeEnabled && codeAllowedByAgent) {
-        items.push({
-          label: localize('com_ui_upload_code_environment'),
-          onClick: () => {
-            setToolResource(EToolResources.execute_code);
-            setEphemeralAgent((prev) => ({
-              ...prev,
-              [EToolResources.execute_code]: true,
-            }));
-            onAction();
-          },
-          icon: <TerminalSquareIcon className="icon-md" />,
-        });
-      }
+      items.push({
+        label: localize('com_ui_upload_ocr_text'),
+        onClick: () => {
+          setToolResource(EToolResources.context);
+          onAction();
+        },
+        icon: <FileType2Icon className="icon-md" />,
+      });
 
       return items;
     };
@@ -258,15 +194,10 @@ const AttachFileMenu = ({
   }, [
     localize,
     endpoint,
-    provider,
     endpointType,
-    capabilities,
     useResponsesApi,
     handleUploadClick,
-    setEphemeralAgent,
     sharePointEnabled,
-    codeAllowedByAgent,
-    fileSearchAllowedByAgent,
     setIsSharePointDialogOpen,
   ]);
 

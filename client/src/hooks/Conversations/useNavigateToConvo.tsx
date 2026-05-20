@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useSetRecoilState } from 'recoil';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   QueryKeys,
@@ -22,12 +22,14 @@ import {
   buildDefaultConvo,
   logger,
 } from '~/utils';
-import { useApplyModelSpecEffects } from '~/hooks/Agents';
+import useApplyModelSpecEffects from '~/hooks/useApplyModelSpecEffects';
 import { startupConfigKey } from '~/data-provider';
+import { getCookingConversationPath } from '~/components/Cooking/artifact';
 import store from '~/store';
 
 const useNavigateToConvo = (index = 0) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const clearAllConversations = store.useClearConvoState();
   const applyModelSpecEffects = useApplyModelSpecEffects();
@@ -52,6 +54,12 @@ const useNavigateToConvo = (index = 0) => {
     [setConvo, queryClient, applyModelSpecEffects],
   );
 
+  const getConversationPath = useCallback(
+    (conversationId?: string | null) =>
+      getCookingConversationPath(location.pathname, conversationId),
+    [location.pathname],
+  );
+
   const fetchFreshData = async (conversation?: Partial<TConversation>) => {
     const conversationId = conversation?.conversationId;
     if (!conversationId) {
@@ -66,12 +74,12 @@ const useNavigateToConvo = (index = 0) => {
       const convoData = { ...data };
       clearModelForNonEphemeralAgent(convoData);
       setConversation(convoData);
-      navigate(`/c/${conversationId ?? Constants.NEW_CONVO}`, { state: { focusChat: true } });
+      navigate(getConversationPath(conversationId), { state: { focusChat: true } });
     } catch (error) {
       console.error('Error fetching conversation data on navigation', error);
       if (conversation) {
         setConversation(conversation as TConversation);
-        navigate(`/c/${conversationId}`, { state: { focusChat: true } });
+        navigate(getConversationPath(conversationId), { state: { focusChat: true } });
       }
     }
   };
@@ -129,7 +137,7 @@ const useNavigateToConvo = (index = 0) => {
       fetchFreshData(convo);
     } else {
       setConversation(convo);
-      navigate(`/c/${convo.conversationId ?? Constants.NEW_CONVO}`, { state: { focusChat: true } });
+      navigate(getConversationPath(convo.conversationId), { state: { focusChat: true } });
     }
   };
 

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
-import { PermissionTypes, Permissions, isAssistantsEndpoint } from 'librechat-data-provider';
-import useAgentCapabilities from '~/hooks/Agents/useAgentCapabilities';
-import useGetAgentsConfig from '~/hooks/Agents/useGetAgentsConfig';
+import { PermissionTypes, Permissions } from 'librechat-data-provider';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import store from '~/store';
 
@@ -55,10 +53,6 @@ const useHandleKeyUp = ({
   index: number;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
 }) => {
-  const hasPromptsAccess = useHasAccess({
-    permissionType: PermissionTypes.PROMPTS,
-    permission: Permissions.USE,
-  });
   const hasMultiConvoAccess = useHasAccess({
     permissionType: PermissionTypes.MULTI_CONVO,
     permission: Permissions.USE,
@@ -67,26 +61,19 @@ const useHandleKeyUp = ({
     permissionType: PermissionTypes.SKILLS,
     permission: Permissions.USE,
   });
-  const { agentsConfig } = useGetAgentsConfig();
-  const { skillsEnabled } = useAgentCapabilities(agentsConfig?.capabilities);
   const latestMessage = useRecoilValue(store.latestMessageFamily(index));
-  const endpoint = useRecoilValue(store.effectiveEndpointByIndex(index));
   const setShowMentionPopover = useSetRecoilState(store.showMentionPopoverFamily(index));
   const setShowPlusPopover = useSetRecoilState(store.showPlusPopoverFamily(index));
-  const setShowPromptsPopover = useSetRecoilState(store.showPromptsPopoverFamily(index));
   const setShowSkillsPopover = useSetRecoilState(store.showSkillsPopoverFamily(index));
 
   const atCommandEnabled = useRecoilValue(store.atCommand);
   const plusCommandEnabled = useRecoilValue(store.plusCommand);
-  const slashCommandEnabled = useRecoilValue(store.slashCommand);
   const dollarCommandEnabled = useRecoilValue(store.dollarCommand);
 
   useEffect(() => {
-    if (isAssistantsEndpoint(endpoint)) {
-      setShowPlusPopover(false);
-      setShowSkillsPopover(false);
-    }
-  }, [endpoint, setShowPlusPopover, setShowSkillsPopover]);
+    setShowPlusPopover(false);
+    setShowSkillsPopover(false);
+  }, [setShowPlusPopover, setShowSkillsPopover]);
 
   const handleAtCommand = useCallback(() => {
     if (atCommandEnabled && shouldTriggerCommand(textAreaRef, '@')) {
@@ -95,52 +82,30 @@ const useHandleKeyUp = ({
   }, [textAreaRef, setShowMentionPopover, atCommandEnabled]);
 
   const handlePlusCommand = useCallback(() => {
-    if (!hasMultiConvoAccess || !plusCommandEnabled || isAssistantsEndpoint(endpoint)) {
+    if (!hasMultiConvoAccess || !plusCommandEnabled) {
       return;
     }
     if (shouldTriggerCommand(textAreaRef, '+')) {
       setShowPlusPopover(true);
     }
-  }, [textAreaRef, setShowPlusPopover, plusCommandEnabled, hasMultiConvoAccess, endpoint]);
-
-  const handlePromptsCommand = useCallback(() => {
-    if (!hasPromptsAccess || !slashCommandEnabled) {
-      return;
-    }
-    if (shouldTriggerCommand(textAreaRef, '/')) {
-      setShowPromptsPopover(true);
-    }
-  }, [textAreaRef, hasPromptsAccess, setShowPromptsPopover, slashCommandEnabled]);
+  }, [textAreaRef, setShowPlusPopover, plusCommandEnabled, hasMultiConvoAccess]);
 
   const handleSkillsCommand = useCallback(() => {
-    if (
-      !hasSkillsAccess ||
-      !skillsEnabled ||
-      !dollarCommandEnabled ||
-      isAssistantsEndpoint(endpoint)
-    ) {
+    if (!hasSkillsAccess || !dollarCommandEnabled) {
       return;
     }
     if (shouldTriggerCommand(textAreaRef, '$')) {
       setShowSkillsPopover(true);
     }
-  }, [
-    textAreaRef,
-    hasSkillsAccess,
-    skillsEnabled,
-    setShowSkillsPopover,
-    dollarCommandEnabled,
-    endpoint,
-  ]);
+  }, [textAreaRef, hasSkillsAccess, setShowSkillsPopover, dollarCommandEnabled]);
 
   const commandHandlers = useMemo(
     () => ({
       '@': handleAtCommand,
       '+': handlePlusCommand,
-      '/': handlePromptsCommand,
       $: handleSkillsCommand,
     }),
-    [handleAtCommand, handlePlusCommand, handlePromptsCommand, handleSkillsCommand],
+    [handleAtCommand, handlePlusCommand, handleSkillsCommand],
   );
 
   const handleUpArrow = useCallback(

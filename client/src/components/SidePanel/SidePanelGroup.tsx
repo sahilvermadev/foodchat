@@ -2,6 +2,7 @@ import { useState, memo } from 'react';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { ResizablePanel, ResizablePanelGroup, useMediaQuery } from '@librechat/client';
 import ArtifactsPanel from './ArtifactsPanel';
+import { cn } from '~/utils';
 
 const PANEL_IDS_SINGLE = ['messages-view'];
 const PANEL_IDS_SPLIT = ['messages-view', 'artifacts-panel'];
@@ -9,9 +10,10 @@ const PANEL_IDS_SPLIT = ['messages-view', 'artifacts-panel'];
 interface SidePanelProps {
   artifacts?: React.ReactNode;
   children: React.ReactNode;
+  transparentBackground?: boolean;
 }
 
-const SidePanelGroup = memo(({ artifacts, children }: SidePanelProps) => {
+const SidePanelGroup = memo(({ artifacts, children, transparentBackground }: SidePanelProps) => {
   const [shouldRenderArtifacts, setShouldRenderArtifacts] = useState(artifacts != null);
   const isSmallScreen = useMediaQuery('(max-width: 767px)');
 
@@ -29,7 +31,10 @@ const SidePanelGroup = memo(({ artifacts, children }: SidePanelProps) => {
         orientation="horizontal"
         defaultLayout={defaultLayout}
         onLayoutChanged={onLayoutChanged}
-        className="relative flex-1 bg-presentation"
+        className={cn(
+          'relative flex-1',
+          transparentBackground ? 'bg-transparent' : 'bg-presentation',
+        )}
       >
         <ResizablePanel defaultSize="50" minSize={minSizeMain} id="messages-view">
           {children}

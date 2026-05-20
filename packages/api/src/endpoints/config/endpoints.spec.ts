@@ -61,22 +61,6 @@ describe('createEndpointsConfigService', () => {
       );
     });
 
-    it('adds azureAssistants when azure has assistants config', async () => {
-      const deps = createMockDeps({
-        getAppConfig: jest.fn().mockResolvedValue(
-          appConfig({
-            endpoints: { [EModelEndpoint.azureOpenAI]: { assistants: true } },
-          }),
-        ),
-      });
-      const { getEndpointsConfig } = createEndpointsConfigService(deps);
-      const result = await getEndpointsConfig(fakeReq());
-
-      expect(result?.[EModelEndpoint.azureAssistants]).toEqual(
-        expect.objectContaining({ userProvide: false }),
-      );
-    });
-
     it('enables anthropic when vertex AI is configured', async () => {
       const deps = createMockDeps({
         getAppConfig: jest.fn().mockResolvedValue(
@@ -91,32 +75,6 @@ describe('createEndpointsConfigService', () => {
       expect(result?.[EModelEndpoint.anthropic]).toEqual(
         expect.objectContaining({ userProvide: false }),
       );
-    });
-
-    it('merges assistants config with version coercion', async () => {
-      const deps = createMockDeps({
-        loadDefaultEndpointsConfig: jest.fn().mockResolvedValue({
-          [EModelEndpoint.assistants]: { userProvide: false, order: 0 },
-        }),
-        getAppConfig: jest.fn().mockResolvedValue(
-          appConfig({
-            endpoints: {
-              [EModelEndpoint.assistants]: {
-                disableBuilder: true,
-                capabilities: [AgentCapabilities.execute_code],
-                version: 2,
-              },
-            },
-          }),
-        ),
-      });
-      const { getEndpointsConfig } = createEndpointsConfigService(deps);
-      const result = await getEndpointsConfig(fakeReq());
-      const assistants = result?.[EModelEndpoint.assistants];
-
-      expect(assistants?.version).toBe('2');
-      expect(assistants?.disableBuilder).toBe(true);
-      expect(assistants?.capabilities).toEqual([AgentCapabilities.execute_code]);
     });
 
     it('merges agents config with allowedProviders', async () => {

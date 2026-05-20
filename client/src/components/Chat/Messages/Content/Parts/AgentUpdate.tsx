@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { EModelEndpoint } from 'librechat-data-provider';
 import type { TMessage } from 'librechat-data-provider';
-import MessageIcon from '~/components/Share/MessageIcon';
+import MessageIcon from '~/components/Chat/Messages/MessageIcon';
 import { useAgentsMapContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
 

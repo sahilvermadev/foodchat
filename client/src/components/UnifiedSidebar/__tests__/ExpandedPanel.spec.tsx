@@ -144,7 +144,7 @@ describe('ExpandedPanel', () => {
       const newChatLink = screen.getByTestId('new-chat-button');
       fireEvent.click(newChatLink);
 
-      expect(mockNewConversation).toHaveBeenCalledTimes(1);
+      expect(mockNewConversation).toHaveBeenCalledWith({ routeBase: '/cook' });
       expect(localStorage.getItem('side:active-panel')).toBe(DEFAULT_PANEL);
     });
 
@@ -160,7 +160,7 @@ describe('ExpandedPanel', () => {
       const newChatLink = screen.getByTestId('new-chat-button');
       fireEvent.click(newChatLink);
 
-      expect(mockNewConversation).toHaveBeenCalledTimes(1);
+      expect(mockNewConversation).toHaveBeenCalledWith({ routeBase: '/cook' });
       expect(localStorage.getItem('side:active-panel')).toBe('prompts');
     });
   });

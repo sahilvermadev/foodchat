@@ -35,7 +35,7 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
         new URLSearchParams(window.location.search).has(REDIRECT_PARAM) ||
         sessionStorage.getItem(SESSION_KEY) != null;
       if (!hasPendingRedirect) {
-        navigate('/c/new', { replace: true });
+        navigate('/cook', { replace: true });
       }
     }
     if (data) {
@@ -44,7 +44,7 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
   }, [isAuthenticated, navigate, data]);
 
   useEffect(() => {
-    document.title = startupConfig?.appTitle || 'LibreChat';
+    document.title = startupConfig?.appTitle || 'Mise';
   }, [startupConfig?.appTitle]);
 
   useEffect(() => {

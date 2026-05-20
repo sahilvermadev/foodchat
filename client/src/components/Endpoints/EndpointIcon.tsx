@@ -1,10 +1,5 @@
-import { getEndpointField, isAssistantsEndpoint } from 'librechat-data-provider';
-import type {
-  TPreset,
-  TConversation,
-  TAssistantsMap,
-  TEndpointsConfig,
-} from 'librechat-data-provider';
+import { getEndpointField } from 'librechat-data-provider';
+import type { TPreset, TConversation, TEndpointsConfig } from 'librechat-data-provider';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import MinimalIcon from '~/components/Endpoints/MinimalIcon';
 import { getIconEndpoint } from '~/utils';
@@ -13,14 +8,12 @@ export default function EndpointIcon({
   conversation,
   endpointsConfig,
   className = 'mr-0',
-  assistantMap,
   context,
 }: {
   conversation: TConversation | TPreset | null;
   endpointsConfig: TEndpointsConfig;
   containerClassName?: string;
   context?: 'message' | 'nav' | 'landing' | 'menu-item';
-  assistantMap?: TAssistantsMap;
   className?: string;
   size?: number;
 }) {
@@ -31,13 +24,7 @@ export default function EndpointIcon({
   const endpointType = getEndpointField(endpointsConfig, endpoint, 'type');
   const endpointIconURL = getEndpointField(endpointsConfig, endpoint, 'iconURL');
 
-  const assistant = isAssistantsEndpoint(endpoint)
-    ? assistantMap?.[endpoint]?.[conversation?.assistant_id ?? '']
-    : null;
-  const assistantAvatar = (assistant && (assistant.metadata?.avatar as string)) || '';
-  const assistantName = assistant && (assistant.name ?? '');
-
-  const iconURL = assistantAvatar || convoIconURL;
+  const iconURL = convoIconURL;
 
   if (iconURL && (iconURL.includes('http') || iconURL.startsWith('/images/'))) {
     return (
@@ -46,8 +33,6 @@ export default function EndpointIcon({
         modelLabel={conversation?.chatGptLabel ?? conversation?.modelLabel ?? ''}
         context={context}
         endpointIconURL={endpointIconURL}
-        assistantAvatar={assistantAvatar}
-        assistantName={assistantName ?? ''}
       />
     );
   } else {

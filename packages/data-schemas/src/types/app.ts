@@ -1,3 +1,4 @@
+import { EModelEndpoint } from 'librechat-data-provider';
 import type {
   TEndpoint,
   FileStorage,
@@ -5,12 +6,10 @@ import type {
   TAzureConfig,
   TCustomConfig,
   TMemoryConfig,
-  EModelEndpoint,
   TVertexAIConfig,
   TAgentsEndpoint,
   CloudFrontConfig,
   TCustomEndpoints,
-  TAssistantEndpoint,
   TAnthropicEndpoint,
   SummarizationConfig,
 } from 'librechat-data-provider';
@@ -116,12 +115,12 @@ export interface AppConfig {
     };
     /** Azure OpenAI endpoint configuration */
     azureOpenAI?: TAzureConfig;
-    /** Assistants endpoint configuration */
-    assistants?: Partial<TAssistantEndpoint>;
-    /** Azure assistants endpoint configuration */
-    azureAssistants?: Partial<TAssistantEndpoint>;
+    /** Agents endpoint configuration */
+    agents?: Partial<TAgentsEndpoint>;
     /** Agents endpoint configuration */
     [EModelEndpoint.agents]?: Partial<TAgentsEndpoint>;
+    /** Custom endpoints configuration */
+    custom?: TCustomEndpoints;
     /** Custom endpoints configuration */
     [EModelEndpoint.custom]?: TCustomEndpoints;
     /** Global endpoint configuration */

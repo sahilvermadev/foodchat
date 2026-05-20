@@ -1,6 +1,6 @@
 import { useMemo, memo } from 'react';
 import { getEndpointField } from 'librechat-data-provider';
-import type { Assistant, Agent } from 'librechat-data-provider';
+import type { Assistant, Agent, TConversation, TMessage } from 'librechat-data-provider';
 import type { TMessageIcon } from '~/common';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import { useGetEndpointsQuery } from '~/data-provider';
@@ -9,6 +9,8 @@ import Icon from '~/components/Endpoints/Icon';
 
 type MessageIconProps = {
   iconData?: TMessageIcon;
+  message?: TMessage;
+  conversation?: TConversation | null;
   assistant?: Assistant;
   agent?: Agent;
 };
@@ -25,6 +27,13 @@ export function arePropsEqual(prev: MessageIconProps, next: MessageIconProps): b
     [prev.iconData?.iconURL, next.iconData?.iconURL],
     [prev.iconData?.modelLabel, next.iconData?.modelLabel],
     [prev.iconData?.isCreatedByUser, next.iconData?.isCreatedByUser],
+    [prev.message?.endpoint, next.message?.endpoint],
+    [prev.message?.model, next.message?.model],
+    [prev.message?.iconURL, next.message?.iconURL],
+    [prev.message?.isCreatedByUser, next.message?.isCreatedByUser],
+    [prev.conversation?.endpoint, next.conversation?.endpoint],
+    [prev.conversation?.model, next.conversation?.model],
+    [prev.conversation?.modelLabel, next.conversation?.modelLabel],
     [prev.agent?.name, next.agent?.name],
     [prev.agent?.avatar?.filepath, next.agent?.avatar?.filepath],
     [prev.assistant?.name, next.assistant?.name],
@@ -39,8 +48,24 @@ export function arePropsEqual(prev: MessageIconProps, next: MessageIconProps): b
   return true;
 }
 
-const MessageIcon = memo(({ iconData, assistant, agent }: MessageIconProps) => {
+const MessageIcon = memo(
+  ({ iconData, message, conversation, assistant, agent }: MessageIconProps) => {
   const { data: endpointsConfig } = useGetEndpointsQuery();
+  const resolvedIconData = useMemo<TMessageIcon | undefined>(() => {
+    if (iconData) {
+      return iconData;
+    }
+    if (!message) {
+      return undefined;
+    }
+    return {
+      endpoint: message.endpoint ?? conversation?.endpoint,
+      model: message.model ?? conversation?.model,
+      iconURL: message.iconURL,
+      modelLabel: conversation?.modelLabel,
+      isCreatedByUser: message.isCreatedByUser,
+    };
+  }, [iconData, message, conversation]);
 
   const agentName = agent?.name ?? '';
   const agentAvatar = agent?.avatar?.filepath ?? '';
@@ -53,10 +78,10 @@ const MessageIcon = memo(({ iconData, assistant, agent }: MessageIconProps) => {
     avatarURL = agentAvatar;
   }
 
-  const iconURL = iconData?.iconURL;
+  const iconURL = resolvedIconData?.iconURL;
   const endpoint = useMemo(
-    () => getIconEndpoint({ endpointsConfig, iconURL, endpoint: iconData?.endpoint }),
-    [endpointsConfig, iconURL, iconData?.endpoint],
+    () => getIconEndpoint({ endpointsConfig, iconURL, endpoint: resolvedIconData?.endpoint }),
+    [endpointsConfig, iconURL, resolvedIconData?.endpoint],
   );
 
   const endpointIconURL = useMemo(
@@ -64,11 +89,11 @@ const MessageIcon = memo(({ iconData, assistant, agent }: MessageIconProps) => {
     [endpointsConfig, endpoint],
   );
 
-  if (iconData?.isCreatedByUser !== true && iconURL != null && iconURL.includes('http')) {
+  if (resolvedIconData?.isCreatedByUser !== true && iconURL != null && iconURL.includes('http')) {
     return (
       <ConvoIconURL
         iconURL={iconURL}
-        modelLabel={iconData?.modelLabel}
+        modelLabel={resolvedIconData?.modelLabel}
         context="message"
         assistantAvatar={assistantAvatar}
         agentAvatar={agentAvatar}
@@ -81,16 +106,18 @@ const MessageIcon = memo(({ iconData, assistant, agent }: MessageIconProps) => {
 
   return (
     <Icon
-      isCreatedByUser={iconData?.isCreatedByUser ?? false}
+      isCreatedByUser={resolvedIconData?.isCreatedByUser ?? false}
       endpoint={endpoint}
       iconURL={avatarURL || endpointIconURL}
-      model={iconData?.model}
+      model={resolvedIconData?.model}
       assistantName={assistantName}
       agentName={agentName}
       size={28.8}
     />
   );
-}, arePropsEqual);
+  },
+  arePropsEqual,
+);
 
 MessageIcon.displayName = 'MessageIcon';
 

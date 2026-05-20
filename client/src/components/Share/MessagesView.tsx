@@ -4,7 +4,7 @@ import MultiMessage from './MultiMessage';
 import { useLocalize } from '~/hooks';
 
 export default function MessagesView({
-  messagesTree: _messagesTree,
+  messagesTree,
   conversationId,
 }: {
   messagesTree?: TMessage[] | null;
@@ -12,35 +12,26 @@ export default function MessagesView({
 }) {
   const localize = useLocalize();
   const [currentEditId, setCurrentEditId] = useState<number | string | null>(-1);
+
   return (
     <div className="min-h-0 flex-1 overflow-hidden">
-      <div className="dark:gpt-dark-gray relative h-full">
-        <div
-          style={{
-            height: '100%',
-            overflowY: 'auto',
-            width: '100%',
-          }}
-        >
+      <div className="relative h-full dark:gpt-dark-gray">
+        <div className="h-full w-full overflow-y-auto">
           <div className="flex flex-col pb-16 text-sm dark:bg-transparent">
-            {(_messagesTree && _messagesTree.length === 0) || _messagesTree === null ? (
+            {messagesTree == null || messagesTree.length === 0 ? (
               <div className="flex w-full items-center justify-center gap-1 bg-gray-50 p-3 text-sm text-gray-500 dark:border-gray-800/50 dark:bg-gray-800 dark:text-gray-300">
                 {localize('com_ui_nothing_found')}
               </div>
             ) : (
-              <>
-                <div>
-                  <MultiMessage
-                    key={conversationId} // avoid internal state mixture
-                    messagesTree={_messagesTree}
-                    messageId={conversationId ?? null}
-                    setCurrentEditId={setCurrentEditId}
-                    currentEditId={currentEditId ?? null}
-                  />
-                </div>
-              </>
+              <MultiMessage
+                key={conversationId}
+                messagesTree={messagesTree}
+                messageId={conversationId}
+                setCurrentEditId={setCurrentEditId}
+                currentEditId={currentEditId}
+              />
             )}
-            <div className="dark:gpt-dark-gray group h-0 w-full flex-shrink-0 dark:border-gray-800/50" />
+            <div className="group h-0 w-full flex-shrink-0 dark:gpt-dark-gray dark:border-gray-800/50" />
           </div>
         </div>
       </div>

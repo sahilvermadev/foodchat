@@ -1,16 +1,13 @@
 import { useMemo, memo, type FC, useCallback, useEffect, useRef } from 'react';
 import throttle from 'lodash/throttle';
 import { ChevronDown } from 'lucide-react';
-import { useRecoilValue } from 'recoil';
 import { Spinner, useMediaQuery } from '@librechat/client';
 import { List, AutoSizer, CellMeasurer, CellMeasurerCache } from 'react-virtualized';
 import type { TConversation } from 'librechat-data-provider';
-import { useLocalize, TranslationKeys, useFavorites, useShowMarketplace } from '~/hooks';
-import FavoritesList from '~/components/Nav/Favorites/FavoritesList';
+import { useLocalize, TranslationKeys } from '~/hooks';
 import { useActiveJobs } from '~/data-provider';
 import { groupConversationsByDate, cn } from '~/utils';
 import Convo from './Convo';
-import store from '~/store';
 
 export type CellPosition = {
   columnIndex: number;
@@ -29,7 +26,6 @@ interface ConversationsProps {
   containerRef: React.RefObject<List>;
   loadMoreConversations: () => void;
   isLoading: boolean;
-  isSearchLoading: boolean;
   isChatsExpanded: boolean;
   setIsChatsExpanded: (expanded: boolean) => void;
 }
@@ -113,7 +109,6 @@ const DateLabel: FC<{ groupName: string; isFirst?: boolean }> = memo(({ groupNam
 DateLabel.displayName = 'DateLabel';
 
 type FlattenedItem =
-  | { type: 'favorites' }
   | { type: 'chats-header' }
   | { type: 'header'; groupName: string }
   | { type: 'convo'; convo: TConversation }
@@ -157,18 +152,11 @@ const Conversations: FC<ConversationsProps> = ({
   containerRef,
   loadMoreConversations,
   isLoading,
-  isSearchLoading,
   isChatsExpanded,
   setIsChatsExpanded,
 }) => {
-  const localize = useLocalize();
-  const search = useRecoilValue(store.search);
-  const { favorites, isLoading: isFavoritesLoading } = useFavorites();
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const convoHeight = isSmallScreen ? 44 : 34;
-  const showAgentMarketplace = useShowMarketplace();
-
-  const favoritesContentKeyRef = useRef('');
 
   // Fetch active job IDs for showing generation indicators
   const { data: activeJobsData } = useActiveJobs();
@@ -176,12 +164,6 @@ const Conversations: FC<ConversationsProps> = ({
     () => new Set(activeJobsData?.activeJobIds ?? []),
     [activeJobsData?.activeJobIds],
   );
-
-  // Determine if FavoritesList will render content
-  const shouldShowFavorites =
-    !search.query && (isFavoritesLoading || favorites.length > 0 || showAgentMarketplace);
-
-  favoritesContentKeyRef.current = `${favorites.length}-${showAgentMarketplace ? 1 : 0}-${isFavoritesLoading ? 1 : 0}`;
 
   const filteredConversations = useMemo(
     () => rawConversations.filter(Boolean) as TConversation[],
@@ -195,10 +177,6 @@ const Conversations: FC<ConversationsProps> = ({
 
   const flattenedItems = useMemo(() => {
     const items: FlattenedItem[] = [];
-    // Only include favorites row if FavoritesList will render content
-    if (shouldShowFavorites) {
-      items.push({ type: 'favorites' });
-    }
     items.push({ type: 'chats-header' });
 
     if (isChatsExpanded) {
@@ -208,11 +186,11 @@ const Conversations: FC<ConversationsProps> = ({
       });
 
       if (isLoading) {
-        items.push({ type: 'loading' } as any);
+        items.push({ type: 'loading' });
       }
     }
     return items;
-  }, [groupedConversations, isLoading, isChatsExpanded, shouldShowFavorites]);
+  }, [groupedConversations, isLoading, isChatsExpanded]);
 
   // Store flattenedItems in a ref for keyMapper to access without recreating cache
   const flattenedItemsRef = useRef(flattenedItems);
@@ -228,9 +206,6 @@ const Conversations: FC<ConversationsProps> = ({
           const item = flattenedItemsRef.current[index];
           if (!item) {
             return `unknown-${index}`;
-          }
-          if (item.type === 'favorites') {
-            return `favorites-${favoritesContentKeyRef.current}`;
           }
           if (item.type === 'chats-header') {
             return 'chats-header';
@@ -250,22 +225,6 @@ const Conversations: FC<ConversationsProps> = ({
     [convoHeight],
   );
 
-  const clearFavoritesCache = useCallback(() => {
-    if (cache) {
-      cache.clear(0, 0);
-      if (containerRef.current && 'recomputeRowHeights' in containerRef.current) {
-        containerRef.current.recomputeRowHeights(0);
-      }
-    }
-  }, [cache, containerRef]);
-
-  useEffect(() => {
-    const frameId = requestAnimationFrame(() => {
-      clearFavoritesCache();
-    });
-    return () => cancelAnimationFrame(frameId);
-  }, [favorites.length, isFavoritesLoading, showAgentMarketplace, clearFavoritesCache]);
-
   useEffect(() => {
     const frameId = requestAnimationFrame(() => {
       cache.clearAll();
@@ -274,7 +233,7 @@ const Conversations: FC<ConversationsProps> = ({
       }
     });
     return () => cancelAnimationFrame(frameId);
-  }, [search.query, cache, containerRef]);
+  }, [cache, containerRef]);
 
   const rowRenderer = useCallback(
     ({ index, key, parent, style }) => {
@@ -285,14 +244,6 @@ const Conversations: FC<ConversationsProps> = ({
         return (
           <MeasuredRow key={key} {...rowProps}>
             <LoadingSpinner />
-          </MeasuredRow>
-        );
-      }
-
-      if (item.type === 'favorites') {
-        return (
-          <MeasuredRow key={key} {...rowProps}>
-            <FavoritesList isSmallScreen={isSmallScreen} toggleNav={toggleNav} />
           </MeasuredRow>
         );
       }
@@ -309,13 +260,9 @@ const Conversations: FC<ConversationsProps> = ({
       }
 
       if (item.type === 'header') {
-        // First date header index depends on whether favorites row is included
-        // With favorites: [favorites, chats-header, first-header] → index 2
-        // Without favorites: [chats-header, first-header] → index 1
-        const firstHeaderIndex = shouldShowFavorites ? 2 : 1;
         return (
           <MeasuredRow key={key} {...rowProps}>
-            <DateLabel groupName={item.groupName} isFirst={index === firstHeaderIndex} />
+            <DateLabel groupName={item.groupName} isFirst={index === 1} />
           </MeasuredRow>
         );
       }
@@ -341,10 +288,8 @@ const Conversations: FC<ConversationsProps> = ({
       flattenedItems,
       moveToTop,
       toggleNav,
-      isSmallScreen,
       isChatsExpanded,
       setIsChatsExpanded,
-      shouldShowFavorites,
       activeJobIds,
     ],
   );
@@ -370,36 +315,29 @@ const Conversations: FC<ConversationsProps> = ({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col pb-2 text-sm text-text-primary">
-      {isSearchLoading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <Spinner className="text-text-primary" />
-          <span className="ml-2 text-text-primary">{localize('com_ui_loading')}</span>
-        </div>
-      ) : (
-        <div className="flex-1">
-          <AutoSizer>
-            {({ width, height }) => (
-              <List
-                ref={containerRef}
-                width={width}
-                height={height}
-                deferredMeasurementCache={cache}
-                rowCount={flattenedItems.length}
-                rowHeight={getRowHeight}
-                rowRenderer={rowRenderer}
-                overscanRowCount={10}
-                aria-readonly={false}
-                className="outline-none"
-                aria-label="Conversations"
-                onRowsRendered={handleRowsRendered}
-                tabIndex={-1}
-                style={{ outline: 'none' }}
-                containerRole="rowgroup"
-              />
-            )}
-          </AutoSizer>
-        </div>
-      )}
+      <div className="flex-1">
+        <AutoSizer>
+          {({ width, height }) => (
+            <List
+              ref={containerRef}
+              width={width}
+              height={height}
+              deferredMeasurementCache={cache}
+              rowCount={flattenedItems.length}
+              rowHeight={getRowHeight}
+              rowRenderer={rowRenderer}
+              overscanRowCount={10}
+              aria-readonly={false}
+              className="outline-none"
+              aria-label="Conversations"
+              onRowsRendered={handleRowsRendered}
+              tabIndex={-1}
+              style={{ outline: 'none' }}
+              containerRole="rowgroup"
+            />
+          )}
+        </AutoSizer>
+      </div>
     </div>
   );
 };

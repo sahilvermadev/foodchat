@@ -1,10 +1,9 @@
-import { useState } from 'react';
 import { Settings2 } from 'lucide-react';
 import { TooltipAnchor } from '@librechat/client';
 import { Root, Anchor } from '@radix-ui/react-popover';
-import { isParamEndpoint, getEndpointField, tConvoUpdateSchema } from 'librechat-data-provider';
-import type { TPreset, TInterfaceConfig } from 'librechat-data-provider';
-import { EndpointSettings, SaveAsPresetDialog, AlternativeSettings } from '~/components/Endpoints';
+import { isParamEndpoint, getEndpointField } from 'librechat-data-provider';
+import type { TInterfaceConfig } from 'librechat-data-provider';
+import { EndpointSettings, AlternativeSettings } from '~/components/Endpoints';
 import { useSetIndexOptions, useLocalize } from '~/hooks';
 import { useGetEndpointsQuery } from '~/data-provider';
 import OptionsPopover from './OptionsPopover';
@@ -17,17 +16,11 @@ export default function HeaderOptions({
   interfaceConfig?: Partial<TInterfaceConfig>;
 }) {
   const { data: endpointsConfig } = useGetEndpointsQuery();
-
-  const [saveAsDialogShow, setSaveAsDialogShow] = useState<boolean>(false);
   const localize = useLocalize();
 
   const { showPopover, conversation, setShowPopover } = useChatContext();
   const { setOption } = useSetIndexOptions();
   const { endpoint } = conversation ?? {};
-
-  const saveAsPreset = () => {
-    setSaveAsDialogShow(true);
-  };
 
   if (!endpoint) {
     return null;
@@ -65,8 +58,6 @@ export default function HeaderOptions({
             {interfaceConfig?.parameters === true && paramEndpoint === false && (
               <OptionsPopover
                 visible={showPopover}
-                saveAsPreset={saveAsPreset}
-                presetsDisabled={!(interfaceConfig.presets ?? false)}
                 PopoverButtons={<PopoverButtons />}
                 closePopover={() => setShowPopover(false)}
               >
@@ -79,17 +70,6 @@ export default function HeaderOptions({
                   <AlternativeSettings conversation={conversation} setOption={setOption} />
                 </div>
               </OptionsPopover>
-            )}
-            {interfaceConfig?.presets === true && (
-              <SaveAsPresetDialog
-                open={saveAsDialogShow}
-                onOpenChange={setSaveAsDialogShow}
-                preset={
-                  tConvoUpdateSchema.parse({
-                    ...conversation,
-                  }) as TPreset
-                }
-              />
             )}
           </span>
         </div>

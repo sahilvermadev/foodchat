@@ -4,20 +4,18 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { DropdownPopup, Spinner, useToastContext } from '@librechat/client';
-import { Ellipsis, Share2, CopyPlus, Archive, Pen, Trash } from 'lucide-react';
+import { Ellipsis, CopyPlus, Archive, Pen, Trash } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import type { TMessage } from 'librechat-data-provider';
 import {
   useDuplicateConversationMutation,
   useDeleteConversationMutation,
-  useGetStartupConfig,
   useArchiveConvoMutation,
 } from '~/data-provider';
 import { useLocalize, useNavigateToConvo, useNewConvo } from '~/hooks';
 import { NotificationSeverity } from '~/common';
 import { useChatContext } from '~/Providers';
 import DeleteButton from './DeleteButton';
-import ShareButton from './ShareButton';
 import { cn } from '~/utils';
 
 function ConvoOptions({
@@ -42,18 +40,16 @@ function ConvoOptions({
   const localize = useLocalize();
   const queryClient = useQueryClient();
   const { index } = useChatContext();
-  const { data: startupConfig } = useGetStartupConfig();
   const { navigateToConvo } = useNavigateToConvo(index);
   const { showToast } = useToastContext();
 
   const navigate = useNavigate();
   const { conversationId: currentConvoId } = useParams();
   const { newConversation } = useNewConvo();
+  const newConversationPath = '/cook';
 
   const menuId = useId();
-  const shareButtonRef = useRef<HTMLButtonElement>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
-  const [showShareDialog, setShowShareDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [announcement, setAnnouncement] = useState('');
 
@@ -63,7 +59,7 @@ function ConvoOptions({
     onSuccess: () => {
       if (currentConvoId === conversationId || currentConvoId === 'new') {
         newConversation();
-        navigate('/c/new', { replace: true });
+        navigate(newConversationPath, { replace: true });
       }
       retainView();
       showToast({
@@ -108,10 +104,6 @@ function ConvoOptions({
   const isArchiveLoading = archiveConvoMutation.isLoading;
   const isDeleteLoading = deleteMutation.isLoading;
 
-  const shareHandler = useCallback(() => {
-    setShowShareDialog(true);
-  }, []);
-
   const deleteHandler = useCallback(() => {
     setShowDeleteDialog(true);
   }, []);
@@ -149,7 +141,7 @@ function ConvoOptions({
             }, 10000);
             if (currentConvoId === convoId || currentConvoId === 'new') {
               newConversation();
-              navigate('/c/new', { replace: true });
+              navigate(newConversationPath, { replace: true });
             }
             retainView();
             setIsPopoverActive(false);
@@ -174,6 +166,7 @@ function ConvoOptions({
       setIsPopoverActive,
       showToast,
       localize,
+      newConversationPath,
     ],
   );
 
@@ -185,18 +178,6 @@ function ConvoOptions({
 
   const dropdownItems = useMemo(
     () => [
-      {
-        label: localize('com_ui_share'),
-        onClick: shareHandler,
-        icon: <Share2 className="icon-sm mr-2 text-text-primary" aria-hidden="true" />,
-        show: startupConfig && startupConfig.sharedLinksEnabled,
-        ariaHasPopup: 'dialog' as const,
-        ariaControls: 'share-conversation-dialog',
-        /** NOTE: THE FOLLOWING PROPS ARE REQUIRED FOR MENU ITEMS THAT OPEN DIALOGS */
-        hideOnClick: false,
-        ref: shareButtonRef,
-        render: (props) => <button {...props} />,
-      },
       {
         label: localize('com_ui_rename'),
         onClick: renameHandler,
@@ -236,8 +217,6 @@ function ConvoOptions({
     ],
     [
       localize,
-      shareHandler,
-      startupConfig,
       renameHandler,
       deleteHandler,
       isArchiveLoading,
@@ -254,7 +233,7 @@ function ConvoOptions({
       : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[open]:opacity-100',
   );
 
-  if (isShiftHeld && isActiveConvo && !isPopoverActive && !showShareDialog && !showDeleteDialog) {
+  if (isShiftHeld && isActiveConvo && !isPopoverActive && !showDeleteDialog) {
     return (
       <div className="flex items-center gap-0.5">
         <button
@@ -323,14 +302,6 @@ function ConvoOptions({
         }
         items={dropdownItems}
       />
-      {showShareDialog && (
-        <ShareButton
-          conversationId={conversationId ?? ''}
-          open={showShareDialog}
-          onOpenChange={setShowShareDialog}
-          triggerRef={shareButtonRef}
-        />
-      )}
       {showDeleteDialog && (
         <DeleteButton
           title={title ?? ''}

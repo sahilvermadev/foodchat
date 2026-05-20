@@ -2,12 +2,10 @@ import { useEffect } from 'react';
 import { useRecoilState } from 'recoil';
 import type { TMessage } from 'librechat-data-provider';
 import type { TMessageProps } from '~/common';
-
 import Message from './Message';
 import store from '~/store';
 
 export default function MultiMessage({
-  // messageId is used recursively here
   messageId,
   messagesTree,
   currentEditId,
@@ -20,10 +18,8 @@ export default function MultiMessage({
   };
 
   useEffect(() => {
-    // reset siblingIdx when the tree changes, mostly when a new message is submitting.
     setSiblingIdx(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messagesTree?.length]);
+  }, [messagesTree?.length, setSiblingIdx]);
 
   useEffect(() => {
     if (messagesTree?.length != null && siblingIdx >= messagesTree.length) {

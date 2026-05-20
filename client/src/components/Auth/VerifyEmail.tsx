@@ -22,7 +22,7 @@ function RequestPasswordReset() {
       setCountdown((prevCountdown) => {
         if (prevCountdown <= 1) {
           clearInterval(timer);
-          navigate('/c/new', { replace: true });
+          navigate('/cook', { replace: true });
           return 0;
         }
         return prevCountdown - 1;
@@ -36,7 +36,7 @@ function RequestPasswordReset() {
       setVerificationStatus(true);
       countdownRedirect();
     },
-    onError: (error: unknown) => {
+    onError: () => {
       setHeaderText(localize('com_auth_email_verification_failed') + ' 😢');
       setShowResendLink(true);
       setVerificationStatus(true);
@@ -74,7 +74,7 @@ function RequestPasswordReset() {
       setShowResendLink(true);
       setVerificationStatus(true);
     }
-  }, [token, email, verificationStatus, verifyEmailMutation]);
+  }, [token, email, verificationStatus, verifyEmailMutation, localize]);
 
   const VerificationSuccess = () => (
     <div className="flex flex-col items-center justify-center">

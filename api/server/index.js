@@ -24,7 +24,6 @@ const {
   preAuthTenantMiddleware,
 } = require('@librechat/api');
 const { connectDb, indexSync } = require('~/db');
-const initializeOAuthReconnectManager = require('./services/initializeOAuthReconnectManager');
 const {
   getRoleByName,
   updateAccessPermissions,
@@ -35,7 +34,6 @@ const { capabilityContextMiddleware } = require('./middleware/roles/capabilities
 const createValidateImageRequest = require('./middleware/validateImageRequest');
 const { jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
 const { checkMigrations } = require('./services/start/migration');
-const initializeMCPs = require('./services/initializeMCPs');
 const configureSocialLogins = require('./socialLogins');
 const { getAppConfig } = require('./services/Config');
 const staticCache = require('./utils/staticCache');
@@ -89,11 +87,18 @@ const startServer = async () => {
   });
 
   const indexPath = path.join(appConfig.paths.dist, 'index.html');
-  let indexHTML = fs.readFileSync(indexPath, 'utf8');
+  let indexHTML = '';
+  if (fs.existsSync(indexPath)) {
+    indexHTML = fs.readFileSync(indexPath, 'utf8');
+  } else if (process.env.NODE_ENV === 'development') {
+    logger.warn(`Client build not found at ${indexPath}; serving API-only backend for Vite.`);
+  } else {
+    throw new Error(`Client build not found at ${indexPath}`);
+  }
 
   // In order to provide support to serving the application in a sub-directory
   // We need to update the base href if the DOMAIN_CLIENT is specified and not the root path
-  if (process.env.DOMAIN_CLIENT) {
+  if (indexHTML && process.env.DOMAIN_CLIENT) {
     const clientUrl = new URL(process.env.DOMAIN_CLIENT);
     const baseHref = clientUrl.pathname.endsWith('/')
       ? clientUrl.pathname
@@ -171,22 +176,21 @@ const startServer = async () => {
   app.use('/api/admin/groups', routes.adminGroups);
   app.use('/api/admin/roles', routes.adminRoles);
   app.use('/api/admin/users', routes.adminUsers);
-  app.use('/api/actions', routes.actions);
   app.use('/api/keys', routes.keys);
   app.use('/api/api-keys', routes.apiKeys);
   app.use('/api/user', routes.user);
   app.use('/api/search', routes.search);
   app.use('/api/messages', routes.messages);
   app.use('/api/convos', routes.convos);
-  app.use('/api/presets', routes.presets);
-  app.use('/api/prompts', routes.prompts);
+  app.use('/api/preferences', routes.preferences);
   app.use('/api/skills', routes.skills);
   app.use('/api/categories', routes.categories);
+  app.use('/api/cooking', routes.cooking);
+  app.use('/api/recipes', routes.recipes);
   app.use('/api/endpoints', routes.endpoints);
   app.use('/api/balance', routes.balance);
   app.use('/api/models', routes.models);
   app.use('/api/config', preAuthTenantMiddleware, optionalJwtAuth, routes.config);
-  app.use('/api/assistants', routes.assistants);
   app.use('/api/files', await routes.files.initialize());
   app.use('/images/', createValidateImageRequest(appConfig.secureImageLinks), routes.staticRoute);
   app.use('/api/share', preAuthTenantMiddleware, routes.share);
@@ -197,8 +201,6 @@ const startServer = async () => {
   app.use('/api/permissions', routes.accessPermissions);
 
   app.use('/api/tags', routes.tags);
-  app.use('/api/mcp', routes.mcp);
-
   /** 404 for unmatched API routes */
   app.use('/api', apiNotFound);
 
@@ -212,7 +214,9 @@ const startServer = async () => {
 
     const lang = req.cookies.lang || req.headers['accept-language']?.split(',')[0] || 'en-US';
     const saneLang = lang.replace(/"/g, '&quot;');
-    let updatedIndexHtml = indexHTML.replace(/lang="en-US"/g, `lang="${saneLang}"`);
+    const updatedIndexHtml = indexHTML
+      ? indexHTML.replace(/lang="en-US"/g, `lang="${saneLang}"`)
+      : '<!doctype html><html><body>Mise API is running.</body></html>';
 
     res.type('html');
     res.send(updatedIndexHtml);
@@ -245,8 +249,7 @@ const startServer = async () => {
      */
     try {
       await runAsSystem(async () => {
-        await initializeMCPs();
-        await initializeOAuthReconnectManager();
+        logger.info('Post-listen startup checks completed.');
       });
       await checkMigrations();
 

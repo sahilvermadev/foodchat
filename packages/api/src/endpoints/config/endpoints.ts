@@ -45,46 +45,12 @@ export function createEndpointsConfigService(deps: EndpointsConfigDeps) {
       mergedConfig[EModelEndpoint.anthropic] = { userProvide: false };
     }
 
-    if (appConfig.endpoints?.[EModelEndpoint.azureOpenAI]?.assistants) {
-      mergedConfig[EModelEndpoint.azureAssistants] = { userProvide: false };
-    }
-
-    if (
-      mergedConfig[EModelEndpoint.assistants] &&
-      appConfig?.endpoints?.[EModelEndpoint.assistants]
-    ) {
-      const { disableBuilder, retrievalModels, capabilities, version } =
-        appConfig.endpoints[EModelEndpoint.assistants];
-      mergedConfig[EModelEndpoint.assistants] = {
-        ...mergedConfig[EModelEndpoint.assistants],
-        version: version != null ? String(version) : undefined,
-        retrievalModels,
-        disableBuilder,
-        capabilities,
-      };
-    }
-
     if (mergedConfig[EModelEndpoint.agents] && appConfig?.endpoints?.[EModelEndpoint.agents]) {
       const { disableBuilder, capabilities, allowedProviders } =
         appConfig.endpoints[EModelEndpoint.agents];
       mergedConfig[EModelEndpoint.agents] = {
         ...mergedConfig[EModelEndpoint.agents],
         allowedProviders,
-        disableBuilder,
-        capabilities,
-      };
-    }
-
-    if (
-      mergedConfig[EModelEndpoint.azureAssistants] &&
-      appConfig?.endpoints?.[EModelEndpoint.azureAssistants]
-    ) {
-      const { disableBuilder, retrievalModels, capabilities, version } =
-        appConfig.endpoints[EModelEndpoint.azureAssistants];
-      mergedConfig[EModelEndpoint.azureAssistants] = {
-        ...mergedConfig[EModelEndpoint.azureAssistants],
-        version: version != null ? String(version) : undefined,
-        retrievalModels,
         disableBuilder,
         capabilities,
       };

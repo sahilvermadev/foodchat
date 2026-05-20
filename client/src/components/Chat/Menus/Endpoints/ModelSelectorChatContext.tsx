@@ -10,7 +10,6 @@ interface ModelSelectorChatContextValue {
   model?: string | null;
   spec?: string | null;
   agent_id?: string | null;
-  assistant_id?: string | null;
   getConversation: () => TConversation | null;
   newConversation: ConvoGenerator;
 }
@@ -27,7 +26,6 @@ export function ModelSelectorChatProvider({ children }: { children: React.ReactN
   const model = useRecoilValue(store.conversationModelByIndex(0));
   const agent_id = useRecoilValue(store.conversationAgentIdByIndex(0));
   const endpoint = useRecoilValue(store.conversationEndpointByIndex(0));
-  const assistant_id = useRecoilValue(store.conversationAssistantIdByIndex(0));
 
   const newConversationRef = useRef(nextNewConversation);
   newConversationRef.current = nextNewConversation;
@@ -43,11 +41,10 @@ export function ModelSelectorChatProvider({ children }: { children: React.ReactN
       spec,
       agent_id,
       endpoint,
-      assistant_id,
       getConversation,
       newConversation,
     }),
-    [endpoint, model, spec, agent_id, assistant_id, getConversation, newConversation],
+    [endpoint, model, spec, agent_id, getConversation, newConversation],
   );
 
   return (

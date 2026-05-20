@@ -8,11 +8,10 @@ import SubRow from '~/components/Chat/Messages/SubRow';
 import { fontSizeAtom } from '~/store/fontSize';
 import { MessageContext } from '~/Providers';
 import { useAttachments } from '~/hooks';
-
 import MultiMessage from './MultiMessage';
+import MessageIcon from './MessageIcon';
 import { cn } from '~/utils';
 
-import Icon from './MessageIcon';
 export default function Message(props: TMessageProps) {
   const fontSize = useAtomValue(fontSizeAtom);
   const {
@@ -43,24 +42,17 @@ export default function Message(props: TMessageProps) {
     isCreatedByUser = true,
   } = message;
 
-  let messageLabel = '';
-  if (isCreatedByUser) {
-    messageLabel = 'anonymous';
-  } else {
-    messageLabel = message.sender ?? '';
-  }
+  const messageLabel = isCreatedByUser ? 'You' : (message.sender ?? '');
 
   return (
     <>
-      <div className="text-token-text-primary w-full border-0 bg-transparent dark:border-0 dark:bg-transparent">
+      <div className="w-full border-0 bg-transparent text-token-text-primary dark:border-0 dark:bg-transparent">
         <div className="m-auto justify-center p-4 py-2 md:gap-6">
           <div className="final-completion group mx-auto flex flex-1 gap-3 md:max-w-[47rem] md:px-5 lg:px-1 xl:max-w-[55rem] xl:px-5">
             <div className="relative flex flex-shrink-0 flex-col items-end">
-              <div>
-                <div className="pt-0.5">
-                  <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full">
-                    <Icon message={message} conversation={conversation} />
-                  </div>
+              <div className="pt-0.5">
+                <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full">
+                  <MessageIcon message={message} conversation={conversation} />
                 </div>
               </div>
             </div>
@@ -75,8 +67,8 @@ export default function Message(props: TMessageProps) {
                       messageId,
                       isExpanded: false,
                       conversationId: conversation?.conversationId,
-                      isSubmitting: false, // Share view is always read-only
-                      isLatestMessage: false, // No concept of latest message in share view
+                      isSubmitting: false,
+                      isLatestMessage: false,
                     }}
                   >
                     {message.content ? (

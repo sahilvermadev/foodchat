@@ -14,7 +14,6 @@ import {
   mergeFileConfig,
   AgentCapabilities,
   resolveEndpointType,
-  isAssistantsEndpoint,
   getEndpointFileConfig,
   defaultAgentCapabilities,
 } from 'librechat-data-provider';
@@ -34,11 +33,6 @@ export default function useDragHelpers() {
   const conversation = useRecoilValue(store.conversationByIndex(0)) || undefined;
   const setEphemeralAgent = useSetRecoilState(
     ephemeralAgentByConvoId(conversation?.conversationId ?? Constants.NEW_CONVO),
-  );
-
-  const isAssistants = useMemo(
-    () => isAssistantsEndpoint(conversation?.endpoint),
-    [conversation?.endpoint],
   );
 
   const { handleFiles } = useFileHandling();
@@ -85,7 +79,7 @@ export default function useDragHelpers() {
       );
       const cfg = queryClient.getQueryData<t.FileConfig>([QueryKeys.fileConfig]);
       if (cfg) {
-        const mergedCfg = mergeFileConfig(cfg);
+        const mergedCfg = mergeFileConfig(cfg as Parameters<typeof mergeFileConfig>[0]);
         const endpointCfg = getEndpointFileConfig({
           fileConfig: mergedCfg,
           endpoint: currentEndpoint,
@@ -98,11 +92,6 @@ export default function useDragHelpers() {
           });
           return;
         }
-      }
-
-      if (isAssistants) {
-        handleFilesRef.current(item.files);
-        return;
       }
 
       const agentsConfig = endpointsConfig?.[EModelEndpoint.agents];
@@ -144,7 +133,7 @@ export default function useDragHelpers() {
       setDraggedFiles(item.files);
       setShowModal(true);
     },
-    [isAssistants, queryClient, showToast, localize],
+    [queryClient, showToast, localize],
   );
 
   const [{ canDrop, isOver }, drop] = useDrop(

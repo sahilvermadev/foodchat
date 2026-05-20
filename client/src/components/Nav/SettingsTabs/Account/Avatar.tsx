@@ -46,7 +46,7 @@ function Avatar() {
   const [isDialogOpen, setDialogOpen] = useState<boolean>(false);
 
   const { data: fileConfig = defaultFileConfig } = useGetFileConfig({
-    select: (data) => mergeFileConfig(data),
+    select: (data) => mergeFileConfig(data as Parameters<typeof mergeFileConfig>[0]),
   });
 
   const localize = useLocalize();
