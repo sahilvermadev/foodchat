@@ -11,6 +11,8 @@ import {
 } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { NotificationSeverity } from '~/common';
+import RecipeMetrics from './Metrics';
+import { recipeMarkdownDisplay } from './recipe';
 
 type RecipeCanvasProps = {
   draft?: CookingDraft;
@@ -47,34 +49,6 @@ function recipeToMarkdown(recipe: StructuredRecipe): string {
   ]
     .filter(Boolean)
     .join('\n\n');
-}
-
-function cleanHeadingText(value: string): string {
-  return value
-    .replace(/^#+\s*/, '')
-    .replace(/\*\*/g, '')
-    .replace(/[_`]/g, '')
-    .trim();
-}
-
-function splitDocumentTitle(markdown: string, fallbackTitle?: string) {
-  const lines = markdown.split('\n');
-  const firstContentIndex = lines.findIndex((line) => line.trim().length > 0);
-  const firstContent = firstContentIndex >= 0 ? lines[firstContentIndex].trim() : '';
-  const firstHeading = firstContent.match(/^#\s+(.+)$/);
-
-  if (firstHeading && firstContentIndex >= 0) {
-    const bodyLines = [...lines.slice(0, firstContentIndex), ...lines.slice(firstContentIndex + 1)];
-    return {
-      title: cleanHeadingText(firstHeading[1]),
-      body: bodyLines.join('\n').trim(),
-    };
-  }
-
-  return {
-    title: fallbackTitle?.trim() || '',
-    body: markdown.trim(),
-  };
 }
 
 export default function RecipeCanvas({
@@ -128,7 +102,7 @@ export default function RecipeCanvas({
   ) : (
     <BookmarkPlus className="h-4 w-4" aria-hidden="true" />
   );
-  const documentParts = splitDocumentTitle(documentMarkdown, draft?.recipe.title);
+  const documentParts = recipeMarkdownDisplay(documentMarkdown, draft?.recipe.title);
 
   const handleCopyMarkdown = () => {
     const copied = copy(documentMarkdown, { format: 'text/plain' });
@@ -170,14 +144,14 @@ export default function RecipeCanvas({
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col bg-surface-primary-alt text-text-primary">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
-        <article className="mx-auto min-h-full max-w-[56rem] rounded-lg border border-border-light bg-surface-primary shadow-sm">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7 lg:px-10">
+        <article className="mx-auto min-h-full max-w-[56rem] rounded-lg border border-border-light bg-surface-primary shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)]">
           {documentMarkdown ? (
-            <header className="border-b border-border-light px-5 py-5 sm:px-8 lg:px-10">
+            <header className="border-b border-border-light px-5 py-6 sm:px-8 lg:px-10">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   {documentParts.title ? (
-                    <h1 className="text-2xl font-semibold leading-tight text-text-primary sm:text-3xl">
+                    <h1 className="font-serif text-3xl font-normal leading-tight tracking-normal text-text-primary sm:text-4xl">
                       {documentParts.title}
                     </h1>
                   ) : null}
@@ -228,7 +202,8 @@ export default function RecipeCanvas({
           ) : null}
           {documentMarkdown ? (
             <div className="px-5 py-6 sm:px-8 sm:py-7 lg:px-10">
-              <div className="markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
+              <RecipeMetrics metrics={documentParts.metrics} />
+              <div className="cooking-recipe-markdown markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
                 <Markdown content={documentParts.body} isLatestMessage={false} />
               </div>
             </div>

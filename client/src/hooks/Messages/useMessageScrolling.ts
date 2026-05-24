@@ -14,6 +14,7 @@ export default function useMessageScrolling(messagesTree?: TMessage[] | null) {
 
   const scrollableRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const initialScrollConversationRef = useRef<string | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const { conversation, conversationId } = useMessagesConversation();
   const { setAbortScroll, isSubmitting, abortScroll } = useMessagesSubmission();
@@ -70,6 +71,62 @@ export default function useMessageScrolling(messagesTree?: TMessage[] | null) {
       setAbortScroll(false);
     },
   });
+
+  useEffect(() => {
+    if (!messagesTree || messagesTree.length === 0) {
+      return;
+    }
+
+    if (!conversationId || conversationId === Constants.NEW_CONVO) {
+      return;
+    }
+
+    if (!messagesEndRef.current || !scrollableRef.current) {
+      return;
+    }
+
+    if (initialScrollConversationRef.current === conversationId) {
+      return;
+    }
+
+    initialScrollConversationRef.current = conversationId;
+    let frameId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
+    const scrollToEnd = () => {
+      const scroller = scrollableRef.current;
+      if (!scroller) {
+        return;
+      }
+      scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      debouncedSetShowScrollButton(false);
+    };
+
+    const runFrames = (remaining: number) => {
+      if (cancelled || remaining <= 0) {
+        return;
+      }
+      frameId = requestAnimationFrame(() => {
+        scrollToEnd();
+        runFrames(remaining - 1);
+      });
+    };
+
+    scrollToEnd();
+    runFrames(4);
+    timeoutId = setTimeout(scrollToEnd, 250);
+
+    return () => {
+      cancelled = true;
+      if (frameId != null) {
+        cancelAnimationFrame(frameId);
+      }
+      if (timeoutId != null) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [conversationId, debouncedSetShowScrollButton, messagesTree]);
 
   useEffect(() => {
     if (!messagesTree || messagesTree.length === 0) {

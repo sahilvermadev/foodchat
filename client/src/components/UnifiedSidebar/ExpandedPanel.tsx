@@ -106,7 +106,7 @@ const NavIconButton = memo(function NavIconButton({
           aria-pressed={isActive}
           className={cn(
             'h-11 w-11 rounded-lg',
-            isActive ? 'bg-surface-active-alt text-text-primary' : 'text-text-secondary',
+            isActive ? 'bg-surface-active-alt text-surface-submit' : 'text-text-secondary',
           )}
           onClick={handleClick}
         >

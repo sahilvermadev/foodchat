@@ -1,6 +1,6 @@
 import { useState, memo, useRef } from 'react';
 import * as Menu from '@ariakit/react/menu';
-import { FileText, LogOut, SlidersHorizontal } from 'lucide-react';
+import { FileText, LogOut, ScrollText, SlidersHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { LinkIcon, GearIcon, DropdownMenuSeparator, Avatar } from '@librechat/client';
 import { MyFilesModal } from '~/components/Chat/Input/Files/MyFilesModal';
@@ -77,6 +77,10 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
         <Menu.MenuItem onClick={() => navigate('/preferences')} className="select-item text-sm">
           <SlidersHorizontal className="icon-md" aria-hidden="true" />
           {localize('com_nav_preferences')}
+        </Menu.MenuItem>
+        <Menu.MenuItem onClick={() => navigate('/skills')} className="select-item text-sm">
+          <ScrollText className="icon-md" aria-hidden="true" />
+          {localize('com_ui_skills')}
         </Menu.MenuItem>
         {startupConfig?.helpAndFaqURL !== '/' && (
           <Menu.MenuItem

@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, MessagesSquare, ScrollText, SlidersHorizontal } from 'lucide-react';
+import { BookOpen, MessagesSquare, SlidersHorizontal } from 'lucide-react';
 import type { NavLink } from '~/common';
-import { SkillsAccordion } from '~/components/Skills';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
 
 export default function useUnifiedSidebarLinks() {
@@ -16,13 +15,6 @@ export default function useUnifiedSidebarLinks() {
         icon: MessagesSquare,
         id: 'conversations',
         Component: ConversationsSection,
-      },
-      {
-        title: 'com_ui_skills',
-        label: '',
-        icon: ScrollText,
-        id: 'skills',
-        Component: SkillsAccordion,
       },
       {
         title: 'com_recipes_library',

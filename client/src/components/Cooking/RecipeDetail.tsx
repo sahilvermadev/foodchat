@@ -5,7 +5,8 @@ import { Button, Input, TextareaAutosize } from '@librechat/client';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { useRecipeQuery, useUpdateSavedRecipeMutation } from '~/data-provider';
 import { useLocalize } from '~/hooks';
-import { recipeBodyMarkdown, recipeDisplayTitle } from './recipe';
+import RecipeMetrics from './Metrics';
+import { recipeBodyMarkdown, recipeDisplayTitle, recipeMarkdownDisplay } from './recipe';
 
 function arrayChips(value: unknown): string[] {
   return Array.isArray(value)
@@ -97,6 +98,7 @@ export default function RecipeDetail() {
   const metadataSet = new Set(metadata);
   const secondaryChips = categoryChips(recipe).filter((chip) => !metadataSet.has(chip));
   const markdown = recipeBodyMarkdown(recipe);
+  const markdownDisplay = recipeMarkdownDisplay(markdown);
   const saveDisabled =
     updateRecipe.isLoading || draftTitle.trim().length === 0 || draftMarkdown.trim().length === 0;
 
@@ -135,15 +137,15 @@ export default function RecipeDetail() {
   };
 
   return (
-    <main className="h-full overflow-y-auto bg-surface-primary-alt px-4 py-6 text-text-primary sm:px-6 lg:px-8">
+    <main className="h-full overflow-y-auto bg-surface-primary-alt px-4 py-7 text-text-primary sm:px-7 lg:px-10">
       <div className="mx-auto max-w-[56rem]">
         <Link to="/recipes" className="text-sm text-text-secondary hover:text-text-primary">
           {localize('com_recipes_back_to_library')}
         </Link>
-        <article className="mt-4 rounded-lg border border-border-light bg-surface-primary px-5 py-6 shadow-sm sm:px-8 sm:py-8 lg:px-10">
+        <article className="mt-4 rounded-lg border border-border-light bg-surface-primary px-5 py-6 shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)] sm:px-8 sm:py-8 lg:px-10">
           <header className="mb-5 border-b border-border-light pb-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <h1 className="text-2xl font-semibold">
+              <h1 className="font-serif text-3xl font-normal leading-tight tracking-normal sm:text-4xl">
                 {isEditing ? localize('com_recipes_edit_recipe') : recipeDisplayTitle(recipe)}
               </h1>
               <div className="flex shrink-0 items-center gap-2">
@@ -230,9 +232,12 @@ export default function RecipeDetail() {
               </div>
             </div>
           ) : (
-            <div className="markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
-              <Markdown content={markdown} isLatestMessage={false} />
-            </div>
+            <>
+              <RecipeMetrics metrics={markdownDisplay.metrics} />
+              <div className="cooking-recipe-markdown markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
+                <Markdown content={markdownDisplay.body} isLatestMessage={false} />
+              </div>
+            </>
           )}
         </article>
       </div>

@@ -36,6 +36,59 @@ const filterLabelKeys: Record<FilterKey, TranslationKeys> = {
   mainIngredient: 'com_recipes_filter_main_ingredient',
   equipment: 'com_recipes_filter_equipment',
 };
+const recipeSkeletonItems = [0, 1, 2, 3, 4, 5];
+
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={cn('rounded-md bg-surface-hover', className)} />;
+}
+
+function RecipeCardSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border-light bg-surface-primary shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)]">
+      <div className="relative aspect-[1.92/1] overflow-hidden bg-surface-hover">
+        <SkeletonBlock className="h-full w-full rounded-none" />
+        <SkeletonBlock className="bg-surface-primary/80 absolute right-4 top-4 h-9 w-20 rounded-full" />
+      </div>
+      <div className="flex min-h-[178px] flex-col p-6">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+            <SkeletonBlock className="h-7 w-4/5" />
+            <SkeletonBlock className="h-7 w-3/5" />
+          </div>
+          <SkeletonBlock className="h-8 w-8 shrink-0 rounded-full" />
+        </div>
+        <div className="mt-4 flex flex-col gap-2">
+          <SkeletonBlock className="h-4 w-full" />
+          <SkeletonBlock className="h-4 w-2/3" />
+        </div>
+        <div className="mt-5 flex gap-2">
+          <SkeletonBlock className="h-8 w-24 rounded-full bg-surface-primary-alt" />
+          <SkeletonBlock className="h-8 w-20 rounded-full bg-surface-primary-alt" />
+        </div>
+        <div className="mt-auto flex gap-1.5 pt-4">
+          <SkeletonBlock className="h-8 w-20 rounded-full" />
+          <SkeletonBlock className="h-8 w-24 rounded-full" />
+          <SkeletonBlock className="h-8 w-16 rounded-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecipeLibrarySkeleton({ label }: { label: string }) {
+  return (
+    <div
+      role="status"
+      aria-label={label}
+      className="grid animate-pulse auto-rows-[minmax(0,auto)] gap-5 lg:grid-cols-2 2xl:grid-cols-3"
+    >
+      <span className="sr-only">{label}</span>
+      {recipeSkeletonItems.map((item) => (
+        <RecipeCardSkeleton key={item} />
+      ))}
+    </div>
+  );
+}
 
 function arrayChips(value: unknown): string[] {
   return Array.isArray(value)
@@ -192,20 +245,22 @@ export default function RecipeLibrary() {
       : localize('com_recipes_count_short_other', { count: recipes.length });
 
   return (
-    <main className="h-full overflow-y-auto bg-[#fff8ef] px-4 py-8 text-[#1d1a16] dark:bg-[#171116] dark:text-white sm:px-8 lg:px-14">
+    <main className="h-full overflow-y-auto bg-surface-primary-alt px-4 py-8 text-text-primary sm:px-8 lg:px-14">
       <div className="mx-auto flex max-w-[1500px] flex-col gap-7">
         <header className="pt-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="font-serif text-6xl font-normal leading-none tracking-normal text-[#1d1a16] dark:text-white sm:text-7xl">
+              <h1 className="font-serif text-6xl font-normal leading-none tracking-normal text-text-primary sm:text-7xl">
                 {localize('com_recipes_library')}
               </h1>
-              <p className="mt-5 text-base text-[#8a5a00] dark:text-[#e3b77b]">
+              <p className="mt-5 text-base text-text-secondary">
                 {localize('com_recipes_library_subtitle')}
               </p>
             </div>
-            {recipesQuery.isLoading ? null : (
-              <div className="font-serif hidden rotate-[-3deg] border-b border-[#b56c3c] px-2 pb-1 text-lg italic text-[#8a5a00] dark:border-[#d1a05d] dark:text-[#d1a05d] lg:block">
+            {recipesQuery.isLoading ? (
+              <SkeletonBlock className="hidden h-8 w-28 rotate-[-3deg] lg:block" />
+            ) : (
+              <div className="hidden rotate-[-3deg] border-b border-surface-submit px-2 pb-1 font-serif text-lg italic text-surface-submit lg:block">
                 {recipeCountLabel}
               </div>
             )}
@@ -213,7 +268,7 @@ export default function RecipeLibrary() {
           <div className="mt-8 flex flex-col gap-3 lg:flex-row">
             <div className="relative flex-1">
               <Search
-                className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5f554d]/75 dark:text-[#e8d7cb]/80"
+                className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-text-secondary"
                 aria-hidden="true"
               />
               <Input
@@ -221,18 +276,18 @@ export default function RecipeLibrary() {
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={localize('com_recipes_search_placeholder')}
                 aria-label={localize('com_recipes_search_placeholder')}
-                className="min-h-14 rounded-[10px] border-[#dfd0bf] bg-[#fffdf8]/85 pl-14 text-base text-[#1d1a16] shadow-none placeholder:text-[#5f554d]/70 focus-visible:ring-1 focus-visible:ring-[#ef6548] dark:border-white/10 dark:bg-[#171116]/75 dark:text-white dark:placeholder:text-[#d8c4b8]/75"
+                className="min-h-14 rounded-lg border-border-light bg-surface-primary pl-14 text-base text-text-primary shadow-none placeholder:text-text-secondary focus-visible:ring-1 focus-visible:ring-ring-primary"
               />
             </div>
             <button
               type="button"
-              className="inline-flex min-h-14 items-center justify-center gap-2 rounded-[10px] border border-[#dfd0bf] bg-[#fffdf8]/90 px-5 text-sm text-[#1d1a16] transition-colors hover:border-[#ef6548] hover:bg-[#f6efe4] dark:border-white/10 dark:bg-[#2d2328]/90 dark:text-white dark:hover:bg-[#37282e]"
+              className="inline-flex min-h-14 items-center justify-center gap-2 rounded-lg border border-border-light bg-surface-primary px-5 text-sm text-text-primary transition-colors hover:border-surface-submit hover:bg-surface-hover"
               onClick={() => setFiltersOpen(true)}
             >
               <ListFilter className="h-4 w-4" aria-hidden="true" />
               <span>{localize('com_recipes_filters')}</span>
               {selectedFilters.length > 0 ? (
-                <span className="rounded-full bg-[#ef6548] px-2 py-0.5 text-xs text-black dark:text-white">
+                <span className="rounded-full bg-surface-submit px-2 py-0.5 text-xs text-white">
                   {selectedFilters.length}
                 </span>
               ) : null}
@@ -240,14 +295,14 @@ export default function RecipeLibrary() {
           </div>
           {selectedFilters.length > 0 ? (
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium uppercase text-[#77685c] dark:text-[#b9a9a0]">
+              <span className="text-xs font-medium uppercase text-text-secondary">
                 {localize('com_recipes_active_filters')}
               </span>
               {selectedFilters.map((filter) => (
                 <button
                   key={`${filter.key}:${filter.value}`}
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[#dfd0bf] bg-[#fffdf8]/85 px-3 py-1.5 text-xs text-[#5f554d] transition-colors hover:bg-[#f6efe4] hover:text-[#1d1a16] dark:border-white/10 dark:bg-[#171116]/70 dark:text-[#e8d7cb] dark:hover:bg-[#35272d] dark:hover:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border-light bg-surface-primary px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
                   onClick={() => removeFilter(filter.key)}
                 >
                   <span>
@@ -258,7 +313,7 @@ export default function RecipeLibrary() {
               ))}
               <button
                 type="button"
-                className="px-2 py-1 text-xs text-[#77685c] hover:text-[#1d1a16] dark:text-[#b9a9a0] dark:hover:text-white"
+                className="px-2 py-1 text-xs text-text-secondary hover:text-text-primary"
                 onClick={clearFilters}
               >
                 {localize('com_recipes_clear_filters')}
@@ -310,7 +365,7 @@ export default function RecipeLibrary() {
                                 className={cn(
                                   'rounded-full border px-3 py-1.5 text-xs capitalize transition-colors',
                                   active
-                                    ? 'border-surface-submit bg-surface-submit text-black'
+                                    ? 'border-surface-submit bg-surface-submit text-white'
                                     : 'border-border-light bg-surface-primary-alt text-text-secondary hover:bg-surface-hover hover:text-text-primary',
                                 )}
                                 onClick={() => setFilter(group.key, value)}
@@ -340,7 +395,7 @@ export default function RecipeLibrary() {
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg bg-surface-submit px-4 py-2 text-sm font-medium text-black hover:bg-surface-submit-hover"
+                  className="rounded-lg bg-surface-submit px-4 py-2 text-sm font-medium text-white hover:bg-surface-submit-hover"
                   onClick={() => setFiltersOpen(false)}
                 >
                   {localize('com_ui_done')}
@@ -351,12 +406,10 @@ export default function RecipeLibrary() {
         ) : null}
 
         {recipesQuery.isLoading ? (
-          <div className="rounded-[10px] border border-[#dfd0bf] bg-[#fffdf8] p-6 text-sm text-[#5f554d] dark:border-white/10 dark:bg-[#221b20] dark:text-[#b9a9a0]">
-            {localize('com_ui_loading')}
-          </div>
+          <RecipeLibrarySkeleton label={localize('com_ui_loading')} />
         ) : null}
         {!recipesQuery.isLoading && recipes.length === 0 ? (
-          <div className="rounded-[10px] border border-[#dfd0bf] bg-[#fffdf8] p-8 text-sm text-[#5f554d] shadow-sm dark:border-white/10 dark:bg-[#221b20] dark:text-[#b9a9a0]">
+          <div className="rounded-lg border border-border-light bg-surface-primary p-8 text-sm text-text-secondary shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)]">
             {localize('com_recipes_empty')}
           </div>
         ) : null}
@@ -371,9 +424,9 @@ export default function RecipeLibrary() {
                 <Link
                   key={recipe._id}
                   to={`/recipes/${recipe._id}`}
-                  className="group overflow-hidden rounded-[10px] border border-[#dfd0bf] bg-[#fffdf8] shadow-[0_18px_44px_rgba(79,48,28,0.11)] transition-colors hover:border-[#ef6548]/70 hover:bg-[#fff8ef] dark:border-white/10 dark:bg-[#231d20] dark:shadow-[0_18px_44px_rgba(0,0,0,0.22)] dark:hover:bg-[#2a2226]"
+                  className="group overflow-hidden rounded-lg border border-border-light bg-surface-primary shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)] transition-colors hover:border-surface-submit hover:bg-surface-primary-alt"
                 >
-                  <div className="relative aspect-[1.92/1] overflow-hidden bg-[#eadfc8]">
+                  <div className="relative aspect-[1.92/1] overflow-hidden bg-surface-hover">
                     {recipe.illustrationUrl ? (
                       <img
                         src={recipe.illustrationUrl}
@@ -382,40 +435,40 @@ export default function RecipeLibrary() {
                         loading="lazy"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#eadfc8] to-[#d9c9ac]">
+                      <div className="flex h-full w-full items-center justify-center bg-surface-hover">
                         {recipe.illustrationStatus === 'pending' ? (
-                          <div className="h-10 w-10 rounded-full border border-[#9e8568] bg-white/40" />
+                          <div className="bg-surface-primary/50 h-10 w-10 rounded-full border border-border-heavy" />
                         ) : null}
                       </div>
                     )}
                     {updatedAt ? (
-                      <span className="absolute right-4 top-4 rounded-full bg-[#e4d2bf]/85 px-3 py-2 text-sm text-[#55443c] backdrop-blur">
+                      <span className="bg-surface-primary/85 absolute right-4 top-4 rounded-full px-3 py-2 text-sm text-text-secondary backdrop-blur">
                         {updatedAt}
                       </span>
                     ) : null}
                   </div>
                   <div className="flex min-h-[178px] flex-col p-6">
                     <div className="flex min-w-0 items-start justify-between gap-3">
-                      <h2 className="font-serif line-clamp-2 text-[1.72rem] font-normal leading-[1.05] tracking-normal text-[#1d1a16] dark:text-[#f6eee7]">
+                      <h2 className="line-clamp-2 font-serif text-[1.72rem] font-normal leading-[1.05] tracking-normal text-text-primary">
                         {recipeDisplayTitle(recipe)}
                       </h2>
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f6efe4] text-[#77685c] dark:bg-white/5 dark:text-[#b9a9a0]">
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-hover text-text-secondary">
                         <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
                       </div>
                     </div>
                     {recipe.categorizationStatus === 'pending' ? (
-                      <span className="mt-3 w-fit rounded-full border border-[#dfd0bf] bg-[#fff8ef] px-2.5 py-1 text-xs text-[#77685c] dark:border-white/10 dark:bg-[#171116]/70 dark:text-[#b9a9a0]">
+                      <span className="mt-3 w-fit rounded-full border border-border-light bg-surface-primary-alt px-2.5 py-1 text-xs text-text-secondary">
                         {localize('com_recipes_categorizing')}
                       </span>
                     ) : null}
                     {description ? (
-                      <p className="mt-3 line-clamp-2 max-w-[31rem] text-base leading-7 text-[#5f554d] dark:text-[#d9c4b6]">
+                      <p className="mt-3 line-clamp-2 max-w-[31rem] text-base leading-7 text-text-secondary">
                         {description}
                       </p>
                     ) : null}
-                    <div className="mt-5 flex flex-wrap gap-2 text-sm text-[#5f554d] dark:text-[#d9c4b6]">
+                    <div className="mt-5 flex flex-wrap gap-2 text-sm text-text-secondary">
                       {typeof servings === 'number' && servings > 0 ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#dfd0bf] bg-[#fff8ef]/80 px-3 py-1.5 dark:border-[#4f3835] dark:bg-[#171116]/65">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-border-light bg-surface-primary-alt px-3 py-1.5">
                           <Users className="h-3.5 w-3.5" aria-hidden="true" />
                           {localize('com_cooking_servings_count', { 0: String(servings) })}
                         </span>
@@ -426,14 +479,14 @@ export default function RecipeLibrary() {
                         <span
                           key={chip}
                           className={cn(
-                            'rounded-full border border-[#dfd0bf] bg-[#f6efe4] px-3 py-1.5 text-sm text-[#5f554d] dark:border-[#4f3835] dark:bg-[#2b2226] dark:text-[#d9c4b6]',
+                            'rounded-full border border-border-light bg-surface-hover px-3 py-1.5 text-sm text-text-secondary',
                           )}
                         >
                           {displayFilter(chip)}
                         </span>
                       ))}
                       {chips(recipe).length === 0 && recipe.categorizationStatus === 'failed' ? (
-                        <span className="rounded-full border border-[#dfd0bf] bg-[#f6efe4] px-3 py-1.5 text-sm text-[#5f554d] dark:border-[#4f3835] dark:bg-[#2b2226] dark:text-[#d9c4b6]">
+                        <span className="rounded-full border border-border-light bg-surface-hover px-3 py-1.5 text-sm text-text-secondary">
                           {localize('com_recipes_saved')}
                         </span>
                       ) : null}
@@ -444,17 +497,17 @@ export default function RecipeLibrary() {
             })}
             <Link
               to="/cook"
-              className="flex min-h-[218px] items-center justify-center rounded-[10px] border border-dashed border-[#d2c0ad] bg-[#fffdf8] p-8 text-center transition-colors hover:border-[#ef6548] hover:bg-[#fff8ef] dark:border-[#654840] dark:bg-[#1d161b] dark:hover:bg-[#241b20]"
+              className="flex min-h-[218px] items-center justify-center rounded-lg border border-dashed border-border-medium bg-surface-primary p-8 text-center transition-colors hover:border-surface-submit hover:bg-surface-primary-alt"
             >
               <div className="flex flex-col items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#b56c3c] text-[#8a5a00] dark:border-[#8b6a5c] dark:text-[#f5d3a1]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-surface-submit text-surface-submit">
                   <Plus className="h-6 w-6" aria-hidden="true" />
                 </div>
                 <div>
-                  <p className="font-serif text-xl italic text-[#8a5a00] dark:text-[#f5d3a1]">
+                  <p className="font-serif text-xl italic text-surface-submit">
                     {localize('com_recipes_add_new')}
                   </p>
-                  <p className="mt-2 max-w-60 text-sm leading-6 text-[#5f554d] dark:text-[#b9a9a0]">
+                  <p className="mt-2 max-w-60 text-sm leading-6 text-text-secondary">
                     {localize('com_recipes_add_new_hint')}
                   </p>
                 </div>

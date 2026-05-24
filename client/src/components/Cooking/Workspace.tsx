@@ -24,7 +24,7 @@ export default function CookingWorkspace({
       <aside
         className={
           hasRecipeCanvas
-            ? 'order-2 min-h-[24rem] shrink-0 border-t border-border-light bg-presentation lg:h-full lg:w-[29rem] lg:border-l lg:border-t-0 xl:w-[31rem]'
+            ? 'order-2 min-h-[24rem] shrink-0 border-t border-border-light bg-surface-primary-alt lg:h-full lg:w-[30rem] lg:border-l lg:border-t-0 xl:w-[32rem]'
             : 'order-1 min-w-0 flex-1'
         }
       >
