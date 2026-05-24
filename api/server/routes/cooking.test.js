@@ -2,6 +2,11 @@ const express = require('express');
 const request = require('supertest');
 
 let mockCurrentUser;
+const mockWebSearchConfig = {
+  searchProvider: 'tavily',
+  scraperProvider: 'tavily',
+  tavilyApiKey: '${TAVILY_API_KEY}',
+};
 
 jest.mock('~/server/middleware', () => ({
   requireJwtAuth: (req, res, next) => {
@@ -9,6 +14,13 @@ jest.mock('~/server/middleware', () => ({
       return res.sendStatus(401);
     }
     req.user = mockCurrentUser;
+    return next();
+  },
+  configMiddleware: (req, res, next) => {
+    req.config = {
+      interfaceConfig: { webSearch: true },
+      webSearch: mockWebSearchConfig,
+    };
     return next();
   },
 }));
@@ -29,7 +41,14 @@ jest.mock('@librechat/api', () => {
   return {
     CookingValidationError,
     runCookingChat: jest.fn(),
-    extractAndSavePreferences: jest.fn(),
+    curatePendingPreferences: jest.fn(),
+    withPendingPreferenceBatch: jest.fn((message) => ({
+      ...message,
+      metadata: {
+        ...(message.metadata || {}),
+        cookingPreferenceBatch: { status: 'pending' },
+      },
+    })),
     getExistingPreferences: jest.fn(),
     getCookingDraftByConversation: jest.fn(),
     generateCookingDraft: jest.fn(),
@@ -98,7 +117,12 @@ describe('cooking routes', () => {
     cookingApi.updateCookingDraft.mockResolvedValue({ _id: 'draft-1' });
     cookingApi.getExistingPreferences.mockResolvedValue(null);
     cookingApi.getCookingDraftByConversation.mockResolvedValue(null);
-    cookingApi.extractAndSavePreferences.mockResolvedValue({ changed: false, warnings: [] });
+    cookingApi.curatePendingPreferences.mockResolvedValue({
+      attempted: false,
+      changed: false,
+      processedCount: 0,
+      warnings: [],
+    });
     cookingApi.runCookingChat.mockResolvedValue({
       text: 'Here is the recipe.',
       draftChanged: false,
@@ -193,13 +217,12 @@ describe('cooking routes', () => {
     });
   });
 
-  test('chat loads preferences server-side and extracts preference updates', async () => {
+  test('chat loads preferences server-side and queues preference batch curation', async () => {
     cookingApi.getExistingPreferences.mockResolvedValue({
       _id: 'preferences-1',
       user: 'auth-user',
       markdown: '## Safety\n- Avoid peanuts',
     });
-    cookingApi.extractAndSavePreferences.mockResolvedValue({ changed: true, warnings: [] });
 
     const response = await request(app)
       .post('/api/cooking/chat')
@@ -211,26 +234,29 @@ describe('cooking routes', () => {
       })
       .expect(200);
 
-    expect(response.text).toContain('"preferencesUpdated":true');
+    expect(response.text).not.toContain('"preferencesUpdated":true');
     expect(cookingApi.runCookingChat).toHaveBeenCalledWith(
       expect.objectContaining({
         user: 'auth-user',
         conversationId: 'conversation-1',
         text: 'I prefer spicy weeknight dinners',
         preferencesMarkdown: '## Safety\n- Avoid peanuts',
-        webSearchConfig: undefined,
+        webSearchConfig: mockWebSearchConfig,
         loadAuthValues: expect.any(Function),
         conversationCreatedAt: expect.any(Date),
       }),
     );
-    expect(cookingApi.extractAndSavePreferences).toHaveBeenCalledWith(
+    expect(cookingApi.withPendingPreferenceBatch).toHaveBeenCalledWith(
       expect.objectContaining({
         user: 'auth-user',
-        userMessage: 'I prefer spicy weeknight dinners',
-        assistantMessage: 'Here is the recipe.',
-        currentMarkdown: '## Safety\n- Avoid peanuts',
+        messageId: 'message-1',
+        text: 'I prefer spicy weeknight dinners',
       }),
     );
+    expect(cookingApi.curatePendingPreferences).toHaveBeenCalledWith({
+      user: 'auth-user',
+      conversationId: 'conversation-1',
+    });
   });
 
   test('chat does not forward stale client history when starting a new cooking conversation', async () => {
@@ -338,6 +364,31 @@ describe('cooking routes', () => {
       }),
       expect.objectContaining({ context: 'POST /api/cooking/chat - response message' }),
     );
+  });
+
+  test('chat forwards live assistant deltas from the cooking agent', async () => {
+    cookingApi.runCookingChat.mockImplementation(async ({ onTextDelta }) => {
+      onTextDelta('Use a wide ');
+      onTextDelta('pan.');
+      return {
+        text: 'Use a wide pan.',
+        draftChanged: false,
+      };
+    });
+
+    const response = await request(app)
+      .post('/api/cooking/chat')
+      .send({
+        text: 'How do I brown onions?',
+        conversationId: 'conversation-1',
+        messageId: 'message-1',
+        responseMessageId: 'message-2',
+      })
+      .expect(200);
+
+    expect(response.text).toContain('"text":"Use a wide "');
+    expect(response.text).toContain('"text":"pan."');
+    expect(response.text).not.toContain('"text":"Use a wide pan.","messageId":"message-2"');
   });
 
   test.each([

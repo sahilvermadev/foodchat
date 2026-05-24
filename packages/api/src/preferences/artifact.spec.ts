@@ -9,8 +9,7 @@ describe('preference artifact helpers', () => {
     const result = applyPreferencePatch('', {
       op: 'append_to_section',
       heading: 'Safety',
-      markdown:
-        'I have an oven, microwave, electric grill, and live in Delhi near Modern Bazaar.',
+      markdown: 'I have an oven, microwave, electric grill, and live in Delhi near Modern Bazaar.',
     });
 
     expect(result.markdown).toBe('');
@@ -44,6 +43,43 @@ describe('preference artifact helpers', () => {
     expect(result.changedHeadings).toEqual(['Personal Context']);
     expect(result.markdown).toBe(
       '## Personal Context\n- I cook after work and like learning the reason behind techniques.',
+    );
+  });
+
+  test('rejects transient cooking projects as durable personal context', () => {
+    const result = applyPreferencePatch('', {
+      op: 'append_to_section',
+      heading: 'Personal Context',
+      markdown: [
+        'Currently working on mastering a classic cheese souffle.',
+        'Interested in learning to bake khameeri roti.',
+        'Considering adding a French whisk to kitchen tools.',
+        'Interested in undertaking periodic intensive kitchen projects.',
+      ].join('\n'),
+    });
+
+    expect(result.markdown).toBe('');
+    expect(result.changed).toBe(false);
+    expect(result.changedHeadings).toEqual([]);
+    expect(result.warnings).toEqual([
+      expect.stringContaining('Skipped broad or misplaced Personal Context preference'),
+      expect.stringContaining('Skipped broad or misplaced Personal Context preference'),
+      expect.stringContaining('Skipped broad or misplaced Personal Context preference'),
+      expect.stringContaining('Skipped broad or misplaced Personal Context preference'),
+    ]);
+  });
+
+  test('allows durable learning style without saving a current project', () => {
+    const result = applyPreferencePatch('', {
+      op: 'append_to_section',
+      heading: 'Goals',
+      markdown: 'Enjoys occasional long kitchen projects for technique mastery.',
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.changedHeadings).toEqual(['Goals']);
+    expect(result.markdown).toBe(
+      '## Goals\n- Enjoys occasional long kitchen projects for technique mastery.',
     );
   });
 

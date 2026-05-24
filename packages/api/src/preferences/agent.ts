@@ -90,6 +90,9 @@ Conversation rules:
 - Start with Safety/Diet/religious or cultural rules if they are unknown, then household, kitchen constraints, taste, goals, cooking level, and location.
 - If the profile status says complete, stop interviewing. Briefly say the profile is ready and invite the user back to cooking. Do not ask what cuisine, region, or dish they want next.
 - Do not save one-off recipe requests as preferences.
+- Do not save active/current/possible cooking projects, shopping considerations, or curiosity from the current chat as durable preferences.
+- When the user likes learning through projects, save the stable pattern, e.g. "Enjoys occasional long kitchen projects for technique mastery"; do not save each project such as sourdough, khameeri roti, souffle, crepes, chhach, or a tool they are considering.
+- Do not save "interested in learning...", "currently working on...", "attempting to master...", or "considering buying..." facts unless the user explicitly asks Mise to remember that exact long-term goal.
 - Do not save guesses. If the user is ambiguous, ask a clarifying question.
 - Do not save sensitive personal data unless the user clearly volunteered it and it is useful for cooking support.
 - Never remove or weaken Safety preferences unless the user explicitly confirms that the restriction is no longer true.
@@ -134,11 +137,11 @@ const tools = [
                 },
                 heading: {
                   type: 'string',
-	                  enum: [
-	                    'Safety',
-	                    'Diet',
-	                    'Religious & Cultural Rules',
-	                    'Cooking Level',
+                  enum: [
+                    'Safety',
+                    'Diet',
+                    'Religious & Cultural Rules',
+                    'Cooking Level',
                     'Household',
                     'Kitchen',
                     'Taste',
@@ -244,7 +247,9 @@ function cleanString(value: unknown, maxLength = 80): string | undefined {
   return clean;
 }
 
-function safeDeviceContext(value: DeviceLocationContext | undefined): DeviceLocationContext | undefined {
+function safeDeviceContext(
+  value: DeviceLocationContext | undefined,
+): DeviceLocationContext | undefined {
   if (!value || typeof value !== 'object') {
     return undefined;
   }
@@ -252,10 +257,12 @@ function safeDeviceContext(value: DeviceLocationContext | undefined): DeviceLoca
   const locale = cleanString(value.locale, 40);
   const timeZone = cleanString(value.timeZone, 80);
   const languages = Array.isArray(value.languages)
-    ? value.languages.flatMap((language) => {
-        const clean = cleanString(language, 40);
-        return clean ? [clean] : [];
-      }).slice(0, 5)
+    ? value.languages
+        .flatMap((language) => {
+          const clean = cleanString(language, 40);
+          return clean ? [clean] : [];
+        })
+        .slice(0, 5)
     : undefined;
   const measurementSystem =
     value.measurementSystem === 'metric' || value.measurementSystem === 'imperial'
@@ -279,9 +286,7 @@ function safeDeviceContext(value: DeviceLocationContext | undefined): DeviceLoca
         latitude: Math.round(latitude * 100000) / 100000,
         longitude: Math.round(longitude * 100000) / 100000,
         source: 'browser_geolocation',
-        ...(Number.isFinite(accuracy) && accuracy > 0
-          ? { accuracy: Math.round(accuracy) }
-          : {}),
+        ...(Number.isFinite(accuracy) && accuracy > 0 ? { accuracy: Math.round(accuracy) } : {}),
         ...(value.location.permission === 'granted' ||
         value.location.permission === 'prompt' ||
         value.location.permission === 'denied' ||
@@ -302,7 +307,9 @@ function safeDeviceContext(value: DeviceLocationContext | undefined): DeviceLoca
   return Object.keys(context).length ? context : undefined;
 }
 
-function deviceContextMessage(deviceContext: DeviceLocationContext | undefined): ChatMessage | null {
+function deviceContextMessage(
+  deviceContext: DeviceLocationContext | undefined,
+): ChatMessage | null {
   const safe = safeDeviceContext(deviceContext);
   if (!safe) {
     return null;

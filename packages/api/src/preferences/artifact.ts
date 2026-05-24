@@ -46,9 +46,10 @@ const headingKeywords: Record<PreferenceHeading, RegExp> = {
   Household: /\b(parent|mom|dad|family|people|serving|household|cook for|meal prep)\b/i,
   Kitchen:
     /\b(oven|microwave|griddle|grill|bbq|freezer|blender|juicer|air ?fryer|stove|pan|equipment|appliance|cookware)\b/i,
-  Taste: /\b(spicy|savou?ry|sweet|sour|bitter|fresh|herby|texture|flavo[u]?r|tasty|authentic)\b/i,
+  Taste:
+    /\b(spicy|savou?ry|sweet|sour|bitter|fresh|herby|texture|mouthfeel|flavo[u]?r|tasty|authentic)\b/i,
   Goals:
-    /\b(goal|quick|time|long recipe|advance|experience|experiment|new dishes|memorable|authentic|efficient)\b/i,
+    /\b(goal|quick|time|long recipe|kitchen project|mastery|advance|experience|experiment|new dishes|memorable|authentic|efficient)\b/i,
   Location:
     /\b(delhi|dwarka|market|bazaar|local ingredient|ingredient access|city|country|store|locale|timezone|browser location|coordinates|measurement)\b/i,
   'Personal Context':
@@ -109,12 +110,30 @@ function matchingHeadings(line: string): PreferenceHeading[] {
   return PREFERENCE_HEADINGS.filter((heading) => headingKeywords[heading].test(line));
 }
 
+function isTransientProfileLine(heading: PreferenceHeading, line: string): boolean {
+  const clean = line.trim();
+  const transientPatterns = [
+    /\b(currently|right now|at the moment|today|tonight|this week|this weekend|recently|just now)\b/i,
+    /\b(attempting|actively learning|working on|trying to|planning to|considering|thinking about)\b/i,
+    /\b(interested in|keen to|wants to|would like to|looking to)\s+(learn|make|bake|try|master|understand|explore)\b/i,
+    /\binterested in\s+undertaking\b.*\bkitchen projects?\b/i,
+    /\b(new|next|current|active)\s+['"]?kitchen project\b/i,
+  ];
+  if (transientPatterns.some((pattern) => pattern.test(clean))) {
+    return true;
+  }
+  return heading === 'Personal Context' && /^(?:-\s*)?(interested in|keen to)\b/i.test(clean);
+}
+
 function isValidSectionLine(heading: PreferenceHeading, line: string): boolean {
   const clean = line.trim();
   if (!clean) {
     return false;
   }
   if (clean.length > 180) {
+    return false;
+  }
+  if (isTransientProfileLine(heading, clean)) {
     return false;
   }
   const matches = matchingHeadings(clean);

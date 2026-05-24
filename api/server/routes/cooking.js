@@ -1,9 +1,11 @@
 const express = require('express');
 const crypto = require('crypto');
+const { logger } = require('@librechat/data-schemas');
 const {
   CookingValidationError,
   runCookingChat,
-  extractAndSavePreferences,
+  curatePendingPreferences,
+  withPendingPreferenceBatch,
   getExistingPreferences,
   getCookingDraftByConversation,
   generateCookingDraft,
@@ -14,12 +16,12 @@ const {
   completeCookingSession,
 } = require('@librechat/api');
 const { Constants } = require('librechat-data-provider');
-const { requireJwtAuth } = require('~/server/middleware');
+const { requireJwtAuth, configMiddleware } = require('~/server/middleware');
 const { loadAuthValues } = require('~/server/services/Tools/credentials');
 
 const router = express.Router();
 
-router.use(requireJwtAuth);
+router.use(requireJwtAuth, configMiddleware);
 
 function userId(req) {
   return req.user.id;
@@ -134,11 +136,44 @@ function sendEvent(res, payload) {
   }
 }
 
+function createChatPerfTrace({ conversationId, endpoint, model, isNewConvo }) {
+  const startedAt = Date.now();
+  const marks = [];
+
+  return {
+    mark(stage, data = {}) {
+      marks.push({
+        stage,
+        atMs: Date.now() - startedAt,
+        ...data,
+      });
+    },
+    log(level = 'info', data = {}) {
+      if (process.env.NODE_ENV === 'test') {
+        return;
+      }
+      const payload = {
+        conversationId,
+        endpoint,
+        model,
+        isNewConvo,
+        totalMs: Date.now() - startedAt,
+        marks,
+        ...data,
+      };
+      logger[level]('[CookingPerf] /api/cooking/chat', payload);
+    },
+  };
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function streamAssistantText(res, { text, messageId, parentMessageId, conversationId }) {
+async function streamAssistantText(
+  res,
+  { text, messageId, parentMessageId, conversationId, onFirstChunk },
+) {
   const content = typeof text === 'string' ? text : '';
   if (!content) {
     return;
@@ -146,6 +181,7 @@ async function streamAssistantText(res, { text, messageId, parentMessageId, conv
 
   const chars = Array.from(content);
   let cursor = 0;
+  let firstChunkSent = false;
   while (cursor < chars.length) {
     const remaining = chars.length - cursor;
     const chunkSize = remaining > 240 ? 32 : remaining > 80 ? 20 : 12;
@@ -158,6 +194,10 @@ async function streamAssistantText(res, { text, messageId, parentMessageId, conv
       parentMessageId,
       conversationId,
     });
+    if (!firstChunkSent) {
+      firstChunkSent = true;
+      onFirstChunk?.();
+    }
     await delay(16);
   }
 }
@@ -200,6 +240,11 @@ router.post('/chat', async (req, res) => {
   const endpoint = req.body?.endpoint || 'agents';
   const model = typeof req.body?.model === 'string' ? req.body.model : undefined;
   const reqCtx = requestContext(req);
+  const perf = createChatPerfTrace({ conversationId, endpoint, model, isNewConvo });
+  perf.mark('request_validated', {
+    promptChars: text.length,
+    clientMessageCount: Array.isArray(req.body?.messages) ? req.body.messages.length : 0,
+  });
 
   res.setHeader('Content-Encoding', 'identity');
   res.setHeader('Content-Type', 'text/event-stream');
@@ -207,8 +252,9 @@ router.post('/chat', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
+  perf.mark('headers_flushed');
 
-  const requestMessage = {
+  const requestMessage = withPendingPreferenceBatch({
     ...req.body,
     text,
     conversationId,
@@ -217,16 +263,28 @@ router.post('/chat', async (req, res) => {
     isCreatedByUser: true,
     error: false,
     user: userId(req),
-  };
+  });
   delete requestMessage.responseMessageId;
   delete requestMessage.overrideParentMessageId;
 
   sendEvent(res, { message: requestMessage, created: true });
+  perf.mark('request_message_event_sent');
 
   try {
     const db = models();
-    const preferences = await getExistingPreferences(userId(req));
-    const activeDraft = await getCookingDraftByConversation(userId(req), conversationId);
+    const contextStartedAt = Date.now();
+    const [preferences, activeDraft] = await Promise.all([
+      getExistingPreferences(userId(req)),
+      getCookingDraftByConversation(userId(req), conversationId),
+    ]);
+    perf.mark('context_loaded', {
+      durationMs: Date.now() - contextStartedAt,
+      hasPreferences: Boolean(preferences?.markdown),
+      hasActiveDraft: Boolean(activeDraft),
+    });
+    const agentTiming = [];
+    const agentStartedAt = Date.now();
+    let assistantTextStreamed = false;
     const result = await runCookingChat({
       user: userId(req),
       conversationId,
@@ -239,6 +297,27 @@ router.post('/chat', async (req, res) => {
       webSearchConfig: req.config?.webSearch,
       loadAuthValues,
       conversationCreatedAt: req.body?.createdAt || new Date(),
+      onTiming: (event) => agentTiming.push(event),
+      onTextDelta: (delta) => {
+        if (!assistantTextStreamed) {
+          assistantTextStreamed = true;
+          perf.mark('assistant_first_text_event_sent');
+        }
+        sendEvent(res, {
+          text: delta,
+          messageId: responseMessageId,
+          parentMessageId: userMessageId,
+          conversationId,
+        });
+      },
+    });
+    perf.mark('cooking_agent_completed', {
+      durationMs: Date.now() - agentStartedAt,
+      outputChars: result.text?.length ?? 0,
+      draftChanged: Boolean(result.draftChanged),
+      promptSuggestionCount: result.promptSuggestions?.length ?? 0,
+      webSourceCount: result.webSources?.length ?? 0,
+      agentTiming,
     });
     const metadata = {
       ...(result.promptSuggestions?.length
@@ -275,6 +354,17 @@ router.post('/chat', async (req, res) => {
     delete conversation.responseMessageId;
     delete conversation.isCreatedByUser;
 
+    if (!assistantTextStreamed) {
+      await streamAssistantText(res, {
+        text: result.text,
+        messageId: responseMessage.messageId,
+        parentMessageId: responseMessage.parentMessageId,
+        conversationId,
+        onFirstChunk: () => perf.mark('assistant_first_text_event_sent'),
+      });
+    }
+    perf.mark('assistant_text_stream_completed');
+    const persistenceStartedAt = Date.now();
     await db.saveMessage(reqCtx, requestMessage, {
       context: 'POST /api/cooking/chat - user message',
     });
@@ -284,13 +374,7 @@ router.post('/chat', async (req, res) => {
     await db.saveConvo(reqCtx, conversation, {
       context: 'POST /api/cooking/chat - conversation',
     });
-
-    await streamAssistantText(res, {
-      text: result.text,
-      messageId: responseMessage.messageId,
-      parentMessageId: responseMessage.parentMessageId,
-      conversationId,
-    });
+    perf.mark('persistence_completed', { durationMs: Date.now() - persistenceStartedAt });
     sendEvent(res, {
       final: true,
       conversation,
@@ -299,22 +383,20 @@ router.post('/chat', async (req, res) => {
       responseMessage,
       cookingDraftUpdated: result.draftChanged,
     });
-    try {
-      const extraction = await extractAndSavePreferences({
-        user: userId(req),
-        userMessage: text,
-        assistantMessage: result.text,
-        model,
-        currentMarkdown: preferences?.markdown,
+    perf.mark('final_event_sent');
+    curatePendingPreferences({ user: userId(req), conversationId }).catch((preferenceError) => {
+      logger.warn('[CookingPreferences] Batch curator failed', {
+        conversationId,
+        error: preferenceError instanceof Error ? preferenceError.message : 'unknown error',
       });
-      if (extraction.changed) {
-        sendEvent(res, { preferencesUpdated: true });
-      }
-    } catch {
-      // Preference extraction must never break the completed chat response.
-    }
+    });
+    perf.mark('preference_batch_queued');
+    perf.log('info', { status: 'ok' });
     res.end();
   } catch (error) {
+    perf.mark('chat_failed', {
+      error: error instanceof Error ? error.message : 'unknown error',
+    });
     const errorResponseMessage = {
       messageId: responseMessageId,
       parentMessageId: userMessageId,
@@ -330,6 +412,7 @@ router.post('/chat', async (req, res) => {
     };
     try {
       const db = models();
+      const errorPersistenceStartedAt = Date.now();
       await db.saveMessage(reqCtx, requestMessage, {
         context: 'POST /api/cooking/chat - user message before error',
       });
@@ -346,7 +429,13 @@ router.post('/chat', async (req, res) => {
         },
         { context: 'POST /api/cooking/chat - error conversation' },
       );
-    } catch {
+      perf.mark('error_persistence_completed', {
+        durationMs: Date.now() - errorPersistenceStartedAt,
+      });
+    } catch (persistenceError) {
+      perf.mark('error_persistence_failed', {
+        error: persistenceError instanceof Error ? persistenceError.message : 'unknown error',
+      });
       // The SSE error below is more useful to the client than masking with a persistence failure.
     }
     await streamAssistantText(res, {
@@ -354,13 +443,17 @@ router.post('/chat', async (req, res) => {
       messageId: errorResponseMessage.messageId,
       parentMessageId: errorResponseMessage.parentMessageId,
       conversationId,
+      onFirstChunk: () => perf.mark('error_first_text_event_sent'),
     });
+    perf.mark('error_text_stream_completed');
     sendEvent(res, {
       final: true,
       conversation: { conversationId, title: conversationTitle(text), endpoint, model },
       requestMessage,
       responseMessage: errorResponseMessage,
     });
+    perf.mark('error_final_event_sent');
+    perf.log('warn', { status: 'error' });
     res.end();
   }
 });
