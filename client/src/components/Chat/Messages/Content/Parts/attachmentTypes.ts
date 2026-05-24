@@ -1,7 +1,5 @@
 import { imageExtRegex } from 'librechat-data-provider';
 import type { TAttachment, TAttachmentMetadata, TFile } from 'librechat-data-provider';
-import type { ToolArtifactType } from '~/utils/artifacts';
-import { detectArtifactTypeFromFile } from '~/utils/artifacts';
 
 /**
  * Empty-folder placeholders the bash executor drops in the stateless
@@ -132,15 +130,6 @@ export const bySalience = (a: TAttachment, b: TAttachment): number =>
   attachmentSalience(a) - attachmentSalience(b);
 
 /**
- * Comparator variant for buckets that wrap the attachment in a record
- * (e.g. `{ attachment, type }` panel entries). Reads salience off the
- * inner `attachment` field so wrapped buckets sort the same way the
- * bare ones do.
- */
-export const byEntrySalience = <T extends { attachment: TAttachment }>(a: T, b: T): number =>
-  attachmentSalience(a.attachment) - attachmentSalience(b.attachment);
-
-/**
  * An attachment is treated as an image only when it has the dimensions and
  * filepath needed to render via `<Image>`. Without width/height the image
  * cannot reserve layout space, so we fall back to the file card.
@@ -163,17 +152,6 @@ export const isImageAttachment = (attachment: TAttachment): boolean => {
 export const isTextAttachment = (attachment: TAttachment): boolean => {
   const { text } = attachment as TFile & TAttachmentMetadata;
   return typeof text === 'string' && text.length > 0;
-};
-
-/**
- * The artifact MIME type a tool-output attachment maps to, or `null` if
- * we don't have a viewer for it. Layered on `detectArtifactTypeFromFile`
- * so the routing logic stays in one place; classifying happens here so
- * the message-render code reads cleanly.
- */
-export const artifactTypeForAttachment = (attachment: TAttachment): ToolArtifactType | null => {
-  const file = attachment as TFile & TAttachmentMetadata;
-  return detectArtifactTypeFromFile(file);
 };
 
 /**

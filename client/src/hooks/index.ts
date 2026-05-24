@@ -6,7 +6,6 @@ export * from './Nav';
 export * from './Files';
 export * from './Generic';
 export * from './Input';
-export * from './Mermaid';
 export * from './Messages';
 export * from './Roles';
 export * from './Skills';

@@ -31,8 +31,7 @@ export default function useAttachments({
      * itself updates to `'ready'` later, but the message's
      * `attachments` array doesn't get rewritten. Polling fetches the
      * resolved record into `messageAttachmentsMap`; merging here lets
-     * `artifactTypeForAttachment` see the resolved text/textFormat
-     * and route through the proper PanelArtifact card. */
+     * the attachment renderer see the resolved text/textFormat. */
     const liveByFileId = new Map<string, TAttachment>();
     for (const a of live) {
       const id = (a as Partial<TFile>).file_id;

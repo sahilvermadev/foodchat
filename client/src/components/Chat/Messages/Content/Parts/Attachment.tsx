@@ -1,12 +1,9 @@
-import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Loader2, AlertCircle, Download } from 'lucide-react';
 import { Tools } from 'librechat-data-provider';
 import type { TAttachment, TFile, TAttachmentMetadata } from 'librechat-data-provider';
-import type { ToolArtifactType } from '~/utils/artifacts';
 import {
-  artifactTypeForAttachment,
   bySalience,
-  byEntrySalience,
   displayFilename,
   isImageAttachment,
   isInternalSandboxArtifact,
@@ -15,10 +12,7 @@ import {
 } from './attachmentTypes';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
 import FileContainer from '~/components/Chat/Input/Files/FileContainer';
-import { fileToArtifact, TOOL_ARTIFACT_TYPES } from '~/utils/artifacts';
 import Image from '~/components/Chat/Messages/Content/Image';
-import ToolMermaidArtifact from './ToolMermaidArtifact';
-import ToolArtifactCard from './ToolArtifactCard';
 import { useAttachmentLink } from './LogLink';
 import { useLocalize, useAttachmentPreviewSync } from '~/hooks';
 import { cn, getFileType } from '~/utils';
@@ -27,19 +21,13 @@ const COLLAPSED_MAX_HEIGHT = 320;
 
 /**
  * Card-shaped placeholder for a code-execution office file whose
- * inline preview is still rendering (or failed). Visually mirrors
- * `ToolArtifactCard`'s chrome — same rounded card, split body +
- * download — so when the deferred render lands and the routing
- * upgrades to the real `PanelArtifact` card the user sees a smooth
- * transition between two card-shaped things, not a jarring jump from
- * a small file chip to a big artifact card.
+ * inline preview is still rendering (or failed).
  *
  * The body is non-interactive while pending (there's no panel to
  * open yet). On `'failed'` the body is also non-interactive — the
  * download button is the only meaningful action since extraction
  * never produced anything to render. Status reads via the spinner /
- * alert subtitle inside the card, mirroring `ToolArtifactCard`'s
- * "click to open" subtitle slot.
+ * alert subtitle inside the card.
  */
 const PreviewPlaceholderCard = memo(
   ({
@@ -79,9 +67,8 @@ const PreviewPlaceholderCard = memo(
               {/* Don't pass `file` here — it triggers `SourceIcon`'s
                   Terminal overlay for code-exec files (matches the
                   `metadata.fileIdentifier` marker), which is the
-                  download-chip look. The artifact card doesn't show
-                  that overlay; the placeholder shouldn't either, so
-                  the pending→resolved transition is visually seamless. */}
+                  download-chip look. The placeholder uses the simpler
+                  preview icon to keep pending and failed states stable. */}
               <FilePreview fileType={fileType} className="relative" />
               <div className="overflow-hidden text-left">
                 <div className="truncate font-medium" title={visibleFilename}>
@@ -146,10 +133,7 @@ const FileAttachment = memo(({ attachment }: { attachment: Partial<TAttachment> 
     return null;
   }
   /* Pending or failed: render the card-shaped placeholder rather than
-   * the small file chip. Visual continuity with `ToolArtifactCard` so
-   * when the deferred render lands and the routing upgrades to
-   * `PanelArtifact`, the user sees a smooth card→card transition
-   * instead of a jump from "file download" to "artifact card". */
+   * the small file chip. */
   if (previewStatus === 'pending' || previewStatus === 'failed') {
     return (
       <div
@@ -318,40 +302,6 @@ const ImageAttachment = memo(({ attachment }: { attachment: TAttachment }) => {
   );
 });
 
-interface PanelArtifactProps {
-  attachment: TAttachment;
-  /** Pre-classified type from the routing decision tree, threaded down so
-   * `fileToArtifact` doesn't re-run `detectArtifactTypeFromFile`. */
-  type: ToolArtifactType;
-}
-
-const PanelArtifact = memo(({ attachment, type }: PanelArtifactProps) => {
-  const localize = useLocalize();
-  const placeholder = localize('com_ui_artifact_preview_pending');
-  const artifact = useMemo(
-    () =>
-      fileToArtifact(attachment as TFile & TAttachmentMetadata, {
-        placeholder,
-        preClassifiedType: type,
-      }),
-    [attachment, type, placeholder],
-  );
-  if (!artifact) {
-    return null;
-  }
-  return <ToolArtifactCard attachment={attachment} artifact={artifact} />;
-});
-PanelArtifact.displayName = 'PanelArtifact';
-
-const MermaidArtifact = memo(({ attachment }: { attachment: TAttachment }) => {
-  const file = attachment as TFile & TAttachmentMetadata;
-  if (!file.text) {
-    return null;
-  }
-  return <ToolMermaidArtifact attachment={attachment} text={file.text} />;
-});
-MermaidArtifact.displayName = 'MermaidArtifact';
-
 export default function Attachment({ attachment }: { attachment?: TAttachment }) {
   if (!attachment) {
     return null;
@@ -368,16 +318,6 @@ export default function Attachment({ attachment }: { attachment?: TAttachment })
 
   if (isImageAttachment(attachment)) {
     return <ImageAttachment attachment={attachment} />;
-  }
-  // Single classification call. The result is threaded into
-  // `PanelArtifact` -> `fileToArtifact` so the panel path doesn't
-  // re-run `detectArtifactTypeFromFile` a second time.
-  const artType = artifactTypeForAttachment(attachment);
-  if (artType === TOOL_ARTIFACT_TYPES.MERMAID) {
-    return <MermaidArtifact attachment={attachment} />;
-  }
-  if (artType != null) {
-    return <PanelArtifact attachment={attachment} type={artType} />;
   }
   if (isTextAttachment(attachment)) {
     return <TextAttachment attachment={attachment} />;
@@ -396,12 +336,6 @@ export function AttachmentGroup({ attachments }: { attachments?: TAttachment[] }
   const fileAttachments: TAttachment[] = [];
   const imageAttachments: TAttachment[] = [];
   const textAttachments: TAttachment[] = [];
-  /* Pending-preview chips share this row with their future selves —
-   * `type` is null while pending so the renderer falls back to
-   * FileAttachment (PreviewPlaceholderCard); on resolution it switches
-   * to PanelArtifact in place. */
-  const panelRow: Array<{ attachment: TAttachment; type: ToolArtifactType | null }> = [];
-  const mermaidArtifacts: TAttachment[] = [];
 
   attachments.forEach((attachment) => {
     if (attachment.type === Tools.web_search) {
@@ -415,16 +349,7 @@ export function AttachmentGroup({ attachments }: { attachments?: TAttachment[] }
       return;
     }
     if ((attachment as Partial<TFile>).status === 'pending') {
-      panelRow.push({ attachment, type: null });
-      return;
-    }
-    const artType = artifactTypeForAttachment(attachment);
-    if (artType === TOOL_ARTIFACT_TYPES.MERMAID) {
-      mermaidArtifacts.push(attachment);
-      return;
-    }
-    if (artType != null) {
-      panelRow.push({ attachment, type: artType });
+      fileAttachments.push(attachment);
       return;
     }
     if (isTextAttachment(attachment)) {
@@ -439,14 +364,6 @@ export function AttachmentGroup({ attachments }: { attachments?: TAttachment[] }
   // engines (V8 ≥ 7.0) so equal-weight entries keep their input order.
   fileAttachments.sort(bySalience);
   textAttachments.sort(bySalience);
-  /* Sort only the typed (resolved) entries; pending placeholders bubble
-   * to the end of the row so resolved siblings catch the eye first. */
-  const resolvedPanel = panelRow.filter(
-    (e): e is { attachment: TAttachment; type: ToolArtifactType } => e.type != null,
-  );
-  const pendingPanel = panelRow.filter((e) => e.type == null);
-  resolvedPanel.sort(byEntrySalience);
-  mermaidArtifacts.sort(bySalience);
   imageAttachments.sort(bySalience);
 
   return (
@@ -461,35 +378,6 @@ export function AttachmentGroup({ attachments }: { attachments?: TAttachment[] }
               />
             ) : null,
           )}
-        </div>
-      )}
-      {(resolvedPanel.length > 0 || pendingPanel.length > 0) && (
-        <div className="my-2 flex flex-wrap items-center gap-2">
-          {resolvedPanel.map(({ attachment, type }, index) => (
-            <PanelArtifact
-              attachment={attachment}
-              type={type}
-              key={renderAttachmentKey('artifact', attachment, index)}
-            />
-          ))}
-          {pendingPanel.map(({ attachment }, index) =>
-            attachment.filepath ? (
-              <FileAttachment
-                attachment={attachment}
-                key={renderAttachmentKey('pending', attachment, index)}
-              />
-            ) : null,
-          )}
-        </div>
-      )}
-      {mermaidArtifacts.length > 0 && (
-        <div className="my-2 flex flex-col gap-3">
-          {mermaidArtifacts.map((attachment, index) => (
-            <MermaidArtifact
-              attachment={attachment}
-              key={renderAttachmentKey('mermaid', attachment, index)}
-            />
-          ))}
         </div>
       )}
       {textAttachments.length > 0 && (

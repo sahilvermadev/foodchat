@@ -12,6 +12,7 @@ module.exports = {
   theme: {
     fontFamily: {
       sans: ['Inter', 'sans-serif'],
+      serif: ['Georgia', 'Cambria', 'Times New Roman', 'serif'],
       mono: ['Roboto Mono', 'monospace'],
     },
     // fontFamily: {

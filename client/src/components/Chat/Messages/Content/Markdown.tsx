@@ -14,8 +14,7 @@ import {
   MCPUIResource,
   MCPUIResourceCarousel,
 } from '~/components/MCPUIResource';
-import { Artifact, artifactPlugin } from '~/components/Artifacts/Artifact';
-import { ArtifactProvider, CodeBlockProvider } from '~/Providers';
+import { CodeBlockProvider } from '~/Providers';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { langSubset, preprocessLaTeX } from '~/utils';
 import { unicodeCitation } from '~/components/Web';
@@ -57,7 +56,6 @@ const Markdown = memo(function Markdown({ content = '', isLatestMessage }: TCont
     supersub,
     remarkGfm,
     remarkDirective,
-    artifactPlugin,
     [remarkMath, { singleDollarTextMath: false }],
     unicodeCitation,
     mcpUIResourcePlugin,
@@ -75,34 +73,31 @@ const Markdown = memo(function Markdown({ content = '', isLatestMessage }: TCont
 
   return (
     <MarkdownErrorBoundary content={content} codeExecution={true}>
-      <ArtifactProvider>
-        <CodeBlockProvider>
-          <ReactMarkdown
-            /** @ts-ignore */
-            remarkPlugins={remarkPlugins}
-            /* @ts-ignore */
-            rehypePlugins={rehypePlugins}
-            components={
-              {
-                code,
-                a,
-                p,
-                img,
-                artifact: Artifact,
-                citation: Citation,
-                'highlighted-text': HighlightedText,
-                'composite-citation': CompositeCitation,
-                'mcp-ui-resource': MCPUIResource,
-                'mcp-ui-carousel': MCPUIResourceCarousel,
-              } as {
-                [nodeType: string]: React.ElementType;
-              }
+      <CodeBlockProvider>
+        <ReactMarkdown
+          /** @ts-ignore */
+          remarkPlugins={remarkPlugins}
+          /* @ts-ignore */
+          rehypePlugins={rehypePlugins}
+          components={
+            {
+              code,
+              a,
+              p,
+              img,
+              citation: Citation,
+              'highlighted-text': HighlightedText,
+              'composite-citation': CompositeCitation,
+              'mcp-ui-resource': MCPUIResource,
+              'mcp-ui-carousel': MCPUIResourceCarousel,
+            } as {
+              [nodeType: string]: React.ElementType;
             }
-          >
-            {currentContent}
-          </ReactMarkdown>
-        </CodeBlockProvider>
-      </ArtifactProvider>
+          }
+        >
+          {currentContent}
+        </ReactMarkdown>
+      </CodeBlockProvider>
     </MarkdownErrorBoundary>
   );
 });

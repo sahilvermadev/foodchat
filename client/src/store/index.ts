@@ -1,4 +1,3 @@
-import * as artifacts from './artifacts';
 import families from './families';
 import endpoints from './endpoints';
 import user from './user';
@@ -17,7 +16,6 @@ export * from './favorites';
 export * from './subagents';
 
 export default {
-  ...artifacts,
   ...families,
   ...endpoints,
   ...user,

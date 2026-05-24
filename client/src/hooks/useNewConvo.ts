@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
 import { useRecoilState, useRecoilValue, useSetRecoilState, useRecoilCallback } from 'recoil';
@@ -10,6 +11,7 @@ import {
   getEndpointField,
   isAgentsEndpoint,
   LocalStorageKeys,
+  QueryKeys,
   getDefaultParamsEndpoint,
 } from 'librechat-data-provider';
 import type {
@@ -36,6 +38,7 @@ import store from '~/store';
 const useNewConvo = (index = 0) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const { data: startupConfig } = useGetStartupConfig();
   const applyModelSpecEffects = useApplyModelSpecEffects();
@@ -158,6 +161,9 @@ const useNewConvo = (index = 0) => {
           setConversation(conversation);
         }
         setSubmission({} as TSubmission);
+        if (conversation.conversationId === Constants.NEW_CONVO) {
+          queryClient.setQueryData([QueryKeys.messages, Constants.NEW_CONVO], []);
+        }
         if (!(keepLatestMessage ?? false)) {
           logger.log('latest_message', 'Clearing all latest messages');
           clearAllLatestMessages();
@@ -194,6 +200,7 @@ const useNewConvo = (index = 0) => {
       defaultPreset,
       modelsQuery.data,
       location.pathname,
+      queryClient,
     ],
   );
 

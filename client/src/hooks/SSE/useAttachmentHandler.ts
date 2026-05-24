@@ -75,7 +75,7 @@ export default function useAttachmentHandler(queryClient?: QueryClient) {
        * with `status: 'pending'` and `text: null`, then again with
        * `status: 'ready'` (and text/textFormat) or `'failed'` (with
        * previewError). The second event must merge over the first in
-       * place — appending would render the artifact card twice, once
+       * place — appending would render duplicate file entries, once
        * stuck pending and once resolved. Attachments without a
        * `file_id` (lightweight types like web_search / file_search
        * citations) keep the legacy append behavior. */
