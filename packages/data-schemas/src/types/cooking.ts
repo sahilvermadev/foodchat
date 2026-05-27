@@ -3,6 +3,7 @@ import type {
   CookingSessionEvent,
   CookingSessionStatus,
   CookingDraftStatus,
+  CookingDocumentType,
   StructuredRecipe,
   SavedRecipe,
   RecipeCategorizationStatus,
@@ -13,9 +14,11 @@ export interface ICookingDraft extends Document {
   conversationId?: string;
   prompt: string;
   status: CookingDraftStatus;
+  documentType: CookingDocumentType;
+  selected: boolean;
   documentMarkdown?: string;
   recipe: StructuredRecipe;
-  expiresAt: Date;
+  expiresAt?: Date;
   tenantId?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -54,8 +57,12 @@ export interface ICookingSessionEvent extends Document {
 export interface ISavedRecipe extends Document {
   user: string;
   title: string;
+  documentType: CookingDocumentType;
   shortDescription?: string;
   illustrationUrl?: string;
+  illustrationData?: Buffer;
+  illustrationContentType?: string;
+  illustrationThumbnail?: Buffer;
   illustrationStatus?: SavedRecipe['illustrationStatus'];
   illustrationModel?: string;
   documentMarkdown: string;

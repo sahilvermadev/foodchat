@@ -83,6 +83,20 @@ describe('preference artifact helpers', () => {
     );
   });
 
+  test('stores durable specialty ingredients separately from kitchen equipment', () => {
+    const result = applyPreferencePatch('', {
+      op: 'append_to_section',
+      heading: 'Specialty Ingredients',
+      markdown: 'Usually keeps gochujang, capers, and preserved lemons on hand.',
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.changedHeadings).toEqual(['Specialty Ingredients']);
+    expect(result.markdown).toBe(
+      '## Specialty Ingredients\n- Usually keeps gochujang, capers, and preserved lemons on hand.',
+    );
+  });
+
   test('stores religious and cultural rules separately from safety', () => {
     const result = applyPreferencePatch('', {
       op: 'append_to_section',

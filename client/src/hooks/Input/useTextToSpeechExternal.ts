@@ -41,13 +41,7 @@ function useTextToSpeechExternal({
   const globalIsFetching = useRecoilValue(store.globalAudioFetchingFamily(index));
   const globalIsPlaying = useRecoilValue(store.globalAudioPlayingFamily(index));
 
-  const autoPlayAudio = (blobUrl: string) => {
-    const newAudio = new Audio(blobUrl);
-    audioRef.current = newAudio;
-  };
-
-  const playAudioPromise = (blobUrl: string) => {
-    const newAudio = new Audio(blobUrl);
+  const playAudio = (newAudio: HTMLAudioElement, blobUrl: string) => {
     const initializeAudio = () => {
       if (playbackRate != null && playbackRate !== 1 && playbackRate > 0) {
         newAudio.playbackRate = playbackRate;
@@ -55,14 +49,17 @@ function useTextToSpeechExternal({
     };
 
     initializeAudio();
-    const playPromise = () => newAudio.play().then(() => setIsSpeaking(true));
+    newAudio.onended = () => {
+      URL.revokeObjectURL(blobUrl);
+      setIsSpeaking(false);
+    };
 
+    const playPromise = () => newAudio.play().then(() => setIsSpeaking(true));
     playPromise().catch((error: Error) => {
       if (
         error.message &&
         error.message.includes('The play() request was interrupted by a call to pause()')
       ) {
-        console.log('Play request was interrupted by a call to pause()');
         initializeAudio();
         return playPromise().catch(console.error);
       }
@@ -72,14 +69,18 @@ function useTextToSpeechExternal({
         status: 'error',
       });
     });
+  };
 
-    newAudio.onended = () => {
-      console.log('Cached message audio ended');
-      URL.revokeObjectURL(blobUrl);
-      setIsSpeaking(false);
-    };
+  const autoPlayAudio = (blobUrl: string) => {
+    const newAudio = new Audio(blobUrl);
+    audioRef.current = newAudio;
+    playAudio(newAudio, blobUrl);
+  };
 
+  const playAudioPromise = (blobUrl: string) => {
+    const newAudio = new Audio(blobUrl);
     promiseAudioRef.current = newAudio;
+    playAudio(newAudio, blobUrl);
   };
 
   const downloadAudio = (blobUrl: string) => {

@@ -1,10 +1,13 @@
 import mongoose from 'mongoose';
-import { createModels } from '@librechat/data-schemas';
+import { createModels, migrateCookingDocuments } from '@librechat/data-schemas';
 import type { CookingSessionEvent, StructuredRecipe } from 'librechat-data-provider';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import {
   CookingValidationError,
+  deleteCookingDocument,
   getCookingSession,
+  listCookingDocuments,
+  selectCookingDocument,
   updateCookingDraft,
   generateCookingDraft,
   completeCookingSession,
@@ -72,24 +75,160 @@ afterAll(async () => {
 });
 
 describe('cooking service', () => {
-  test('generate draft persists user, prompt, active status, recipe content, and expiration', async () => {
-    const before = Date.now();
+  test('generate document persists durable selected recipe content', async () => {
     const draft = await generateCookingDraft(userA, '  chickpea curry  ');
 
     expect(draft.user).toBe(userA);
     expect(draft.prompt).toBe('chickpea curry');
     expect(draft.status).toBe('active');
+    expect(draft.documentType).toBe('recipe');
+    expect(draft.selected).toBe(true);
     expect(draft.recipe.title).toBe('chickpea curry');
     expect(draft.recipe.ingredients.length).toBeGreaterThan(0);
     expect(draft.recipe.steps.length).toBeGreaterThan(0);
-    expect(new Date(draft.expiresAt).getTime()).toBeGreaterThan(before);
+    expect(draft.expiresAt).toBeUndefined();
 
     const saved = await mongoose.models.CookingDraft.findById(draft._id).lean();
     expect(saved).toMatchObject({
       user: userA,
       prompt: 'chickpea curry',
       status: 'active',
+      documentType: 'recipe',
+      selected: true,
     });
+  });
+
+  test('creates multiple documents and revisions target only one document', async () => {
+    const guide = await generateCookingDraft(
+      userA,
+      'Sourdough starter',
+      'conversation-1',
+      undefined,
+      'guide',
+    );
+    const bread = await generateCookingDraft(
+      userA,
+      'Basic bread',
+      'conversation-1',
+      undefined,
+      'recipe',
+    );
+    await updateCookingDraft(
+      userA,
+      guide._id,
+      undefined,
+      '# Starter Guide\n\n## Ingredients\n\n- Flour\n\n## Instructions\n\n1. Feed.',
+    );
+
+    let collection = await listCookingDocuments(userA, 'conversation-1');
+    expect(collection.documents).toHaveLength(2);
+    expect(collection.selectedDocumentId).toBe(bread._id);
+    expect(collection.documents.find((document) => document._id === guide._id)?.recipe.title).toBe(
+      'Starter Guide',
+    );
+    expect(collection.documents.find((document) => document._id === bread._id)?.recipe.title).toBe(
+      'Basic bread',
+    );
+
+    collection = (await selectCookingDocument(userA, guide._id))!;
+    expect(collection.selectedDocumentId).toBe(guide._id);
+    collection = (await deleteCookingDocument(userA, guide._id))!;
+    expect(collection.selectedDocumentId).toBe(bread._id);
+    expect(collection.documents).toHaveLength(1);
+  });
+
+  test('migrates non-expired legacy drafts into durable recipe documents', async () => {
+    const recipe = (await generateCookingDraft(userA, 'base')).recipe;
+    await mongoose.models.CookingDraft.deleteMany({});
+    const collection = mongoose.connection.collection('cookingdrafts');
+    await collection.insertMany([
+      {
+        user: userA,
+        conversationId: 'legacy-conversation',
+        prompt: 'older',
+        status: 'active',
+        recipe,
+        expiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date('2026-01-01'),
+        updatedAt: new Date('2026-01-01'),
+      },
+      {
+        user: userA,
+        conversationId: 'legacy-conversation',
+        prompt: 'newer',
+        status: 'active',
+        recipe,
+        expiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date('2026-01-02'),
+        updatedAt: new Date('2026-01-02'),
+      },
+      {
+        user: userA,
+        conversationId: 'legacy-conversation',
+        prompt: 'already expired',
+        status: 'active',
+        recipe,
+        expiresAt: new Date(Date.now() - 60_000),
+        createdAt: new Date('2026-01-03'),
+        updatedAt: new Date('2026-01-03'),
+      },
+    ]);
+    await mongoose.connection.collection('savedrecipes').insertOne({
+      user: userA,
+      title: 'Legacy saved recipe',
+      documentMarkdown: '# Legacy\n\n## Ingredients\n- Flour\n\n## Instructions\n1. Mix.',
+    });
+    await mongoose.connection.collection('savedrecipes').insertOne({
+      user: userA,
+      title: 'Legacy saved guide',
+      documentType: 'guide',
+      illustrationStatus: 'failed',
+      documentMarkdown: '# Guide\n\nMaintain a starter.',
+    });
+
+    const result = await migrateCookingDocuments(mongoose.connection);
+    const migrated = await listCookingDocuments(userA, 'legacy-conversation');
+    const saved = await mongoose.connection
+      .collection('savedrecipes')
+      .findOne({ title: 'Legacy saved recipe' });
+    const savedGuide = await mongoose.connection
+      .collection('savedrecipes')
+      .findOne({ title: 'Legacy saved guide' });
+
+    expect(result.migrated).toBe(2);
+    expect(result.expiredDeleted).toBe(1);
+    expect(result.savedMigrated).toBe(1);
+    expect(result.illustrationsQueued).toBe(1);
+    expect(saved?.documentType).toBe('recipe');
+    expect(savedGuide?.illustrationStatus).toBe('pending');
+    expect(migrated.documents.every((document) => document.documentType === 'recipe')).toBe(true);
+    expect(migrated.documents.every((document) => !document.expiresAt)).toBe(true);
+    expect(
+      migrated.documents.find((document) => document._id === migrated.selectedDocumentId)?.prompt,
+    ).toBe('newer');
+  });
+
+  test('uses a markdown heading as the canonical title for generated drafts', async () => {
+    const draft = await generateCookingDraft(
+      userA,
+      '{',
+      undefined,
+      '# Thai Iced Tea\n\n## Ingredients\n\n- Tea\n\n## Instructions\n\n1. Brew tea.',
+    );
+
+    expect(draft.prompt).toBe('{');
+    expect(draft.recipe.title).toBe('Thai Iced Tea');
+  });
+
+  test('does not use a wrapper-only markdown heading as a recipe title', async () => {
+    const draft = await generateCookingDraft(
+      userA,
+      'Thai Iced Tea',
+      undefined,
+      '# {\n\n## Ingredients\n\n- Tea\n\n## Instructions\n\n1. Brew tea.',
+    );
+
+    expect(draft.recipe.title).toBe('Thai Iced Tea');
   });
 
   test('update draft normalizes valid edits and rejects invalid recipes', async () => {
@@ -119,6 +258,18 @@ describe('cooking service', () => {
     await expect(
       updateCookingDraft(userA, draft._id, { ...draft.recipe, steps: [] }),
     ).rejects.toThrow(CookingValidationError);
+  });
+
+  test('syncs a structured recipe title when updated markdown changes its heading', async () => {
+    const draft = await generateCookingDraft(userA, 'placeholder recipe');
+    const updated = await updateCookingDraft(
+      userA,
+      draft._id,
+      undefined,
+      '# Corrected Recipe Title\n\n## Ingredients\n\n- Item\n\n## Instructions\n\n1. Cook.',
+    );
+
+    expect(updated?.recipe.title).toBe('Corrected Recipe Title');
   });
 
   test('user isolation protects drafts and sessions', async () => {

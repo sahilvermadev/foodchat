@@ -75,17 +75,23 @@ export const cookingDraftSchema = new Schema<ICookingDraft>(
     conversationId: { type: String, index: true },
     prompt: { type: String, required: true },
     status: { type: String, enum: ['active', 'archived'], default: 'active', required: true },
+    documentType: {
+      type: String,
+      enum: ['recipe', 'guide', 'prep_plan'],
+      default: 'recipe',
+      required: true,
+    },
+    selected: { type: Boolean, default: false, required: true },
     documentMarkdown: { type: String, default: '' },
     recipe: { type: structuredRecipeSchema, required: true },
-    expiresAt: { type: Date, required: true },
     tenantId: { type: String, index: true },
   },
   { timestamps: true },
 );
 
-cookingDraftSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 cookingDraftSchema.index({ user: 1, status: 1, updatedAt: -1, tenantId: 1 });
 cookingDraftSchema.index({ user: 1, conversationId: 1, status: 1, tenantId: 1 });
+cookingDraftSchema.index({ user: 1, conversationId: 1, selected: 1, tenantId: 1 });
 
 export const cookingSessionSchema = new Schema<ICookingSession>(
   {
@@ -159,11 +165,20 @@ export const savedRecipeSchema = new Schema<ISavedRecipe>(
   {
     user: { type: String, required: true, index: true },
     title: { type: String, required: true },
+    documentType: {
+      type: String,
+      enum: ['recipe', 'guide', 'prep_plan'],
+      default: 'recipe',
+      required: true,
+    },
     shortDescription: { type: String, default: '' },
     illustrationUrl: { type: String, default: '' },
+    illustrationData: { type: Buffer },
+    illustrationContentType: { type: String },
+    illustrationThumbnail: { type: Buffer },
     illustrationStatus: {
       type: String,
-      enum: ['pending', 'complete', 'failed'],
+      enum: ['pending', 'generating', 'complete', 'failed'],
       default: 'pending',
       required: true,
     },

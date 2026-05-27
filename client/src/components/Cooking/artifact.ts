@@ -29,6 +29,8 @@ const EMPTY_ACTION: CookingArtifactAction = { type: 'none' };
 const SECTION_HEADING_PATTERN = /^(#{1,6})\s+(.+?)\s*$/;
 const TIMER_TOKEN_PATTERN = /\[timer:(\d+)\]/i;
 const TIMER_TOKEN_GLOBAL_PATTERN = /\[timer:\d+\]/gi;
+const TEXT_PROMPT_SUGGESTION_CALL_PATTERN =
+  /(?:```(?:\w+)?\s*)?set_prompt_suggestions\s*\(\s*suggestions\s*=\s*\[[\s\S]*?\]\s*\)\s*;?\s*(?:```)?/gi;
 
 function cleanMarkdownText(value: string): string {
   return value
@@ -50,6 +52,13 @@ export function extractTimerTokenSeconds(text: string): number | undefined {
 
 export function stripCookingTimerTokens(text: string): string {
   return text.replace(TIMER_TOKEN_GLOBAL_PATTERN, '').replace(/\s+/g, ' ').trim();
+}
+
+function stripTextPromptSuggestionCalls(text: string): string {
+  return text
+    .replace(TEXT_PROMPT_SUGGESTION_CALL_PATTERN, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function extractTaggedBlock(text: string, tag: string): string {
@@ -208,9 +217,13 @@ export function getCookingCanvasMarkdown({
 }
 
 export function getCookingChatDisplayText(text: string, fallback: string): string | null {
-  const parts = parseCookingAssistantResponse(text);
+  const visibleText = stripTextPromptSuggestionCalls(text);
+  const parts = parseCookingAssistantResponse(visibleText);
   if (!parts.hasProtocol && !parts.artifactMarkdown) {
-    if (text.includes('artifact_action') || text.includes('<recipe_artifact>')) {
+    if (visibleText !== text) {
+      return visibleText || fallback;
+    }
+    if (visibleText.includes('artifact_action') || visibleText.includes('<recipe_artifact>')) {
       return fallback;
     }
     return null;

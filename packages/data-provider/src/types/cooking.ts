@@ -49,23 +49,34 @@ export type StructuredRecipe = {
 };
 
 export type CookingDraftStatus = 'active' | 'archived';
+export type CookingDocumentType = 'recipe' | 'guide' | 'prep_plan';
 export type CookingSessionStatus = 'active' | 'completed';
 export type RecipeCategorizationStatus = 'pending' | 'complete' | 'failed';
-export type RecipeIllustrationStatus = 'pending' | 'complete' | 'failed';
+export type RecipeIllustrationStatus = 'pending' | 'generating' | 'complete' | 'failed';
 export type RecipeDifficulty = 'beginner' | 'intermediate' | 'advanced';
 export type RecipeTimeBucket = 'under_15' | 'under_30' | 'under_60' | 'long_cook';
 
-export type CookingDraft = {
+export type CookingDocument = {
   _id: string;
   user: string;
   conversationId?: string;
   prompt: string;
   status: CookingDraftStatus;
+  documentType: CookingDocumentType;
+  selected: boolean;
   documentMarkdown?: string;
   recipe: StructuredRecipe;
-  expiresAt: string;
+  expiresAt?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Compatibility name for clients still consuming the draft endpoints. */
+export type CookingDraft = CookingDocument;
+
+export type ConversationCookingDocuments = {
+  documents: CookingDocument[];
+  selectedDocumentId?: string;
 };
 
 export type RecipeCategorization = {
@@ -90,6 +101,7 @@ export type SavedRecipe = {
   _id: string;
   user: string;
   title: string;
+  documentType: CookingDocumentType;
   shortDescription?: string;
   illustrationUrl?: string;
   illustrationStatus?: RecipeIllustrationStatus;
@@ -103,6 +115,10 @@ export type SavedRecipe = {
   categorizationVersion: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type SavedRecipeSummary = Omit<SavedRecipe, 'documentMarkdown' | 'recipe'> & {
+  servings?: number;
 };
 
 export type CookingSession = {
@@ -175,6 +191,7 @@ export type CookingSessionEvent =
 export type GenerateCookingDraftRequest = {
   prompt: string;
   conversationId?: string;
+  documentType?: CookingDocumentType;
   documentMarkdown?: string;
 };
 
@@ -182,6 +199,10 @@ export type UpdateCookingDraftRequest = {
   recipe?: StructuredRecipe;
   documentMarkdown?: string;
 };
+
+export type CreateCookingDocumentRequest = GenerateCookingDraftRequest;
+
+export type UpdateCookingDocumentRequest = UpdateCookingDraftRequest;
 
 export type StartCookingSessionRequest = {
   draftId: string;
@@ -194,6 +215,7 @@ export type CompleteCookingSessionRequest = {
 
 export type SaveRecipeRequest = {
   title?: string;
+  documentType?: CookingDocumentType;
   shortDescription?: string;
   documentMarkdown: string;
   recipe?: StructuredRecipe;
@@ -203,6 +225,7 @@ export type SaveRecipeRequest = {
 
 export type UpdateSavedRecipeRequest = {
   title?: string;
+  documentType?: CookingDocumentType;
   shortDescription?: string;
   documentMarkdown?: string;
   recipe?: StructuredRecipe;
@@ -216,11 +239,12 @@ export type SavedRecipesQuery = {
   timeBucket?: RecipeTimeBucket;
   mainIngredient?: string;
   equipment?: string;
+  documentType?: CookingDocumentType;
   limit?: number;
   cursor?: string;
 };
 
 export type SavedRecipesResponse = {
-  recipes: SavedRecipe[];
+  recipes: SavedRecipeSummary[];
   nextCursor?: string;
 };

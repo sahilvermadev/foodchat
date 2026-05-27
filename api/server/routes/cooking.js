@@ -8,6 +8,11 @@ const {
   withPendingPreferenceBatch,
   getExistingPreferences,
   getCookingDraftByConversation,
+  listCookingDocuments,
+  createCookingDocument,
+  selectCookingDocument,
+  deleteCookingDocument,
+  updateCookingDocument,
   generateCookingDraft,
   updateCookingDraft,
   startCookingSession,
@@ -20,6 +25,7 @@ const { requireJwtAuth, configMiddleware } = require('~/server/middleware');
 const { loadAuthValues } = require('~/server/services/Tools/credentials');
 
 const router = express.Router();
+const cookingAssistantName = 'Samwise';
 
 router.use(requireJwtAuth, configMiddleware);
 
@@ -52,6 +58,12 @@ function assertRecipe(value) {
     !isObject(value.timing)
   ) {
     throw new CookingValidationError('Recipe is malformed.');
+  }
+}
+
+function assertDocumentType(value) {
+  if (value != null && !['recipe', 'guide', 'prep_plan'].includes(value)) {
+    throw new CookingValidationError('Cooking document type is malformed.');
   }
 }
 
@@ -184,7 +196,12 @@ async function streamAssistantText(
   let firstChunkSent = false;
   while (cursor < chars.length) {
     const remaining = chars.length - cursor;
-    const chunkSize = remaining > 240 ? 32 : remaining > 80 ? 20 : 12;
+    let chunkSize = 12;
+    if (remaining > 240) {
+      chunkSize = 32;
+    } else if (remaining > 80) {
+      chunkSize = 20;
+    }
     cursor += chunkSize;
     sendEvent(res, {
       type: 'text',
@@ -273,10 +290,13 @@ router.post('/chat', async (req, res) => {
   try {
     const db = models();
     const contextStartedAt = Date.now();
-    const [preferences, activeDraft] = await Promise.all([
+    const [preferences, documentCollection] = await Promise.all([
       getExistingPreferences(userId(req)),
-      getCookingDraftByConversation(userId(req), conversationId),
+      listCookingDocuments(userId(req), conversationId),
     ]);
+    const activeDraft = documentCollection.documents.find(
+      (document) => document._id === documentCollection.selectedDocumentId,
+    );
     perf.mark('context_loaded', {
       durationMs: Date.now() - contextStartedAt,
       hasPreferences: Boolean(preferences?.markdown),
@@ -294,6 +314,7 @@ router.post('/chat', async (req, res) => {
       preferencesMarkdown: preferences?.markdown,
       messages: isNewConvo ? [] : req.body?.messages,
       activeDraft,
+      documents: documentCollection.documents,
       webSearchConfig: req.config?.webSearch,
       loadAuthValues,
       conversationCreatedAt: req.body?.createdAt || new Date(),
@@ -329,7 +350,7 @@ router.post('/chat', async (req, res) => {
       messageId: responseMessageId,
       parentMessageId: userMessageId,
       conversationId,
-      sender: req.body?.modelDisplayLabel || 'Mise',
+      sender: cookingAssistantName,
       endpoint,
       model: model || req.body?.modelDisplayLabel || '',
       text: result.text,
@@ -382,6 +403,7 @@ router.post('/chat', async (req, res) => {
       requestMessage,
       responseMessage,
       cookingDraftUpdated: result.draftChanged,
+      cookingDocumentsUpdated: result.draftChanged,
     });
     perf.mark('final_event_sent');
     curatePendingPreferences({ user: userId(req), conversationId }).catch((preferenceError) => {
@@ -401,7 +423,7 @@ router.post('/chat', async (req, res) => {
       messageId: responseMessageId,
       parentMessageId: userMessageId,
       conversationId,
-      sender: 'Mise',
+      sender: cookingAssistantName,
       endpoint,
       model: model || '',
       text: error instanceof Error ? error.message : 'Cooking chat failed.',
@@ -463,13 +485,88 @@ router.post('/drafts/generate', async (req, res) => {
     assertText(req.body?.prompt, 'Prompt is required.');
     assertOptionalText(req.body?.conversationId, 'Conversation id is malformed.');
     assertOptionalText(req.body?.documentMarkdown, 'Recipe document is malformed.');
+    assertDocumentType(req.body?.documentType);
     const draft = await generateCookingDraft(
       userId(req),
       req.body.prompt,
       req.body.conversationId,
       req.body.documentMarkdown,
+      req.body.documentType,
     );
     res.status(201).json(draft);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.post('/documents', async (req, res) => {
+  try {
+    assertText(req.body?.prompt, 'Prompt is required.');
+    assertOptionalText(req.body?.conversationId, 'Conversation id is malformed.');
+    assertOptionalText(req.body?.documentMarkdown, 'Cooking document is malformed.');
+    assertDocumentType(req.body?.documentType);
+    const document = await createCookingDocument(
+      userId(req),
+      req.body.prompt,
+      req.body.conversationId,
+      req.body.documentMarkdown,
+      req.body.documentType,
+    );
+    res.status(201).json(document);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.get('/documents/by-conversation/:conversationId', async (req, res) => {
+  try {
+    const documents = await listCookingDocuments(userId(req), req.params.conversationId);
+    res.json(documents);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.patch('/documents/:id', async (req, res) => {
+  try {
+    if (req.body?.recipe != null) {
+      assertRecipe(req.body.recipe);
+    }
+    assertOptionalText(req.body?.documentMarkdown, 'Cooking document is malformed.');
+    const document = await updateCookingDocument(
+      userId(req),
+      req.params.id,
+      req.body?.recipe,
+      req.body?.documentMarkdown,
+    );
+    if (!document) {
+      return res.sendStatus(404);
+    }
+    res.json(document);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.post('/documents/:id/select', async (req, res) => {
+  try {
+    const documents = await selectCookingDocument(userId(req), req.params.id);
+    if (!documents) {
+      return res.sendStatus(404);
+    }
+    res.json(documents);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.delete('/documents/:id', async (req, res) => {
+  try {
+    const documents = await deleteCookingDocument(userId(req), req.params.id);
+    if (!documents) {
+      return res.sendStatus(404);
+    }
+    res.json(documents);
   } catch (error) {
     handleError(res, error);
   }

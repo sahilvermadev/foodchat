@@ -1,45 +1,246 @@
+import { useEffect, useRef, useState } from 'react';
+import { LoaderCircle, Trash2 } from 'lucide-react';
+import { OGDialog, OGDialogTemplate } from '@librechat/client';
+import type { CookingDocumentType, CookingDraft } from 'librechat-data-provider';
 import ChatView from '~/components/Chat/ChatView';
+import {
+  useDeleteCookingDocumentMutation,
+  useSelectCookingDocumentMutation,
+} from '~/data-provider';
+import { useLocalize } from '~/hooks';
 import RecipeCanvas from './RecipeCanvas';
-import type { CookingDraft } from 'librechat-data-provider';
+
+function documentTypeKey(type: CookingDocumentType) {
+  if (type === 'guide') {
+    return 'com_cooking_document_type_guide' as const;
+  }
+  if (type === 'prep_plan') {
+    return 'com_cooking_document_type_prep_plan' as const;
+  }
+  return 'com_cooking_document_type_recipe' as const;
+}
 
 type CookingWorkspaceProps = {
   conversationId: string;
+  chatConversationId?: string;
   draft?: CookingDraft;
+  documents?: CookingDraft[];
+  documentsLoaded?: boolean;
+  selectedDocumentId?: string;
   markdown: string;
   isPreparingDraft: boolean;
   index?: number;
 };
 
+type RetainedDocumentState = {
+  conversationId?: string;
+  documents: CookingDraft[];
+  selectedDocumentId?: string;
+};
+
+function resolveWorkspaceDocuments({
+  conversationId,
+  documents,
+  documentsLoaded,
+  draft,
+  markdown,
+  retained,
+  selectedDocumentId,
+}: {
+  conversationId: string;
+  documents: CookingDraft[];
+  documentsLoaded: boolean;
+  draft?: CookingDraft;
+  markdown: string;
+  retained: RetainedDocumentState;
+  selectedDocumentId?: string;
+}) {
+  let visibleDocuments = documents;
+  if (!visibleDocuments.length && draft) {
+    visibleDocuments = [draft];
+  }
+  if (!visibleDocuments.length && !documentsLoaded && retained.conversationId === conversationId) {
+    visibleDocuments = retained.documents;
+  }
+
+  const resolvedSelectedDocumentId =
+    selectedDocumentId ??
+    draft?._id ??
+    (retained.conversationId === conversationId ? retained.selectedDocumentId : undefined);
+  const selectedDocument =
+    visibleDocuments.find((document) => document._id === resolvedSelectedDocumentId) ??
+    draft ??
+    visibleDocuments.find((document) => document.selected) ??
+    visibleDocuments[0];
+  const selectedMarkdown = selectedDocument?.documentMarkdown?.trim() || markdown;
+
+  return {
+    visibleDocuments,
+    selectedDocument,
+    selectedMarkdown,
+    hasRecipeCanvas: Boolean(selectedDocument || selectedMarkdown.trim()),
+  };
+}
+
 export default function CookingWorkspace({
   conversationId,
+  chatConversationId,
   draft,
+  documents = [],
+  documentsLoaded = false,
+  selectedDocumentId,
   markdown,
   isPreparingDraft,
   index = 0,
 }: CookingWorkspaceProps) {
-  const hasRecipeCanvas = Boolean(draft || markdown.trim());
+  const localize = useLocalize();
+  const selectDocument = useSelectCookingDocumentMutation(conversationId);
+  const deleteDocument = useDeleteCookingDocumentMutation(conversationId);
+  const [documentToDelete, setDocumentToDelete] = useState<CookingDraft>();
+  const retainedDocumentStateRef = useRef<RetainedDocumentState>({ documents: [] });
+
+  useEffect(() => {
+    if (documents.length > 0) {
+      retainedDocumentStateRef.current = { conversationId, documents, selectedDocumentId };
+      return;
+    }
+    if (draft) {
+      retainedDocumentStateRef.current = {
+        conversationId,
+        documents: [draft],
+        selectedDocumentId: draft._id,
+      };
+      return;
+    }
+    if (documentsLoaded) {
+      retainedDocumentStateRef.current = { conversationId, documents: [] };
+    }
+  }, [conversationId, documents, documentsLoaded, draft, selectedDocumentId]);
+
+  const { visibleDocuments, selectedDocument, selectedMarkdown, hasRecipeCanvas } =
+    resolveWorkspaceDocuments({
+      conversationId,
+      documents,
+      documentsLoaded,
+      draft,
+      markdown,
+      retained: retainedDocumentStateRef.current,
+      selectedDocumentId,
+    });
+
+  const confirmDelete = () => {
+    if (!documentToDelete || deleteDocument.isLoading) {
+      return;
+    }
+
+    deleteDocument.mutate(documentToDelete._id, {
+      onSuccess: () => setDocumentToDelete(undefined),
+    });
+  };
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col bg-presentation lg:flex-row">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-presentation lg:flex-row">
       <aside
         className={
           hasRecipeCanvas
-            ? 'order-2 min-h-[24rem] shrink-0 border-t border-border-light bg-surface-primary-alt lg:h-full lg:w-[30rem] lg:border-l lg:border-t-0 xl:w-[32rem]'
-            : 'order-1 min-w-0 flex-1'
+            ? 'order-2 flex min-h-[24rem] shrink-0 flex-col overflow-hidden border-t border-border-light bg-surface-primary-alt lg:h-full lg:min-h-0 lg:w-[30rem] lg:border-l lg:border-t-0 xl:w-[32rem]'
+            : 'order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-primary-alt'
         }
       >
-        <ChatView index={index} conversationId={conversationId} collapseRecipeMessages />
+        <div className="flex h-full min-h-0 w-full flex-1 bg-surface-primary-alt">
+          <ChatView
+            index={index}
+            conversationId={chatConversationId ?? conversationId}
+            collapseRecipeMessages
+          />
+        </div>
       </aside>
       {hasRecipeCanvas && (
-        <div className="order-1 min-h-0 min-w-0 flex-1">
+        <div className="order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {visibleDocuments.length > 0 ? (
+            <nav
+              aria-label={localize('com_cooking_documents')}
+              className="flex shrink-0 gap-2 overflow-x-auto border-b border-border-light bg-surface-primary-alt px-4 py-3"
+            >
+              {visibleDocuments.map((document) => {
+                const isSelected = document._id === selectedDocument?._id;
+                return (
+                  <div
+                    key={document._id}
+                    className={`flex shrink-0 items-center rounded-md border ${
+                      isSelected
+                        ? 'border-surface-submit bg-surface-primary'
+                        : 'border-border-light bg-surface-primary-alt'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      aria-current={isSelected ? 'page' : undefined}
+                      onClick={() => !isSelected && selectDocument.mutate(document._id)}
+                      className="max-w-56 truncate px-3 py-2 text-sm text-text-primary"
+                    >
+                      {document.recipe.title}
+                      <span className="ml-2 text-xs text-text-secondary">
+                        {localize(documentTypeKey(document.documentType))}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={localize('com_cooking_delete_document', {
+                        0: document.recipe.title,
+                      })}
+                      onClick={() => setDocumentToDelete(document)}
+                      className="mr-1 rounded p-1 text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                    >
+                      <Trash2 className="size-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                );
+              })}
+            </nav>
+          ) : null}
           <RecipeCanvas
-            draft={draft}
-            markdown={markdown}
+            draft={selectedDocument}
+            markdown={selectedMarkdown}
             conversationId={conversationId}
             isPreparingDraft={isPreparingDraft}
           />
         </div>
       )}
+      <OGDialog
+        open={documentToDelete != null}
+        onOpenChange={(open) => {
+          if (!open && !deleteDocument.isLoading) {
+            setDocumentToDelete(undefined);
+          }
+        }}
+      >
+        <OGDialogTemplate
+          showCloseButton={false}
+          title={localize('com_cooking_delete_document_title')}
+          className="max-w-[450px]"
+          main={
+            <p className="text-left text-sm text-text-primary">
+              {localize('com_cooking_delete_document_confirm', {
+                0: documentToDelete?.recipe.title ?? '',
+              })}
+            </p>
+          }
+          selection={
+            <button
+              type="button"
+              disabled={deleteDocument.isLoading}
+              className="flex h-10 items-center justify-center gap-2 rounded-lg border-none bg-surface-destructive px-4 py-2 text-sm text-white transition-colors hover:bg-surface-destructive-hover disabled:cursor-not-allowed disabled:opacity-70"
+              onClick={confirmDelete}
+            >
+              {deleteDocument.isLoading ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {localize('com_ui_delete')}
+            </button>
+          }
+        />
+      </OGDialog>
     </div>
   );
 }

@@ -42,3 +42,37 @@ export type PreferencesChatResponse = {
   preferencesChanged: boolean;
   changedHeadings: string[];
 };
+
+export type SpecialtyIngredientCategory =
+  | 'Condiments & Sauces'
+  | 'Cheese & Dairy'
+  | 'Preserved & Pickled'
+  | 'Freezer'
+  | 'Meat & Protein'
+  | 'Other';
+
+export type SpecialtyIngredientImageStatus = 'pending' | 'generating' | 'ready' | 'failed';
+
+export type SpecialtyIngredientCatalogItem = {
+  _id: string;
+  canonicalName: string;
+  normalizedName: string;
+  displayName: string;
+  category: SpecialtyIngredientCategory;
+  aliases: string[];
+  imageStatus: SpecialtyIngredientImageStatus;
+  imageUrl?: string;
+  imagePrompt?: string;
+  imageStyle: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SpecialtyIngredientCatalogResponse = {
+  ingredients: SpecialtyIngredientCatalogItem[];
+};
+
+export type ResolveSpecialtyIngredientRequest = {
+  name: string;
+  category?: SpecialtyIngredientCategory;
+};

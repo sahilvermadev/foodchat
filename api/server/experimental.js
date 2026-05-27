@@ -10,7 +10,8 @@ const express = require('express');
 const passport = require('passport');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
-const { logger, runAsSystem } = require('@librechat/data-schemas');
+const mongoose = require('mongoose');
+const { logger, runAsSystem, migrateCookingDocuments } = require('@librechat/data-schemas');
 const mongoSanitize = require('express-mongo-sanitize');
 const {
   isEnabled,
@@ -211,6 +212,7 @@ if (cluster.isMaster) {
     /** Connect to MongoDB */
     await connectDb();
     logger.info(`Worker ${process.pid}: Connected to MongoDB`);
+    await runAsSystem(() => migrateCookingDocuments(mongoose.connection));
 
     /** Background index sync (non-blocking) */
     indexSync().catch((err) => {

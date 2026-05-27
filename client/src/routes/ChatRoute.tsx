@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRecoilCallback, useRecoilValue } from 'recoil';
 import { Spinner, useToastContext } from '@librechat/client';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -15,14 +15,9 @@ import {
   isNotFoundError,
   logger,
 } from '~/utils';
+import { useIdChangeEffect, useAppStartup, useNewConvo, useLocalize } from '~/hooks';
 import {
-  useIdChangeEffect,
-  useAppStartup,
-  useNewConvo,
-  useLocalize,
-} from '~/hooks';
-import {
-  useCookingDraftByConversationQuery,
+  useCookingDocumentsByConversationQuery,
   useGetConvoIdQuery,
   useGetStartupConfig,
   useGetEndpointsQuery,
@@ -35,6 +30,7 @@ import { getCookingCanvasMarkdown } from '~/components/Cooking/artifact';
 import { NotificationSeverity } from '~/common';
 import {
   getActiveCookingConversationId,
+  getCookingDocumentsForActiveConversation,
   getNewCookingConversationTemplate,
 } from './cookingRouteState';
 import useAuthRedirect from './useAuthRedirect';
@@ -70,14 +66,27 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
     isCookingMode,
     routeConversationId,
     stateConversationId: conversation?.conversationId,
+    allowStateConversationFallback: isSubmitting,
   });
-  const draftQuery = useCookingDraftByConversationQuery(activeConversationId, {
+  const documentsQuery = useCookingDocumentsByConversationQuery(activeConversationId, {
     enabled: isCookingMode && Boolean(activeConversationId),
   });
+  const documents = useMemo(
+    () =>
+      getCookingDocumentsForActiveConversation(
+        documentsQuery.data?.documents,
+        activeConversationId,
+      ),
+    [activeConversationId, documentsQuery.data?.documents],
+  );
+  const documentsLoaded = activeConversationId ? Boolean(documentsQuery.data) : true;
+  const selectedDocumentId = documents.some(
+    (document) => document._id === documentsQuery.data?.selectedDocumentId,
+  )
+    ? documentsQuery.data?.selectedDocumentId
+    : documents.find((document) => document.selected)?._id;
   const activeDraft =
-    activeConversationId && draftQuery.data?.conversationId === activeConversationId
-      ? draftQuery.data
-      : undefined;
+    documents.find((document) => document._id === selectedDocumentId) ?? undefined;
 
   const modelsQuery = useGetModelsQuery({
     enabled: isAuthenticated,
@@ -175,11 +184,7 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
       logger.log('conversation', 'ChatRoute, new convo effect', conversation);
       newConversation({
         modelsData: modelsQuery.data,
-        template: isCookingMode
-          ? getNewCookingConversationTemplate()
-          : conversation
-            ? conversation
-            : undefined,
+        template: isCookingMode ? getNewCookingConversationTemplate() : (conversation ?? undefined),
         routeBase: isCookingMode ? '/cook' : undefined,
         ...(preset ? { preset } : {}),
       });
@@ -261,12 +266,16 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
         <CookingChatProvider value={{ isCookingChat: true }}>
           <CookingWorkspace
             index={index}
-            conversationId={conversationId}
+            conversationId={activeConversationId ?? conversationId}
+            chatConversationId={conversationId}
             draft={activeDraft}
+            documents={documents}
+            documentsLoaded={documentsLoaded}
+            selectedDocumentId={selectedDocumentId}
             markdown={getCookingCanvasMarkdown({
               draftMarkdown: activeDraft?.documentMarkdown,
             })}
-            isPreparingDraft={isSubmitting || draftQuery.isLoading}
+            isPreparingDraft={isSubmitting || documentsQuery.isLoading}
           />
         </CookingChatProvider>
       ) : (

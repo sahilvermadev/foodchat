@@ -27,6 +27,7 @@ export { default as groupSchema } from './group';
 export { default as systemGrantSchema } from './systemGrant';
 export { default as configSchema } from './config';
 export { preferencesSchema } from './preferences';
+export { specialtyIngredientSchema } from './ingredient';
 export {
   cookingDraftSchema,
   savedRecipeSchema,

@@ -3,6 +3,7 @@ import { QueryKeys, dataService } from 'librechat-data-provider';
 import type { QueryObserverResult, UseQueryOptions } from '@tanstack/react-query';
 import type {
   CookingDraft,
+  ConversationCookingDocuments,
   CookingSession,
   SavedRecipe,
   SavedRecipesQuery,
@@ -19,6 +20,24 @@ export const useCookingDraftByConversationQuery = (
     () => dataService.getCookingDraftByConversation(conversationId as string),
     {
       enabled: enabled && (config?.enabled ?? true),
+      retry: false,
+      refetchOnWindowFocus: false,
+      ...config,
+    },
+  );
+};
+
+export const useCookingDocumentsByConversationQuery = (
+  conversationId: string | undefined,
+  config?: UseQueryOptions<ConversationCookingDocuments>,
+): QueryObserverResult<ConversationCookingDocuments> => {
+  const enabled = Boolean(conversationId);
+  return useQuery<ConversationCookingDocuments>(
+    [QueryKeys.cookingDocuments, 'conversation', conversationId],
+    () => dataService.getCookingDocumentsByConversation(conversationId as string),
+    {
+      enabled: enabled && (config?.enabled ?? true),
+      keepPreviousData: true,
       retry: false,
       refetchOnWindowFocus: false,
       ...config,
@@ -70,6 +89,8 @@ export const useRecipesQuery = (
     {
       keepPreviousData: true,
       refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
+      cacheTime: 30 * 60 * 1000,
       ...config,
     },
   );
@@ -87,6 +108,8 @@ export const useRecipeQuery = (
       enabled: enabled && (config?.enabled ?? true),
       retry: false,
       refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
+      cacheTime: 30 * 60 * 1000,
       ...config,
     },
   );

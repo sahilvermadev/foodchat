@@ -29,14 +29,36 @@ function config() {
   };
 }
 
-function promptFor(recipe: Pick<SavedRecipe, 'title' | 'shortDescription' | 'documentMarkdown'>) {
+function documentLabel(documentType: SavedRecipe['documentType']): string {
+  if (documentType === 'guide') {
+    return 'cooking guide';
+  }
+  if (documentType === 'prep_plan') {
+    return 'prep plan';
+  }
+  return 'recipe';
+}
+
+function subjectDirection(documentType: SavedRecipe['documentType']): string {
+  if (documentType === 'guide') {
+    return 'Show the central food subject and a few useful tools or ingredients as a teaching-friendly still life.';
+  }
+  if (documentType === 'prep_plan') {
+    return 'Show neatly arranged prepared ingredients or meal components that communicate an organized cooking plan.';
+  }
+  return 'Show the finished dish with a few key raw ingredients arranged neatly around it.';
+}
+
+function promptFor(
+  recipe: Pick<SavedRecipe, 'title' | 'documentType' | 'shortDescription' | 'documentMarkdown'>,
+) {
   return [
-    `Create one editorial cookbook illustration for this saved recipe: ${recipe.title}.`,
-    recipe.shortDescription ? `Dish description: ${recipe.shortDescription}.` : '',
-    `Recipe excerpt: ${recipe.documentMarkdown.slice(0, 4000)}`,
+    `Create one editorial cookbook illustration for this saved ${documentLabel(recipe.documentType)}: ${recipe.title}.`,
+    recipe.shortDescription ? `Document description: ${recipe.shortDescription}.` : '',
+    `Document excerpt: ${recipe.documentMarkdown.slice(0, 4000)}`,
     '',
     'Visual direction: warm hand-drawn cookbook illustration, loose black ink linework, rich watercolor and gouache washes, textured paper, ingredient-focused composition, charming imperfections, clear silhouette, appetizing but not photorealistic.',
-    'Show the finished dish with a few key raw ingredients arranged neatly around it. No labels, no text, no logo, no people, no brand packaging.',
+    `${subjectDirection(recipe.documentType)} No labels, no text, no logo, no people, no brand packaging.`,
   ]
     .filter(Boolean)
     .join('\n');
@@ -52,7 +74,7 @@ function imageUrlFrom(body: ImageGenerationResponse): string {
 }
 
 export async function illustrateRecipe(
-  recipe: Pick<SavedRecipe, 'title' | 'shortDescription' | 'documentMarkdown'>,
+  recipe: Pick<SavedRecipe, 'title' | 'documentType' | 'shortDescription' | 'documentMarkdown'>,
 ): Promise<{ illustrationUrl: string; model: string }> {
   const { apiKey, baseUrl, model } = config();
   if (!apiKey) {

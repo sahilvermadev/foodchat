@@ -52,9 +52,11 @@ export type CookingWebInput = {
   webSearchConfig?: TCustomConfig['webSearch'];
   loadAuthValues?: LoadAuthValues;
   conversationCreatedAt?: string | number | Date;
+  allowBroadResearch?: boolean;
 };
 
-const maxSourcesPerTurn = 8;
+const maxFocusedSources = 3;
+const maxBroadSources = 5;
 const maxExtractedText = 18_000;
 const requestTimeout = 10_000;
 const defaultTavilySearchUrl = 'https://api.tavily.com/search';
@@ -103,7 +105,7 @@ export const cookingWebTools = [
     function: {
       name: 'search_web' as const,
       description:
-        'Search the public web with Tavily for current, source-backed cooking information, food safety guidance, substitutions, products, equipment, restaurants, menus, or recipe inspiration.',
+        'Search the public web with Tavily when the user explicitly needs external evidence: current facts, food safety guidance, product or equipment details, grocery availability, restaurants, menus, authenticity/source comparison, verification, or cited research. Do not use for ordinary recipe inspiration or routine cooking advice.',
       parameters: {
         type: 'object',
         properties: {
@@ -225,12 +227,16 @@ async function assertSafeUrl(value: unknown): Promise<URL> {
   return url;
 }
 
-function metadataFromSearch(data: SearchResultData, sourceType: CookingWebSourceType): CookingWebSource[] {
+function metadataFromSearch(
+  data: SearchResultData,
+  sourceType: CookingWebSourceType,
+  sourceLimit: number,
+): CookingWebSource[] {
   const accessedAt = new Date().toISOString();
   const seen = new Set<string>();
   const sources = [...(data.organic ?? []), ...(data.topStories ?? [])].reduce<CookingWebSource[]>(
     (acc, item) => {
-      if (!item.link || seen.has(item.link) || acc.length >= maxSourcesPerTurn) {
+      if (!item.link || seen.has(item.link) || acc.length >= sourceLimit) {
         return acc;
       }
       seen.add(item.link);
@@ -242,16 +248,16 @@ function metadataFromSearch(data: SearchResultData, sourceType: CookingWebSource
   return sources;
 }
 
-function compactSearchData(data: SearchResultData): SearchResultData {
+function compactSearchData(data: SearchResultData, sourceLimit: number): SearchResultData {
   return {
-    organic: data.organic?.slice(0, 5).map((item) => ({
+    organic: data.organic?.slice(0, sourceLimit).map((item) => ({
       title: item.title,
       link: item.link,
       snippet: item.snippet,
       content: item.content?.slice(0, 1800),
       attribution: item.attribution,
     })),
-    topStories: data.topStories?.slice(0, 3).map((item) => ({
+    topStories: data.topStories?.slice(0, sourceLimit).map((item) => ({
       title: item.title,
       link: item.link,
       content: item.content?.slice(0, 1800),
@@ -327,11 +333,11 @@ async function postTavily<T>({
   }
 }
 
-function searchDataFromTavily(data: TavilySearchResponse): SearchResultData {
+function searchDataFromTavily(data: TavilySearchResponse, sourceLimit: number): SearchResultData {
   return {
     organic: data.results
       ?.filter((item): item is TavilySearchResult & { url: string } => Boolean(item.url))
-      .slice(0, 5)
+      .slice(0, sourceLimit)
       .map((item, index) => ({
         position: index + 1,
         title: item.title,
@@ -347,6 +353,7 @@ function searchDataFromTavily(data: TavilySearchResponse): SearchResultData {
 async function executeSearch(
   authResult: Partial<TWebSearchConfig>,
   args: Record<string, unknown>,
+  sourceLimit: number,
 ): Promise<{ content: string; sources: CookingWebSource[] }> {
   const query = typeof args.query === 'string' ? args.query.trim() : '';
   if (!query) {
@@ -363,7 +370,7 @@ async function executeSearch(
     body: {
       query,
       search_depth: authResult.tavilySearchOptions?.searchDepth ?? 'advanced',
-      max_results: authResult.tavilySearchOptions?.maxResults ?? 5,
+      max_results: Math.min(authResult.tavilySearchOptions?.maxResults ?? sourceLimit, sourceLimit),
       include_answer: authResult.tavilySearchOptions?.includeAnswer ?? false,
       include_raw_content: authResult.tavilySearchOptions?.includeRawContent ?? 'markdown',
       topic: authResult.tavilySearchOptions?.topic ?? 'general',
@@ -371,13 +378,13 @@ async function executeSearch(
       exclude_domains: authResult.tavilySearchOptions?.excludeDomains,
     },
   });
-  const data = searchDataFromTavily(response);
+  const data = searchDataFromTavily(response, sourceLimit);
   return {
-    sources: metadataFromSearch(data, kind),
+    sources: metadataFromSearch(data, kind, sourceLimit),
     content: JSON.stringify({
       ok: true,
       query,
-      result: compactSearchData(data),
+      result: compactSearchData(data, sourceLimit),
       summary: response.answer ?? '',
     }),
   };
@@ -428,11 +435,12 @@ function recipeFacts(text: string): {
   if (instructions.length === 0) {
     warnings.push('No clear instruction list was extracted.');
   }
-  const confidence = ingredients.length >= 3 && instructions.length >= 2
-    ? 'high'
-    : ingredients.length > 0 || instructions.length > 0
-      ? 'medium'
-      : 'low';
+  let confidence: 'high' | 'medium' | 'low' = 'low';
+  if (ingredients.length >= 3 && instructions.length >= 2) {
+    confidence = 'high';
+  } else if (ingredients.length > 0 || instructions.length > 0) {
+    confidence = 'medium';
+  }
   return {
     ingredients,
     instructions,
@@ -476,7 +484,9 @@ async function extractUrl(
   });
   if (!result || !text) {
     const error = response.failed_results?.[0]?.error;
-    throw new Error(error ? `Page extraction failed: ${error}` : 'Page extraction returned no text.');
+    throw new Error(
+      error ? `Page extraction failed: ${error}` : 'Page extraction returned no text.',
+    );
   }
   return {
     finalUrl: result.url || url.toString(),
@@ -485,7 +495,10 @@ async function extractUrl(
   };
 }
 
-async function executeRead(authResult: Partial<TWebSearchConfig>, args: Record<string, unknown>): Promise<{
+async function executeRead(
+  authResult: Partial<TWebSearchConfig>,
+  args: Record<string, unknown>,
+): Promise<{
   content: string;
   sources: CookingWebSource[];
 }> {
@@ -565,12 +578,13 @@ export async function createCookingWebContext(input: CookingWebInput): Promise<C
     };
   }
 
+  const sourceLimit = input.allowBroadResearch ? maxBroadSources : maxFocusedSources;
   return {
     tools: cookingWebTools,
     execute: async (toolCall) => {
       const args = parseArguments(toolCall.function.arguments);
       if (toolCall.function.name === 'search_web') {
-        return executeSearch(auth.authResult, args);
+        return executeSearch(auth.authResult, args, sourceLimit);
       }
       if (toolCall.function.name === 'read_recipe_source') {
         return executeRecipeSource(auth.authResult, args);

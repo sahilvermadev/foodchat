@@ -3,12 +3,17 @@ import { MutationKeys, QueryKeys, dataService } from 'librechat-data-provider';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type {
   CookingDraft,
+  ConversationCookingDocuments,
+  CookingDocument,
   CookingSession,
   CookingSessionEvent,
   GenerateCookingDraftRequest,
+  CreateCookingDocumentRequest,
   SavedRecipe,
+  SavedRecipeSummary,
   SaveRecipeRequest,
   UpdateCookingDraftRequest,
+  UpdateCookingDocumentRequest,
   UpdateSavedRecipeRequest,
   StartCookingSessionRequest,
   CompleteCookingSessionRequest,
@@ -51,6 +56,86 @@ export const useUpdateCookingDraftMutation = (): UseMutationResult<
         );
       }
     },
+  });
+};
+
+function cacheCookingDocuments(
+  queryClient: ReturnType<typeof useQueryClient>,
+  conversationId: string,
+  collection: ConversationCookingDocuments,
+): void {
+  queryClient.setQueryData(
+    [QueryKeys.cookingDocuments, 'conversation', conversationId],
+    collection,
+  );
+  const selected = collection.documents.find(
+    (document) => document._id === collection.selectedDocumentId,
+  );
+  if (selected) {
+    queryClient.setQueryData([QueryKeys.cookingDraft, 'conversation', conversationId], selected);
+    return;
+  }
+  queryClient.removeQueries([QueryKeys.cookingDraft, 'conversation', conversationId]);
+}
+
+export const useCreateCookingDocumentMutation = (): UseMutationResult<
+  CookingDocument,
+  unknown,
+  CreateCookingDocumentRequest
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.createCookingDocument], {
+    mutationFn: (payload: CreateCookingDocumentRequest) =>
+      dataService.createCookingDocument(payload),
+    onSuccess: (document) => {
+      if (document.conversationId) {
+        queryClient.invalidateQueries([
+          QueryKeys.cookingDocuments,
+          'conversation',
+          document.conversationId,
+        ]);
+      }
+    },
+  });
+};
+
+export const useUpdateCookingDocumentMutation = (): UseMutationResult<
+  CookingDocument,
+  unknown,
+  { documentId: string; payload: UpdateCookingDocumentRequest }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.updateCookingDocument], {
+    mutationFn: ({ documentId, payload }) => dataService.updateCookingDocument(documentId, payload),
+    onSuccess: (document) => {
+      if (document.conversationId) {
+        queryClient.invalidateQueries([
+          QueryKeys.cookingDocuments,
+          'conversation',
+          document.conversationId,
+        ]);
+      }
+    },
+  });
+};
+
+export const useSelectCookingDocumentMutation = (
+  conversationId: string,
+): UseMutationResult<ConversationCookingDocuments, unknown, string> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.selectCookingDocument], {
+    mutationFn: (documentId: string) => dataService.selectCookingDocument(documentId),
+    onSuccess: (collection) => cacheCookingDocuments(queryClient, conversationId, collection),
+  });
+};
+
+export const useDeleteCookingDocumentMutation = (
+  conversationId: string,
+): UseMutationResult<ConversationCookingDocuments, unknown, string> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.deleteCookingDocument], {
+    mutationFn: (documentId: string) => dataService.deleteCookingDocument(documentId),
+    onSuccess: (collection) => cacheCookingDocuments(queryClient, conversationId, collection),
   });
 };
 
@@ -122,6 +207,24 @@ export const useUpdateSavedRecipeMutation = (): UseMutationResult<
       queryClient.setQueryData([QueryKeys.recipe, recipe._id], recipe);
       if (recipe.sourceDraftId) {
         queryClient.setQueryData([QueryKeys.recipe, 'draft', recipe.sourceDraftId], recipe);
+      }
+      queryClient.invalidateQueries([QueryKeys.recipes]);
+    },
+  });
+};
+
+export const useDeleteSavedRecipeMutation = (): UseMutationResult<
+  void,
+  unknown,
+  SavedRecipeSummary
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.deleteSavedRecipe], {
+    mutationFn: (recipe: SavedRecipeSummary) => dataService.deleteSavedRecipe(recipe._id),
+    onSuccess: (_result, recipe) => {
+      queryClient.removeQueries([QueryKeys.recipe, recipe._id]);
+      if (recipe.sourceDraftId) {
+        queryClient.removeQueries([QueryKeys.recipe, 'draft', recipe.sourceDraftId]);
       }
       queryClient.invalidateQueries([QueryKeys.recipes]);
     },

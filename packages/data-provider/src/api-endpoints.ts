@@ -196,6 +196,11 @@ export const config = () => `${BASE_URL}/api/config`;
 
 export const preferences = () => `${BASE_URL}/api/preferences`;
 export const preferencesChat = () => `${BASE_URL}/api/preferences/chat`;
+export const preferenceIngredients = (query?: string) => {
+  const search = query?.trim() ? `?query=${encodeURIComponent(query.trim())}` : '';
+  return `${BASE_URL}/api/preferences/ingredients${search}`;
+};
+export const resolvePreferenceIngredient = () => `${BASE_URL}/api/preferences/ingredients/resolve`;
 
 const cookingRoot = `${BASE_URL}/api/cooking`;
 const recipesRoot = `${BASE_URL}/api/recipes`;
@@ -205,6 +210,13 @@ export const cookingDraftByConversation = (conversationId: string) =>
   `${cookingRoot}/drafts/by-conversation/${encodeURIComponent(conversationId)}`;
 export const cookingDraft = (draftId: string) =>
   `${cookingRoot}/drafts/${encodeURIComponent(draftId)}`;
+export const cookingDocuments = () => `${cookingRoot}/documents`;
+export const cookingDocumentsByConversation = (conversationId: string) =>
+  `${cookingRoot}/documents/by-conversation/${encodeURIComponent(conversationId)}`;
+export const cookingDocument = (documentId: string) =>
+  `${cookingRoot}/documents/${encodeURIComponent(documentId)}`;
+export const selectCookingDocument = (documentId: string) =>
+  `${cookingDocument(documentId)}/select`;
 export const cookingSessions = () => `${cookingRoot}/sessions`;
 export const cookingSession = (sessionId: string) =>
   `${cookingRoot}/sessions/${encodeURIComponent(sessionId)}`;

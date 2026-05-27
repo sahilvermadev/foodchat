@@ -31,6 +31,7 @@ import { createSystemGrantModel } from './systemGrant';
 import { createGroupModel } from './group';
 import { createConfigModel } from './config';
 import { createPreferencesModel } from './preferences';
+import { createSpecialtyIngredientModel } from './ingredient';
 import {
   createSavedRecipeModel,
   createCookingDraftModel,
@@ -76,6 +77,7 @@ export function createModels(mongoose: typeof import('mongoose')) {
     Group: createGroupModel(mongoose),
     Config: createConfigModel(mongoose),
     Preferences: createPreferencesModel(mongoose),
+    SpecialtyIngredient: createSpecialtyIngredientModel(mongoose),
     SavedRecipe: createSavedRecipeModel(mongoose),
     CookingDraft: createCookingDraftModel(mongoose),
     CookingSession: createCookingSessionModel(mongoose),

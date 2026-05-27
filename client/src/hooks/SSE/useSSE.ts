@@ -113,6 +113,13 @@ export default function useSSE(
       }
 
       if (data.final != null) {
+        if (data.cookingDocumentsUpdated && data.conversation?.conversationId) {
+          queryClient.invalidateQueries([
+            QueryKeys.cookingDocuments,
+            'conversation',
+            data.conversation.conversationId,
+          ]);
+        }
         if (data.cookingDraftUpdated && data.conversation?.conversationId) {
           queryClient.invalidateQueries([
             QueryKeys.cookingDraft,
@@ -129,7 +136,6 @@ export default function useSSE(
           setShowStopButton(false);
         }
         (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
-        console.log('final', data);
         return;
       } else if (data.created != null) {
         const runId = v4();

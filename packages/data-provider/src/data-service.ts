@@ -13,10 +13,14 @@ import * as r from './roles';
 import * as permissions from './accessPermissions';
 import type {
   CookingDraft,
+  ConversationCookingDocuments,
+  CookingDocument,
   CookingSession,
   CookingSessionEvent,
   GenerateCookingDraftRequest,
+  CreateCookingDocumentRequest,
   UpdateCookingDraftRequest,
+  UpdateCookingDocumentRequest,
   StartCookingSessionRequest,
   CompleteCookingSessionRequest,
   SavedRecipe,
@@ -29,6 +33,9 @@ import type {
   PreferencesChatRequest,
   PreferencesChatResponse,
   PreferencesDocument,
+  ResolveSpecialtyIngredientRequest,
+  SpecialtyIngredientCatalogItem,
+  SpecialtyIngredientCatalogResponse,
   UpdatePreferencesRequest,
 } from './types/preferences';
 
@@ -64,6 +71,18 @@ export function chatPreferences(payload: PreferencesChatRequest): Promise<Prefer
   return request.post(endpoints.preferencesChat(), payload);
 }
 
+export function listPreferenceIngredients(
+  query?: string,
+): Promise<SpecialtyIngredientCatalogResponse> {
+  return request.get(endpoints.preferenceIngredients(query));
+}
+
+export function resolvePreferenceIngredient(
+  payload: ResolveSpecialtyIngredientRequest,
+): Promise<SpecialtyIngredientCatalogItem> {
+  return request.post(endpoints.resolvePreferenceIngredient(), payload);
+}
+
 export function generateCookingDraft(payload: GenerateCookingDraftRequest): Promise<CookingDraft> {
   return request.post(endpoints.cookingDraftsGenerate(), payload);
 }
@@ -77,6 +96,33 @@ export function updateCookingDraft(
   payload: UpdateCookingDraftRequest,
 ): Promise<CookingDraft> {
   return request.patch(endpoints.cookingDraft(draftId), payload);
+}
+
+export function createCookingDocument(
+  payload: CreateCookingDocumentRequest,
+): Promise<CookingDocument> {
+  return request.post(endpoints.cookingDocuments(), payload);
+}
+
+export function getCookingDocumentsByConversation(
+  conversationId: string,
+): Promise<ConversationCookingDocuments> {
+  return request.get(endpoints.cookingDocumentsByConversation(conversationId));
+}
+
+export function updateCookingDocument(
+  documentId: string,
+  payload: UpdateCookingDocumentRequest,
+): Promise<CookingDocument> {
+  return request.patch(endpoints.cookingDocument(documentId), payload);
+}
+
+export function selectCookingDocument(documentId: string): Promise<ConversationCookingDocuments> {
+  return request.post(endpoints.selectCookingDocument(documentId), {});
+}
+
+export function deleteCookingDocument(documentId: string): Promise<ConversationCookingDocuments> {
+  return request.delete(endpoints.cookingDocument(documentId));
 }
 
 export function startCookingSession(payload: StartCookingSessionRequest): Promise<CookingSession> {
@@ -132,6 +178,19 @@ export function updateSavedRecipe(
   payload: UpdateSavedRecipeRequest,
 ): Promise<SavedRecipe> {
   return request.patch(endpoints.recipe(recipeId), payload);
+}
+
+export function deleteSavedRecipe(recipeId: string): Promise<void> {
+  return request.delete(endpoints.recipe(recipeId));
+}
+
+export function getProtectedImage(url: string): Promise<AxiosResponse<Blob>> {
+  return request.getResponse(url, {
+    responseType: 'blob',
+    headers: {
+      Accept: 'image/*',
+    },
+  });
 }
 
 /**

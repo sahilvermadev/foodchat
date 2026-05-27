@@ -9,7 +9,8 @@ const passport = require('passport');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const mongoSanitize = require('express-mongo-sanitize');
-const { logger, runAsSystem } = require('@librechat/data-schemas');
+const mongoose = require('mongoose');
+const { logger, runAsSystem, migrateCookingDocuments } = require('@librechat/data-schemas');
 const {
   isEnabled,
   apiNotFound,
@@ -57,6 +58,7 @@ const startServer = async () => {
   await connectDb();
 
   logger.info('Connected to MongoDB');
+  await runAsSystem(() => migrateCookingDocuments(mongoose.connection));
   indexSync().catch((err) => {
     logger.error('[indexSync] Background sync failed:', err);
   });

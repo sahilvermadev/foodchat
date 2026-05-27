@@ -153,6 +153,19 @@ For the Gravy:
     expect(getCookingChatDisplayText(response, 'Added to canvas.')).toBe('Added to canvas.');
   });
 
+  it('hides text-emitted prompt suggestion calls in stored cooking chat messages', () => {
+    const response = `A poolish gives the baguette deeper flavor and better structure.
+
+set_prompt_suggestions(suggestions=[
+"Let's draft the baguette recipe.",
+"How does Delhi climate affect fermentation?"
+])`;
+
+    expect(getCookingChatDisplayText(response, 'Added to canvas.')).toBe(
+      'A poolish gives the baguette deeper flavor and better structure.',
+    );
+  });
+
   it('applies targeted artifact patches without requiring full recipe markdown', () => {
     const markdown = `# Changezi Chicken
 

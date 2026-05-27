@@ -1,6 +1,11 @@
 import { logger } from '@librechat/data-schemas';
 
-import type { CookingDraft, TCustomConfig, TMessage } from 'librechat-data-provider';
+import type {
+  CookingDocumentType,
+  CookingDraft,
+  TCustomConfig,
+  TMessage,
+} from 'librechat-data-provider';
 
 import { isRecipeDocumentMarkdown } from './canvas';
 import { createCookingWebContext } from './web';
@@ -27,10 +32,11 @@ type ToolCall = {
 };
 
 type CookingToolName =
-  | 'create_recipe_canvas'
-  | 'read_recipe_canvas'
-  | 'revise_recipe_canvas'
+  | 'create_cooking_document'
+  | 'read_cooking_document'
+  | 'revise_cooking_document'
   | 'set_prompt_suggestions'
+  | 'request_external_research'
   | 'search_web'
   | 'read_web_page'
   | 'read_recipe_source';
@@ -55,6 +61,13 @@ type CompletionChoice = {
 type CompletionResponse = {
   choices?: CompletionChoice[];
 };
+
+type ToolChoice =
+  | 'auto'
+  | {
+      type: 'function';
+      function: { name: 'set_prompt_suggestions' };
+    };
 
 type StreamingCompletionChoice = {
   delta?: {
@@ -87,6 +100,7 @@ type CookingChatInput = {
   preferencesMarkdown?: string;
   messages?: TMessage[];
   activeDraft?: CookingDraft | null;
+  documents?: CookingDraft[];
   webSearchConfig?: TCustomConfig['webSearch'];
   loadAuthValues?: (params: {
     userId: string;
@@ -122,7 +136,7 @@ export type CookingChatTimingEvent = {
   webSourceCount?: number;
   activeCanvas?: boolean;
   availableToolNames?: string[];
-  canvasToolName?: 'create_recipe_canvas' | 'revise_recipe_canvas';
+  canvasToolName?: 'create_cooking_document' | 'revise_cooking_document';
   revisionType?: RevisionType;
   canvasMutationValidated?: boolean;
   usedFastCanvasReturn?: boolean;
@@ -151,7 +165,12 @@ type ParsedRecipeSource = {
 
 const defaultBaseUrl = 'https://openrouter.ai/api/v1';
 const defaultModel = 'google/gemini-3.1-flash-lite';
+const defaultFallbackModel = 'deepseek/deepseek-v4-pro';
 const maxActiveCanvasContextChars = 18_000;
+const textPromptSuggestionCallPattern =
+  /(?:```(?:\w+)?\s*)?set_prompt_suggestions\s*\(\s*suggestions\s*=\s*(\[[\s\S]*?\])\s*\)\s*;?\s*(?:```)?/gi;
+const textPromptSuggestionMarker = 'set_prompt_suggestions';
+const streamedTextTailLength = textPromptSuggestionMarker.length + 24;
 
 function logCookingSource(event: string, payload: Record<string, unknown>): void {
   if (process.env.NODE_ENV === 'test') {
@@ -171,17 +190,21 @@ Personality:
 
 Decide by user need before choosing tools:
 - Some turns need communication: answer a question, clarify a tradeoff, explain a technique, compare options, reassure, diagnose, or help the user decide. Use chat for these turns, even when a canvas tool is available.
-- Some turns need durable recipe work: the user wants the canvas to become the recipe they will cook from, or wants the active recipe changed for future use. Use the canvas mutation tool for these turns.
+- Some turns need durable document work: the user wants a recipe, guide, or preparation plan they will use later, or wants the selected document changed. Use a document mutation tool for these turns.
 - If the user is still exploring, keep the conversation open. If the user has committed to a recipe or asks for the cooking instructions to change, update the canvas instead of merely describing the update.
 - Prior discussion is not consent to edit the canvas. A concept mentioned in chat becomes part of the recipe only when the current request asks to apply it, or when fulfilling the request would otherwise leave the durable recipe wrong.
 - If the request is ambiguous, prefer an honest chat response that answers the immediate need and offers the concrete canvas change, rather than silently rewriting the recipe.
 
-Canvas contract:
-- Available tools are scoped by product state. Without an active canvas, create_recipe_canvas may be available. With an active canvas, read_recipe_canvas and revise_recipe_canvas may be available.
-- create_recipe_canvas is for starting the durable recipe canvas. revise_recipe_canvas is for replacing the active recipe with a better version of itself. read_recipe_canvas is for inspecting the exact current canvas without changing it.
-- Canvas mutation tools expect the complete recipe markdown, not a patch or intent summary. Keep the recipe coherent as one document, with exactly one top-level title, ingredients, and instructions.
+Cooking document contract:
+- A conversation can contain multiple durable cooking documents, with one selected document open in the canvas.
+- create_cooking_document creates and selects a separate document. Use it for a distinct deliverable such as a starter guide, loaf recipe, discard recipe, shopping/prep plan, or a variant the user explicitly wants preserved.
+- revise_cooking_document replaces only the selected document. Use it for substitutions, scaling, added notes, equipment alternatives, timing adjustments, dietary adaptations, or restructuring of that same deliverable.
+- read_cooking_document inspects the exact selected document without changing it.
+- For an ambiguous request to make a version, such as "make this spicier," ask whether to update the selected document or keep both versions before mutating.
+- Document mutation tools expect complete markdown, not a patch or intent summary. Keep each document coherent, with exactly one top-level title, ingredients/materials, and chronological instructions/method.
+- A multi-day preparation or cultivation project may use a canvas, but it must still be a complete usable document: list its materials in Ingredients and put the chronological actions in Instructions or Method.
 - After a successful canvas mutation, user_message is the final response shown to the user. It should plainly say what changed or was created, in one short sentence, without protocol or tool details.
-- Never claim the canvas was created or changed unless a canvas mutation tool succeeds. If a tool fails, be concrete about the validation or persistence problem.
+- Never claim the canvas was created or changed unless a canvas mutation tool succeeds. If a tool call fails validation, use the feedback to correct the document before responding to the user.
 - Saving recipes to the library is user initiated only. You may suggest using the Save button, but you must not claim to have saved a recipe.
 
 External recipe sources:
@@ -196,20 +219,20 @@ Using user context:
 - If the user states a clear lasting preference or personal detail relevant to future cooking, use it naturally; a backend batch curator may later fold durable facts into the saved profile.
 
 Internet access:
-- Use internet tools automatically when they would materially improve the answer.
+- Do not browse for routine cooking conversation, ordinary recipe requests, broad dish ideas, or technique guidance when established culinary knowledge is sufficient to answer well. A dish name like "blueberry cheesecake" is a normal cooking request, not a web-search request.
+- Use internet tools only when the answer materially depends on external evidence: user-requested research or verification, supplied URLs, current availability or product details, authenticity/source comparison, restaurant or menu recreation, and food safety.
+- If web tools are not currently available but the request genuinely needs external evidence, call request_external_research with a specific reason. After access is unlocked, use the narrowest web tool needed.
 - Read URLs explicitly pasted by the user before importing, adapting, summarizing, or critiquing the linked content.
-- Search for current facts, authenticity/source comparison, food safety, substitutions, product/equipment details, grocery availability, restaurant/menu recreation, and claims that need source backing.
+- Search only for current facts, authenticity/source comparison, food safety, product/equipment details, grocery availability, restaurant/menu recreation, and claims that need source backing. Do not search merely for recipe inspiration.
+- Prefer one to three directly relevant sources when external evidence is needed. Use a broader source set only when the user explicitly asks for research depth, comparison, verification, or multiple perspectives.
 - Prefer USDA, FDA, CDC, extension offices, and manufacturer documentation for food safety. If authoritative confirmation is not found, say so.
-- Cite web-backed claims inline with normal markdown links using the source title or domain. Distinguish sourced facts from Mise inference.
+- When web research is used, sources are supporting evidence, not the shape of the answer. First give the user useful cooking judgment in Mise's own voice; cite only the claims that depend on those sources.
+- Results from a web tool are working evidence, not a final answer. After using them, answer the user's request substantively; never return only a source list, bibliography, attribution line, or thin one-sentence summary.
 - Do not copy long recipe text verbatim. Transform external recipes into Mise's own guidance or canvas format and cite the source URL once in chat.
 
-Prompt suggestions:
-- When the latest response would naturally benefit from follow-up, call set_prompt_suggestions.
-- Suggestions must be contextual to this conversation, the active recipe canvas, user preferences, and your latest answer.
-- Suggestions should invite exploration, not funnel the user: compare cuisines, pick a direction, deepen technique, troubleshoot, adapt to time/equipment, or personalize around real constraints.
-- Each suggestion must be the exact prompt the user would send, not a short label for hidden behavior.
-- Prefer 3 suggestions. Keep each concise, normally under 90 characters.
-- Omit suggestions for errors, trivial confirmations, low-value turns, and generic prompts like "Tell me more" or "Make it better."
+Conversation flow:
+- When an exploratory reply presents useful next steps or requires a choice, finish the user-facing answer with a clear, natural question.
+- The product enriches completed replies with optional follow-up controls separately. Do not output tool-like UI instructions or protocol syntax in chat prose.
 
 Recipe canvas markdown requirements:
 - Write a structured recipe document that feels like competent guidance, not documentation.
@@ -237,7 +260,7 @@ function preferencesContext(markdown?: string): string {
 
   return [
     'User Preferences Context:',
-    'Treat Safety, Diet, and Religious & Cultural Rules as hard constraints. Treat Kitchen, Household, Taste, Goals, Location, Cooking Level, and Personal Context as relationship context and optimization context, not commands. The latest explicit chat request can override soft preferences only. If the user states a lasting preference or personal detail in chat, respect it for this conversation; a backend batch curator may later fold durable facts into the saved profile.',
+    'Treat Safety, Diet, and Religious & Cultural Rules as hard constraints. Treat Kitchen, Household, Specialty Ingredients, Taste, Goals, Location, Cooking Level, and Personal Context as relationship context and optimization context, not commands. Specialty Ingredients are usually available extras; consider them when they can make a recipe more interesting, but do not force them into every dish. The latest explicit chat request can override soft preferences only. If the user states a lasting preference or personal detail in chat, respect it for this conversation; a backend batch curator may later fold durable facts into the saved profile.',
     preferences,
   ].join('\n\n');
 }
@@ -246,27 +269,28 @@ const tools = [
   {
     type: 'function',
     function: {
-      name: 'create_recipe_canvas',
+      name: 'create_cooking_document',
       description:
-        'Start the durable recipe canvas when no active canvas exists and the user wants cooking instructions they can work from. Use this for a committed recipe, imported recipe, or concrete cooking project. Do not use it when the user is asking for explanation, comparison, reassurance, or help deciding; answer those in chat. The markdown must be the complete recipe document with exactly one top-level title, ingredients, and instructions. user_message is shown after the save succeeds; keep it practical, honest, and under 160 characters.',
+        'Create and select a new durable cooking document. Use it for a distinct recipe, guide, prep plan, imported recipe, or explicitly preserved variant, including when another document already exists. Do not use it for a small change to the selected document. The markdown must be one complete usable document with exactly one top-level title, an Ingredients section, and an Instructions or Method section.',
       parameters: {
         type: 'object',
         properties: {
           title: { type: 'string' },
+          document_type: { type: 'string', enum: ['recipe', 'guide', 'prep_plan'] },
           markdown: { type: 'string' },
           change_summary: { type: 'string' },
           user_message: { type: 'string' },
         },
-        required: ['title', 'markdown', 'change_summary', 'user_message'],
+        required: ['title', 'document_type', 'markdown', 'change_summary', 'user_message'],
       },
     },
   },
   {
     type: 'function',
     function: {
-      name: 'read_recipe_canvas',
+      name: 'read_cooking_document',
       description:
-        'Read the current active recipe canvas title and markdown when the exact existing recipe is needed to answer, verify, compare, or inspect. This is an inspection tool only and never changes the canvas.',
+        'Read the selected cooking document title and markdown when exact contents are needed. This is an inspection tool only and never changes the canvas.',
       parameters: {
         type: 'object',
         properties: {},
@@ -276,9 +300,9 @@ const tools = [
   {
     type: 'function',
     function: {
-      name: 'revise_recipe_canvas',
+      name: 'revise_cooking_document',
       description:
-        'Replace the active recipe canvas when the recipe itself should become different for future cooking. Use this when the user asks to apply an adjustment, switch source recipe, change constraints, improve organization, or otherwise make the durable recipe more correct for their situation. Do not use it just because a chat answer mentions a possible change; questions, clarifications, comparisons, and reassurance belong in chat unless the user also wants the recipe updated. Send the complete updated recipe markdown, not a patch. The markdown must keep exactly one top-level title, ingredients, and instructions. user_message is shown after the save succeeds; say what changed in practical terms and keep it under 160 characters.',
+        'Replace only the selected cooking document when that same deliverable should change for future cooking. Use for substitutions, scaling, notes, equipment alternatives, timing adjustments, adaptations, or restructuring. If the user may want both versions, ask before mutation. Send complete updated markdown, not a patch.',
       parameters: {
         type: 'object',
         properties: {
@@ -324,6 +348,42 @@ const tools = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'request_external_research',
+      description:
+        'Ask to unlock web research tools for this turn when the user request genuinely depends on external evidence. Use this instead of guessing from memory for source comparison, verification, current facts, products, restaurants, safety, or linked/source-driven work. Do not use it for ordinary recipe inspiration or routine cooking advice.',
+      parameters: {
+        type: 'object',
+        properties: {
+          reason: {
+            type: 'string',
+            description:
+              'Concrete reason external evidence is needed for the user request, not a generic desire for sources.',
+          },
+          research_type: {
+            type: 'string',
+            enum: [
+              'verification',
+              'current_fact',
+              'food_safety',
+              'product_or_equipment',
+              'restaurant_or_menu',
+              'authenticity_or_source_comparison',
+              'linked_source',
+              'other',
+            ],
+          },
+          likely_query: {
+            type: 'string',
+            description: 'Optional focused search query you expect to run after tools unlock.',
+          },
+        },
+        required: ['reason', 'research_type'],
+      },
+    },
+  },
 ];
 
 type CookingToolDefinition = (typeof tools)[number];
@@ -349,16 +409,33 @@ function activeCanvasContext(draft?: CookingDraft | null): string {
   const markdown = draft.documentMarkdown?.trim();
   const visibleMarkdown =
     markdown && markdown.length > maxActiveCanvasContextChars
-      ? `${markdown.slice(0, maxActiveCanvasContextChars)}\n\n[Canvas truncated: use read_recipe_canvas if the exact omitted text is needed.]`
+      ? `${markdown.slice(0, maxActiveCanvasContextChars)}\n\n[Canvas truncated: use read_cooking_document if the exact omitted text is needed.]`
       : markdown;
   return [
-    'Active Recipe Canvas:',
-    `A recipe canvas already exists for this conversation: "${title}".`,
-    'The canvas is the durable recipe the user may cook from later. Revise it only when the current request should change that durable recipe; read it when exact current contents are needed; otherwise answer in chat.',
-    visibleMarkdown ? `Current canvas markdown:\n${visibleMarkdown}` : '',
+    'Selected Cooking Document:',
+    `The selected ${draft.documentType} document is "${title}".`,
+    'Revise this document only when the request changes this deliverable; create a new document for a distinct deliverable; otherwise answer in chat.',
+    visibleMarkdown ? `Selected document markdown:\n${visibleMarkdown}` : '',
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+function documentsContext(
+  documents: CookingDraft[] | undefined,
+  selected?: CookingDraft | null,
+): string {
+  if (!documents?.length) {
+    return 'Conversation Cooking Documents:\n- None yet.';
+  }
+  return [
+    'Conversation Cooking Documents:',
+    ...documents.map((document) => {
+      const title = draftTitle(document) ?? 'Untitled';
+      const marker = document._id === selected?._id ? ' [selected]' : '';
+      return `- ${document._id}: ${title} (${document.documentType})${marker}`;
+    }),
+  ].join('\n');
 }
 
 function linkedSourceState(text: string): LinkedSourceState {
@@ -488,11 +565,11 @@ function toolStateContext(
   const toolNames = availableTools.map((tool) => tool.function.name).join(', ') || 'none';
   return [
     'Current Product State:',
-    `- Active recipe canvas: ${hasActiveCanvas ? 'yes' : 'no'}.`,
+    `- Selected cooking document: ${hasActiveCanvas ? 'yes' : 'no'}.`,
     `- Available tools this turn: ${toolNames}.`,
     hasActiveCanvas
-      ? '- Durable recipe changes must go through revise_recipe_canvas. Exact canvas inspection should go through read_recipe_canvas.'
-      : '- A new durable recipe should go through create_recipe_canvas after the user commits to cooking instructions.',
+      ? '- Changes to the selected document go through revise_cooking_document; distinct deliverables go through create_cooking_document; exact inspection goes through read_cooking_document.'
+      : '- A new durable cooking document should go through create_cooking_document after the user commits to usable instructions.',
     '- Chat is the right response for questions, clarification, comparison, reassurance, and decision support. Do not claim a canvas mutation unless a canvas mutation tool succeeds.',
   ].join('\n');
 }
@@ -500,13 +577,20 @@ function toolStateContext(
 function selectCookingToolsForState(
   hasActiveCanvas: boolean,
   webTools: CookingWebToolDefinition[],
+  options: { allowResearchRequest?: boolean } = {},
 ): AvailableCookingTool[] {
   const localToolNames: CookingToolName[] = hasActiveCanvas
-    ? ['read_recipe_canvas', 'revise_recipe_canvas', 'set_prompt_suggestions']
-    : ['create_recipe_canvas', 'set_prompt_suggestions'];
+    ? ['create_cooking_document', 'read_cooking_document', 'revise_cooking_document']
+    : ['create_cooking_document'];
   const selected = localToolNames
     .map(cookingTool)
     .filter((tool): tool is CookingToolDefinition => Boolean(tool));
+  if (options.allowResearchRequest) {
+    const researchRequestTool = cookingTool('request_external_research');
+    if (researchRequestTool) {
+      selected.push(researchRequestTool);
+    }
+  }
   return [...selected, ...webTools];
 }
 
@@ -518,6 +602,43 @@ function webToolsForProvider(
     return webTools;
   }
   return webTools.filter((tool) => tool.function.name !== 'read_recipe_source');
+}
+
+type AvailableToolState = {
+  availableTools: AvailableCookingTool[];
+  availableToolNames: CookingToolName[];
+  availableToolNameSet: Set<CookingToolName>;
+};
+
+function buildAvailableToolState({
+  activeCanvas,
+  sourceState,
+  webContext,
+  webToolsUnlocked,
+}: {
+  activeCanvas: boolean;
+  sourceState: LinkedSourceState;
+  webContext: Awaited<ReturnType<typeof createCookingWebContext>>;
+  webToolsUnlocked: boolean;
+}): AvailableToolState {
+  const providerWebTools = webToolsUnlocked
+    ? webToolsForProvider(webContext.tools, sourceState)
+    : [];
+  const availableTools = selectCookingToolsForState(activeCanvas, providerWebTools, {
+    allowResearchRequest: !webToolsUnlocked && webContext.tools.length > 0,
+  });
+  const availableToolNames = availableTools.map((tool) => {
+    const toolName = normalizeToolName(tool.function.name);
+    if (!toolName) {
+      throw new Error(`Unexpected cooking tool exposed: ${tool.function.name}`);
+    }
+    return toolName;
+  });
+  return {
+    availableTools,
+    availableToolNames,
+    availableToolNameSet: new Set(availableToolNames),
+  };
 }
 
 function apiKey(): string {
@@ -532,17 +653,44 @@ function selectedModel(model?: string): string {
   return model?.trim() || process.env.COOKING_AGENT_MODEL || defaultModel;
 }
 
+function fallbackModel(primaryModel: string): string | undefined {
+  const model = (process.env.COOKING_AGENT_FALLBACK_MODEL || defaultFallbackModel).trim();
+  if (!model || model === primaryModel) {
+    return undefined;
+  }
+  return model;
+}
+
+function providerModels(primaryModel: string): string[] {
+  const fallback = fallbackModel(primaryModel);
+  return fallback ? [primaryModel, fallback] : [primaryModel];
+}
+
 function requestTimeoutMs(): number {
   const value = Number(process.env.COOKING_AGENT_TIMEOUT_MS);
   return Number.isFinite(value) && value > 0 ? value : 45000;
 }
 
+function isRetryableProviderError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return (
+    error.message.includes('Cooking chat provider timed out') ||
+    error.message.includes('fetch failed') ||
+    error.message.includes('EAI_AGAIN') ||
+    error.message.includes('ETIMEDOUT') ||
+    error.message.includes('ECONNRESET')
+  );
+}
+
 function normalizeToolName(name: string | undefined): CookingToolName | undefined {
   if (
-    name === 'create_recipe_canvas' ||
-    name === 'read_recipe_canvas' ||
-    name === 'revise_recipe_canvas' ||
+    name === 'create_cooking_document' ||
+    name === 'read_cooking_document' ||
+    name === 'revise_cooking_document' ||
     name === 'set_prompt_suggestions' ||
+    name === 'request_external_research' ||
     name === 'search_web' ||
     name === 'read_web_page' ||
     name === 'read_recipe_source'
@@ -609,14 +757,20 @@ function cleanOptionalText(value: unknown): string | undefined {
 }
 
 function markdownTitle(markdown: string | undefined): string | undefined {
-  return markdown?.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  const title = markdown?.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  return validCanvasTitle(title);
+}
+
+function validCanvasTitle(value: unknown): string | undefined {
+  const title = cleanOptionalText(value);
+  return title && title !== '{' && title !== '}' ? title : undefined;
 }
 
 function draftTitle(draft: CookingDraft | undefined, fallback?: string): string | undefined {
   return (
-    draft?.recipe?.title?.trim() ||
+    validCanvasTitle(draft?.recipe?.title) ||
     markdownTitle(draft?.documentMarkdown) ||
-    cleanOptionalText(fallback)
+    validCanvasTitle(fallback)
   );
 }
 
@@ -649,12 +803,304 @@ export function sanitizePromptSuggestions(value: unknown): string[] {
   return suggestions;
 }
 
+export function extractTextPromptSuggestions(text: string): {
+  text: string;
+  promptSuggestions: string[];
+} {
+  const suggestions: string[] = [];
+  const visibleText = text.replace(textPromptSuggestionCallPattern, (_call, serialized: string) => {
+    try {
+      suggestions.push(...sanitizePromptSuggestions(JSON.parse(serialized)));
+    } catch {
+      return '';
+    }
+    return '';
+  });
+
+  return {
+    text: visibleText.replace(/\n{3,}/g, '\n\n').trim(),
+    promptSuggestions: sanitizePromptSuggestions(suggestions),
+  };
+}
+
+async function generatePromptSuggestions(
+  messages: ChatMessage[],
+  responseText: string,
+  model: string,
+): Promise<string[]> {
+  const promptSuggestionTool = cookingTool('set_prompt_suggestions');
+  if (!promptSuggestionTool || !responseText.includes('?')) {
+    return [];
+  }
+
+  try {
+    const assistant = await complete(
+      [
+        ...messages,
+        {
+          role: 'system',
+          content: [
+            'You add optional prompt suggestion chips after a completed cooking reply.',
+            'Do not answer the user again. Call set_prompt_suggestions with zero to three exact prompts the user could send next.',
+            'Use suggestions only when the completed reply offers meaningful next steps or asks the user to make a decision. For a rhetorical or informational question, submit an empty suggestions array.',
+            'Suggestions should be concise, specific to the reply and conversation, and never generic filler.',
+            '',
+            'Completed user-facing reply:',
+            responseText,
+          ].join('\n'),
+        },
+      ],
+      model,
+      [promptSuggestionTool],
+      undefined,
+      { type: 'function', function: { name: 'set_prompt_suggestions' } },
+    );
+    const toolCall = assistant.tool_calls?.find(
+      (candidate) => candidate.function.name === 'set_prompt_suggestions',
+    );
+    return toolCall
+      ? sanitizePromptSuggestions(parseArguments(toolCall.function.arguments).suggestions)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function recoverEmptyResponse(messages: ChatMessage[], model: string): Promise<string> {
+  try {
+    const recovered = await complete(
+      [
+        ...messages,
+        {
+          role: 'system',
+          content:
+            'The previous turn did not include a user-facing response. Answer the user request directly now in normal chat prose. Do not call tools or output internal protocol.',
+        },
+      ],
+      model,
+      [],
+    );
+    return extractTextPromptSuggestions(recovered.content?.trim() ?? '').text;
+  } catch {
+    return '';
+  }
+}
+
+function requestsBroadResearch(text: string): boolean {
+  return /\b(?:compare|comparison|research|sources?|evidence|fact[- ]?check|verify|verification|multiple perspectives|deep dive|comprehensive)\b/i.test(
+    text,
+  );
+}
+
+function requestsExternalEvidence(text: string, sourceState: LinkedSourceState): boolean {
+  if (sourceState.readRequired) {
+    return true;
+  }
+
+  return (
+    requestsBroadResearch(text) ||
+    /\b(?:browse|internet|web|search|look\s*(?:it|this)?\s*up|google|source-backed|citation|cite|references?)\b/i.test(
+      text,
+    ) ||
+    /\b(?:safe|safety|dangerous|botulism|canning|preserv(?:e|ing|ation)|pasteuri[sz]e|internal temperature|food poisoning|left out|expired|spoil(?:ed|age)|raw chicken|raw pork|raw egg)\b/i.test(
+      text,
+    ) ||
+    /\b(?:current|latest|today|available|availability|price|buy|store|grocery|brand|product|model|equipment|manufacturer)\b/i.test(
+      text,
+    ) ||
+    /\b(?:restaurant|menu|copycat|recreate|dupe|clone|authentic|traditional|origin|regional|history)\b/i.test(
+      text,
+    )
+  );
+}
+
+function normalizedSourceUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return value.replace(/\/$/, '');
+  }
+}
+
+function citedWebSources(
+  text: string,
+  sources: CookingWebSource[],
+  limit: number,
+): CookingWebSource[] {
+  const linkedUrls = new Set(
+    [...text.matchAll(/\[[^\]]+\]\((https?:\/\/[^)\s]+)\)/gi)].map((match) =>
+      normalizedSourceUrl(match[1]),
+    ),
+  );
+  return sources
+    .filter((source) => linkedUrls.has(normalizedSourceUrl(source.url)))
+    .slice(0, limit);
+}
+
+function sourceLabel(source: CookingWebSource): string {
+  if (source.title?.trim()) {
+    return source.title.trim();
+  }
+  try {
+    return new URL(source.url).hostname.replace(/^www\./, '');
+  } catch {
+    return source.url;
+  }
+}
+
+function normalizedSourceText(value: string): string {
+  return value
+    .toLocaleLowerCase()
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[[\]()`*_#>]/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function sourceAttributionVariants(sources: CookingWebSource[]): string[] {
+  const variants = new Set<string>();
+  for (const source of sources) {
+    const label = normalizedSourceText(sourceLabel(source));
+    if (label) {
+      variants.add(label);
+    }
+    try {
+      const hostname = new URL(source.url).hostname.replace(/^www\./, '');
+      const normalizedHost = normalizedSourceText(hostname);
+      if (normalizedHost) {
+        variants.add(normalizedHost);
+      }
+    } catch {
+      // Ignore malformed URLs; sourceLabel already provides a usable fallback.
+    }
+  }
+  return [...variants].sort((left, right) => right.length - left.length);
+}
+
+function isSourceAttributionLine(line: string, sourceVariants: string[]): boolean {
+  const withoutListMarker = line.replace(/^(?:[-*]|\d+[.)])\s+/, '').trim();
+  if (
+    /^(?:#{1,6}\s*)?(?:sources?|references?|citations?)(?:\s+consulted)?\s*:?(?:\s|$)/i.test(
+      withoutListMarker,
+    ) ||
+    /^source\s*:\s*\[[^\]]+\]\(https?:\/\//i.test(withoutListMarker) ||
+    /^\[[^\]]+\]\(https?:\/\/[^)\s]+\)$/i.test(withoutListMarker) ||
+    /^https?:\/\/\S+$/i.test(withoutListMarker) ||
+    /^[a-z0-9.-]+\.[a-z]{2,}(?:\/\S*)?$/i.test(withoutListMarker)
+  ) {
+    return true;
+  }
+
+  const normalizedLine = normalizedSourceText(withoutListMarker);
+  if (!normalizedLine) {
+    return true;
+  }
+  const lineWords = normalizedLine.split(' ').length;
+  return sourceVariants.some((variant) => {
+    if (normalizedLine === variant) {
+      return true;
+    }
+    const variantWords = variant.split(' ').length;
+    return variantWords > 1 && normalizedLine.includes(variant) && lineWords <= variantWords + 3;
+  });
+}
+
+function isAttributionOnlyResponse(text: string, sources: CookingWebSource[] = []): boolean {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) {
+    return true;
+  }
+  const sourceVariants = sourceAttributionVariants(sources);
+  return lines.every((line) => isSourceAttributionLine(line, sourceVariants));
+}
+
+function citedFallbackResponse(text: string, source: CookingWebSource): string {
+  return `${text}\n\nReference: [${sourceLabel(source)}](${source.url})`;
+}
+
+async function ensureInlineSourceCitations(
+  messages: ChatMessage[],
+  text: string,
+  sources: CookingWebSource[],
+  model: string,
+  sourceLimit: number,
+): Promise<{ text: string; sources: CookingWebSource[] }> {
+  if (!text || sources.length === 0) {
+    return { text, sources: [] };
+  }
+  const attributionOnly = isAttributionOnlyResponse(text, sources);
+  const existingCitations = citedWebSources(text, sources, sourceLimit);
+  if (!attributionOnly && existingCitations.length > 0) {
+    return { text, sources: existingCitations };
+  }
+
+  const sourceLines = sources
+    .slice(0, sourceLimit)
+    .map((source) => `- ${sourceLabel(source)}: ${source.url}`)
+    .join('\n');
+  const correctionMessages: ChatMessage[] = [
+    ...messages,
+    {
+      role: 'system',
+      content: [
+        attributionOnly
+          ? 'The previous draft contains only source attribution and does not answer the user request.'
+          : 'The previous answer relied on web research but omitted inline markdown citations.',
+        attributionOnly
+          ? 'Write a substantive user-facing answer to the original request now, using the evidence only where relevant and citing supported factual claims inline with the source URLs below.'
+          : 'Rewrite the same answer concisely, keeping its advice and final question, and cite externally supported factual claims inline using only the source URLs below.',
+        'Return only the corrected user-facing answer. Do not call tools or mention this correction.',
+        '',
+        'Draft answer to revise:',
+        text,
+        '',
+        'Available sources:',
+        sourceLines,
+      ].join('\n'),
+    },
+  ];
+  for (const correctionModel of providerModels(model)) {
+    try {
+      const revised = await complete(correctionMessages, correctionModel, []);
+      const revisedText = revised.content?.trim() ?? '';
+      const revisedCitations = citedWebSources(revisedText, sources, sourceLimit);
+      if (
+        revisedText &&
+        !isAttributionOnlyResponse(revisedText, sources) &&
+        revisedCitations.length > 0
+      ) {
+        return { text: revisedText, sources: revisedCitations };
+      }
+    } catch {
+      continue;
+    }
+  }
+  if (attributionOnly) {
+    return { text: '', sources: [] };
+  }
+  const source = sources[0];
+  return { text: citedFallbackResponse(text, source), sources: [source] };
+}
+
 function cleanRequiredText(value: unknown, message: string): string {
   const text = cleanOptionalText(value);
   if (!text) {
     throw new CookingValidationError(message);
   }
   return text;
+}
+
+function cleanDocumentType(value: unknown): CookingDocumentType {
+  if (value === 'guide' || value === 'prep_plan') {
+    return value;
+  }
+  return 'recipe';
 }
 
 function assertSingleTopLevelTitle(markdown: string): void {
@@ -668,7 +1114,9 @@ function assertSingleTopLevelTitle(markdown: string): void {
 
 function assertRecipeMarkdown(markdown: unknown): string {
   if (typeof markdown !== 'string' || !isRecipeDocumentMarkdown(markdown)) {
-    throw new CookingValidationError('Recipe canvas markdown is malformed.');
+    throw new CookingValidationError(
+      'Canvas document must include one title, an Ingredients section, and an Instructions or Method section with actionable steps. Rewrite a preparation plan in that structure and try again.',
+    );
   }
   const trimmed = markdown.trim();
   assertSingleTopLevelTitle(trimmed);
@@ -704,11 +1152,11 @@ function conciseCanvasUserMessage(value: unknown, fallback: string): string {
 }
 
 function createdCanvasMessage(title: string): string {
-  return `I created the ${title} recipe canvas.`;
+  return `I created ${title} in the cooking canvas.`;
 }
 
 function revisedCanvasMessage(changeSummary: string): string {
-  return `I updated the recipe canvas: ${changeSummary}.`;
+  return `I updated the selected cooking document: ${changeSummary}.`;
 }
 
 const revisionTypes = new Set<RevisionType>([
@@ -725,6 +1173,19 @@ const revisionTypes = new Set<RevisionType>([
   'other',
 ]);
 
+const externalResearchTypes = new Set([
+  'verification',
+  'current_fact',
+  'food_safety',
+  'product_or_equipment',
+  'restaurant_or_menu',
+  'authenticity_or_source_comparison',
+  'linked_source',
+  'other',
+]);
+const genericExternalResearchReasonPattern =
+  /^(?:need|needs|use|uses|unlock|get|search|browse)?\s*(?:web|internet|research|sources?|citations?|external evidence)\s*\.?$/i;
+
 function assertRevisionType(value: unknown): RevisionType {
   if (typeof value === 'string' && revisionTypes.has(value as RevisionType)) {
     return value as RevisionType;
@@ -732,17 +1193,35 @@ function assertRevisionType(value: unknown): RevisionType {
   throw new CookingValidationError('Recipe canvas revision type is malformed.');
 }
 
-function assertToolAllowedForState(input: CookingChatInput, toolName: CookingToolName): void {
-  if (toolName === 'create_recipe_canvas' && input.activeDraft) {
+function assertExternalResearchRequest(args: Record<string, unknown>): {
+  reason: string;
+  researchType: string;
+} {
+  const reason = cleanRequiredText(
+    args.reason,
+    'A concrete reason is required before unlocking web research tools.',
+  );
+  const researchType = cleanRequiredText(
+    args.research_type,
+    'A research type is required before unlocking web research tools.',
+  );
+  if (!externalResearchTypes.has(researchType)) {
+    throw new CookingValidationError('External research type is malformed.');
+  }
+  if (reason.length < 20 || genericExternalResearchReasonPattern.test(reason)) {
     throw new CookingValidationError(
-      'Creating a new recipe canvas is not available while this conversation already has an active canvas.',
+      'External research reason must explain why the user request depends on external evidence.',
     );
   }
+  return { reason, researchType };
+}
+
+function assertToolAllowedForState(input: CookingChatInput, toolName: CookingToolName): void {
   if (
-    (toolName === 'read_recipe_canvas' || toolName === 'revise_recipe_canvas') &&
+    (toolName === 'read_cooking_document' || toolName === 'revise_cooking_document') &&
     !input.activeDraft
   ) {
-    throw new CookingValidationError('No active recipe canvas exists for this conversation.');
+    throw new CookingValidationError('No cooking document is selected for this conversation.');
   }
 }
 
@@ -759,11 +1238,30 @@ async function executeTool(
   userMessage?: string;
   revisionType?: RevisionType;
   canvasMutationValidated?: boolean;
-  promptSuggestions?: string[];
   webSources?: CookingWebSource[];
+  unlockWebTools?: boolean;
 }> {
   const args = parseArguments(toolCall.function.arguments);
   assertToolAllowedForState(input, toolCall.function.name);
+
+  if (toolCall.function.name === 'request_external_research') {
+    if (!webContext?.tools.length) {
+      throw new CookingValidationError('Web research tools are not available for this chat.');
+    }
+    const { reason, researchType } = assertExternalResearchRequest(args);
+    return {
+      content: JSON.stringify({
+        ok: true,
+        webToolsUnlocked: webContext.tools.map((tool) => tool.function.name),
+        researchType,
+        reason,
+        guidance:
+          'Use the narrowest web tool needed, then answer the user substantively in Mise voice. Sources should support the answer, not replace it.',
+      }),
+      draftChanged: false,
+      unlockWebTools: true,
+    };
+  }
 
   if (
     toolCall.function.name === 'search_web' ||
@@ -791,15 +1289,12 @@ async function executeTool(
   }
 
   if (toolCall.function.name === 'set_prompt_suggestions') {
-    const promptSuggestions = sanitizePromptSuggestions(args.suggestions);
-    return {
-      promptSuggestions,
-      draftChanged: false,
-      content: JSON.stringify({ ok: true, suggestions: promptSuggestions }),
-    };
+    throw new CookingValidationError(
+      'Prompt suggestions are generated only after a user-facing response is complete.',
+    );
   }
 
-  if (toolCall.function.name === 'read_recipe_canvas') {
+  if (toolCall.function.name === 'read_cooking_document') {
     const draft = await getCookingDraftByConversation(input.user, input.conversationId);
     return {
       draft: draft ?? undefined,
@@ -812,7 +1307,7 @@ async function executeTool(
     };
   }
 
-  if (toolCall.function.name === 'create_recipe_canvas') {
+  if (toolCall.function.name === 'create_cooking_document') {
     if (
       sourceState.readRequired &&
       (sourceState.readCompletedTurn == null || sourceState.readCompletedTurn >= turn)
@@ -828,14 +1323,25 @@ async function executeTool(
         }),
       };
     }
-    const title = cleanRequiredText(args.title, 'Recipe canvas title is required.');
+    const requestedTitle = cleanRequiredText(args.title, 'Recipe canvas title is required.');
+    const documentType = cleanDocumentType(args.document_type);
     const markdown = assertRecipeMarkdown(args.markdown);
+    const title = markdownTitle(markdown) ?? validCanvasTitle(requestedTitle);
+    if (!title) {
+      throw new Error('Recipe canvas title is malformed.');
+    }
     const changeSummary = cleanRequiredText(
       args.change_summary,
       'Canvas change summary is required.',
     );
     const userMessage = conciseCanvasUserMessage(args.user_message, createdCanvasMessage(title));
-    const draft = await generateCookingDraft(input.user, title, input.conversationId, markdown);
+    const draft = await generateCookingDraft(
+      input.user,
+      title,
+      input.conversationId,
+      markdown,
+      documentType,
+    );
     if (!draft) {
       throw new CookingValidationError('Recipe canvas could not be created.');
     }
@@ -847,6 +1353,7 @@ async function executeTool(
       content: JSON.stringify({
         ok: true,
         draftId: draft._id,
+        documentType: draft.documentType,
         title: draftTitle(draft, title) ?? markdownTitle(markdown),
         changeSummary,
       }),
@@ -872,7 +1379,7 @@ async function executeTool(
   const revisionType = assertRevisionType(args.revision_type);
   const draft = await getCookingDraftByConversation(input.user, input.conversationId);
   if (!draft) {
-    throw new CookingValidationError('No active recipe canvas exists for this conversation.');
+    throw new CookingValidationError('No cooking document is selected for this conversation.');
   }
 
   const markdown = assertRecipeMarkdown(args.markdown);
@@ -887,7 +1394,7 @@ async function executeTool(
   );
   const updated = await updateCookingDraft(input.user, draft._id, undefined, markdown);
   if (!updated) {
-    throw new CookingValidationError('No active recipe canvas exists for this conversation.');
+    throw new CookingValidationError('No cooking document is selected for this conversation.');
   }
 
   return {
@@ -910,6 +1417,7 @@ async function complete(
   model: string,
   availableTools: AvailableCookingTool[],
   onTextDelta?: (delta: string) => void | Promise<void>,
+  toolChoice: ToolChoice = 'auto',
 ): Promise<ChatMessage> {
   const key = apiKey();
   if (!key) {
@@ -933,7 +1441,7 @@ async function complete(
         model,
         messages,
         tools: availableTools,
-        tool_choice: 'auto',
+        tool_choice: toolChoice,
         stream: true,
       }),
     });
@@ -968,6 +1476,36 @@ async function complete(
     >();
     let content = '';
     let buffer = '';
+    let streamedTextTail = '';
+    let suppressLeakedSuggestionCall = false;
+
+    const emitVisibleText = async (delta: string) => {
+      if (!onTextDelta || suppressLeakedSuggestionCall) {
+        return;
+      }
+
+      streamedTextTail += delta;
+      const markerIndex = streamedTextTail.toLowerCase().indexOf(textPromptSuggestionMarker);
+      if (markerIndex >= 0) {
+        const visible = streamedTextTail
+          .slice(0, markerIndex)
+          .replace(/```(?:\w+)?\s*$/i, '')
+          .replace(/\n{3,}$/g, '\n\n');
+        if (visible) {
+          await onTextDelta(visible);
+        }
+        streamedTextTail = '';
+        suppressLeakedSuggestionCall = true;
+        return;
+      }
+
+      if (streamedTextTail.length <= streamedTextTailLength) {
+        return;
+      }
+      const visibleLength = streamedTextTail.length - streamedTextTailLength;
+      await onTextDelta(streamedTextTail.slice(0, visibleLength));
+      streamedTextTail = streamedTextTail.slice(visibleLength);
+    };
 
     const applyDelta = async (payload: string) => {
       if (!payload || payload === '[DONE]') {
@@ -980,7 +1518,7 @@ async function complete(
       }
       if (typeof delta.content === 'string' && delta.content) {
         content += delta.content;
-        await onTextDelta?.(delta.content);
+        await emitVisibleText(delta.content);
       }
       for (const toolCallDelta of delta.tool_calls ?? []) {
         const index = toolCallDelta.index ?? toolCalls.size;
@@ -1030,6 +1568,9 @@ async function complete(
     if (buffer.trim()) {
       await processLine(buffer);
     }
+    if (!suppressLeakedSuggestionCall && streamedTextTail) {
+      await onTextDelta?.(streamedTextTail);
+    }
 
     return {
       role: 'assistant',
@@ -1059,30 +1600,46 @@ async function complete(
 
 function isCanvasMutationTool(
   toolName: CookingToolName,
-): toolName is 'create_recipe_canvas' | 'revise_recipe_canvas' {
-  return toolName === 'create_recipe_canvas' || toolName === 'revise_recipe_canvas';
+): toolName is 'create_cooking_document' | 'revise_cooking_document' {
+  return toolName === 'create_cooking_document' || toolName === 'revise_cooking_document';
 }
 
 export async function runCookingChat(input: CookingChatInput): Promise<CookingChatResult> {
   const sourceState = linkedSourceState(input.text);
+  const broadResearch = requestsBroadResearch(input.text);
+  const sourceLimit = broadResearch ? 5 : 3;
   const webContextStartedAt = Date.now();
   const webContext = await createCookingWebContext({
     user: input.user,
     webSearchConfig: input.webSearchConfig,
     loadAuthValues: input.loadAuthValues,
     conversationCreatedAt: input.conversationCreatedAt,
+    allowBroadResearch: broadResearch,
   });
   const linkedSourcePreload = await preloadLinkedRecipeSources(sourceState, webContext);
   const activeCanvas = Boolean(input.activeDraft);
-  const providerWebTools = webToolsForProvider(webContext.tools, sourceState);
-  const availableTools = selectCookingToolsForState(activeCanvas, providerWebTools);
-  const availableToolNames = availableTools.map((tool) => tool.function.name);
+  const externalEvidenceNeeded = requestsExternalEvidence(input.text, sourceState);
+  let webToolsUnlocked = externalEvidenceNeeded;
+  let availableToolState = buildAvailableToolState({
+    activeCanvas,
+    sourceState,
+    webContext,
+    webToolsUnlocked,
+  });
+  const refreshAvailableTools = (): void => {
+    availableToolState = buildAvailableToolState({
+      activeCanvas,
+      sourceState,
+      webContext,
+      webToolsUnlocked,
+    });
+  };
   input.onTiming?.({
     stage: 'web_context_loaded',
     durationMs: Date.now() - webContextStartedAt,
-    toolCount: availableTools.length,
+    toolCount: availableToolState.availableTools.length,
     activeCanvas,
-    availableToolNames,
+    availableToolNames: availableToolState.availableToolNames,
   });
   const messages: ChatMessage[] = [
     {
@@ -1091,10 +1648,11 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         input.promptPrefix,
         preferencesContext(input.preferencesMarkdown),
         webAvailabilityContext(webContext.unavailableReason),
+        documentsContext(input.documents, input.activeDraft),
         activeCanvasContext(input.activeDraft),
         linkedSourceContext(sourceState),
         linkedSourcePreload.context,
-        toolStateContext(activeCanvas, availableTools),
+        toolStateContext(activeCanvas, availableToolState.availableTools),
         cookingSystemInstructions,
       ]
         .filter(Boolean)
@@ -1108,7 +1666,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     linkedUrlCount: sourceState.urls.length,
     hasPreloadContext: Boolean(linkedSourcePreload.context),
     preloadedSourceCount: linkedSourcePreload.sources.length,
-    availableToolNames,
+    availableToolNames: availableToolState.availableToolNames,
     activeCanvas,
     systemPromptChars: messages[0].content?.length ?? 0,
     systemHasPreloadedSource:
@@ -1122,28 +1680,75 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
   let draft: CookingDraft | undefined;
   let draftChanged = false;
   let assistantText = '';
-  let promptSuggestions: string[] = [];
-  let webSources: CookingWebSource[] = linkedSourcePreload.sources.slice(0, 8);
+  let webSources: CookingWebSource[] = linkedSourcePreload.sources.slice(0, sourceLimit);
   let latestCanvasUserMessage = '';
   const resolvedModel = selectedModel(input.model);
 
   for (let turn = 0; turn < 5; turn += 1) {
-    input.onTiming?.({
-      stage: 'provider_request_start',
-      turn,
-      model: resolvedModel,
-      messageCount: messages.length,
-      toolCount: availableTools.length,
-      activeCanvas,
-      availableToolNames,
-      promptChars: messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0),
-    });
-    const providerStartedAt = Date.now();
-    const assistant = await complete(messages, resolvedModel, availableTools, input.onTextDelta);
+    let assistant: ChatMessage | undefined;
+    let providerStartedAt = Date.now();
+    let selectedAttemptModel = resolvedModel;
+    let streamedCharsThisTurn = 0;
+    let lastProviderError: unknown;
+
+    const attemptModels = providerModels(resolvedModel);
+    const finalAttemptModel = attemptModels[attemptModels.length - 1];
+
+    for (const attemptModel of attemptModels) {
+      providerStartedAt = Date.now();
+      selectedAttemptModel = attemptModel;
+      input.onTiming?.({
+        stage: 'provider_request_start',
+        turn,
+        model: attemptModel,
+        messageCount: messages.length,
+        toolCount: availableToolState.availableTools.length,
+        activeCanvas,
+        availableToolNames: availableToolState.availableToolNames,
+        promptChars: messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0),
+      });
+
+      try {
+        assistant = await complete(
+          messages,
+          attemptModel,
+          availableToolState.availableTools,
+          webSources.length === 0
+            ? async (delta) => {
+                streamedCharsThisTurn += delta.length;
+                await input.onTextDelta?.(delta);
+              }
+            : undefined,
+        );
+        break;
+      } catch (error) {
+        lastProviderError = error;
+        const canRetry = streamedCharsThisTurn === 0 && isRetryableProviderError(error);
+        input.onTiming?.({
+          stage: 'provider_response',
+          turn,
+          model: attemptModel,
+          durationMs: Date.now() - providerStartedAt,
+          toolCallCount: 0,
+          providerToolCallCount: 0,
+          outputChars: streamedCharsThisTurn,
+          error: error instanceof Error ? error.message : 'Cooking chat provider failed.',
+        });
+        if (!canRetry || attemptModel === finalAttemptModel) {
+          throw error;
+        }
+      }
+    }
+
+    if (!assistant) {
+      throw lastProviderError instanceof Error
+        ? lastProviderError
+        : new Error('Cooking chat failed.');
+    }
     input.onTiming?.({
       stage: 'provider_response',
       turn,
-      model: resolvedModel,
+      model: selectedAttemptModel,
       durationMs: Date.now() - providerStartedAt,
       toolCallCount: assistant.tool_calls?.length ?? 0,
       providerToolCallCount: assistant.tool_calls?.length ?? 0,
@@ -1153,25 +1758,48 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     assistantText = assistant.content?.trim() ?? '';
 
     if (!assistant.tool_calls?.length) {
+      const extracted = extractTextPromptSuggestions(assistantText);
+      const responseText =
+        extracted.text || (await recoverEmptyResponse(messages, selectedAttemptModel));
+      const citedResponse = await ensureInlineSourceCitations(
+        messages,
+        responseText,
+        webSources,
+        selectedAttemptModel,
+        sourceLimit,
+      );
+      let responseSuggestions = extracted.promptSuggestions;
+      if (responseSuggestions.length === 0) {
+        responseSuggestions = await generatePromptSuggestions(
+          messages,
+          citedResponse.text,
+          selectedAttemptModel,
+        );
+      }
       return {
         text:
-          assistantText ||
+          citedResponse.text ||
           latestCanvasUserMessage ||
-          (draftChanged ? 'I updated the cooking canvas.' : 'I can help with that.'),
+          (draftChanged
+            ? 'I updated the cooking canvas.'
+            : 'I could not generate a cooking response just now. Please try again.'),
         draft,
         draftChanged,
-        promptSuggestions,
-        webSources,
+        promptSuggestions: responseSuggestions,
+        webSources: citedResponse.sources,
       };
     }
 
     let fastCanvasReturn = false;
     for (const toolCall of assistant.tool_calls) {
-      if (fastCanvasReturn && toolCall.function.name !== 'set_prompt_suggestions') {
+      if (fastCanvasReturn) {
         continue;
       }
       const toolStartedAt = Date.now();
       try {
+        if (!availableToolState.availableToolNameSet.has(toolCall.function.name)) {
+          throw new CookingValidationError('The requested tool is not available in this turn.');
+        }
         const result = await executeTool(input, toolCall, sourceState, turn, webContext);
         input.onTiming?.({
           stage: 'tool_executed',
@@ -1204,13 +1832,11 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
               seen.add(source.url);
               return true;
             }),
-          ].slice(0, 8);
+          ].slice(0, sourceLimit);
         }
-        if (result.promptSuggestions) {
-          promptSuggestions = sanitizePromptSuggestions([
-            ...promptSuggestions,
-            ...result.promptSuggestions,
-          ]);
+        if (result.unlockWebTools) {
+          webToolsUnlocked = true;
+          refreshAvailableTools();
         }
         messages.push({
           role: 'tool',
@@ -1230,21 +1856,15 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           canvasMutationValidated: false,
           error: errorMessage,
         });
-        if (isCanvasMutationTool(toolCall.function.name)) {
-          return {
-            draft,
-            draftChanged,
-            promptSuggestions,
-            webSources,
-            text: errorMessage,
-          };
-        }
         messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
           content: JSON.stringify({
             ok: false,
             error: errorMessage,
+            action: isCanvasMutationTool(toolCall.function.name)
+              ? 'Correct the complete cooking document and retry the mutation, or explain naturally if the user request cannot be represented as a cooking document.'
+              : undefined,
           }),
         });
       }
@@ -1254,21 +1874,36 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
       return {
         draft,
         draftChanged,
-        promptSuggestions,
+        promptSuggestions: [],
         webSources,
         text: latestCanvasUserMessage,
       };
     }
   }
 
+  const extracted = extractTextPromptSuggestions(assistantText);
+  const responseText = extracted.text || (await recoverEmptyResponse(messages, resolvedModel));
+  const citedResponse = await ensureInlineSourceCitations(
+    messages,
+    responseText,
+    webSources,
+    resolvedModel,
+    sourceLimit,
+  );
+  const existingSuggestions = extracted.promptSuggestions;
   return {
     draft,
     draftChanged,
-    promptSuggestions,
-    webSources,
+    promptSuggestions:
+      existingSuggestions.length > 0
+        ? existingSuggestions
+        : await generatePromptSuggestions(messages, citedResponse.text, resolvedModel),
+    webSources: citedResponse.sources,
     text:
-      assistantText ||
+      citedResponse.text ||
       latestCanvasUserMessage ||
-      (draftChanged ? 'I updated the cooking canvas.' : 'I can help with that.'),
+      (draftChanged
+        ? 'I updated the cooking canvas.'
+        : 'I could not generate a cooking response just now. Please try again.'),
   };
 }

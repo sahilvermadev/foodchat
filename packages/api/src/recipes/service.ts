@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import type {
   RecipeCategorization,
   SavedRecipe,
+  SavedRecipeSummary,
   SaveRecipeRequest,
   SavedRecipesQuery,
   SavedRecipesResponse,
@@ -11,13 +12,18 @@ import type {
 import type { ISavedRecipe } from '@librechat/data-schemas';
 import { categorizeRecipe } from './categorize';
 import { illustrateRecipe } from './illustrate';
+import { createIllustrationThumbnail, decodeIllustrationDataUrl } from '../illustrations/media';
+import type { IllustrationMedia } from '../illustrations/media';
 import { CookingValidationError, normalizeRecipe } from '../cooking/validation';
 
 const maxLimit = 50;
 const pendingTimeoutMs = 1000 * 60 * 2;
+const activeIllustrationJobs = new Set<string>();
+const usersWithRepairedTitles = new Set<string>();
 
 type RecipeListFilter = {
   user: string;
+  documentType?: string;
   updatedAt?: { $lt: Date };
   $or?: Array<{ title?: RegExp; shortDescription?: RegExp; documentMarkdown?: RegExp }>;
   'categorization.cuisine'?: string;
@@ -56,12 +62,26 @@ function cleanRecipeMarkdown(markdown: string): string {
   return lines.join('\n').trim();
 }
 
-function titleFromMarkdown(markdown: string): string {
+function headingTitleFromMarkdown(markdown: string): string | undefined {
   const heading = cleanRecipeMarkdown(markdown)
     .split('\n')
     .map((line) => line.trim())
-    .find((line) => /^#{1,3}\s+\S/.test(line) || (line.length > 0 && !isWrapperLine(line)));
-  return heading?.replace(/^#+\s*/, '').slice(0, 120) || 'Saved recipe';
+    .find((line) => /^#{1,3}\s+\S/.test(line));
+  const title = heading?.replace(/^#+\s*/, '').trim();
+  return title && !isWrapperLine(title) ? title.slice(0, 120) : undefined;
+}
+
+function titleFromMarkdown(markdown: string): string {
+  const headingTitle = headingTitleFromMarkdown(markdown);
+  if (headingTitle) {
+    return headingTitle;
+  }
+
+  const heading = cleanRecipeMarkdown(markdown)
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !/^#{1,3}\s+\S/.test(line) && !isWrapperLine(line));
+  return heading?.slice(0, 120) || 'Saved recipe';
 }
 
 function cleanMarkdown(value: string | undefined): string {
@@ -132,7 +152,7 @@ const ignoredDescriptionSections = new Set([
 function sectionLabel(value: string): string {
   return value
     .replace(/^#+\s*/, '')
-    .replace(/[:\-]+$/, '')
+    .replace(/[:-]+$/, '')
     .trim()
     .toLowerCase();
 }
@@ -332,6 +352,19 @@ function serializeRecipe(recipe?: StructuredRecipe): StructuredRecipe | undefine
   return recipe ? normalizeRecipe(recipe) : undefined;
 }
 
+function canonicalRecipe(
+  recipe: StructuredRecipe | undefined,
+  documentMarkdown: string,
+): StructuredRecipe | undefined {
+  const structuredRecipe = serializeRecipe(recipe);
+  if (!structuredRecipe) {
+    return undefined;
+  }
+
+  const markdownTitle = headingTitleFromMarkdown(documentMarkdown);
+  return markdownTitle ? { ...structuredRecipe, title: markdownTitle } : structuredRecipe;
+}
+
 function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
@@ -371,34 +404,130 @@ function serializeCategorization(value: unknown): RecipeCategorization | undefin
   };
 }
 
-function serializeSavedRecipe(recipe: ISavedRecipe): SavedRecipe {
-  const categorization = serializeCategorization(recipe.categorization);
-  const descriptionTitle = titleForDescription(
-    recipe.title,
+function illustrationMediaUrl(recipe: ISavedRecipe, thumbnail = false): string {
+  const version = recipe.updatedAt?.getTime() ?? 0;
+  const variant = thumbnail ? '&variant=thumbnail' : '';
+  return `/api/recipes/${encodeURIComponent(idOf(recipe))}/illustration?v=${version}${variant}`;
+}
+
+function hasIllustration(recipe: ISavedRecipe): boolean {
+  return Boolean(recipe.illustrationData?.length || recipe.illustrationUrl);
+}
+
+function storedIllustration(recipe: ISavedRecipe): IllustrationMedia | null {
+  if (recipe.illustrationData?.length) {
+    return {
+      buffer: Buffer.from(recipe.illustrationData),
+      contentType: recipe.illustrationContentType ?? 'image/png',
+    };
+  }
+
+  return decodeIllustrationDataUrl(recipe.illustrationUrl);
+}
+
+function serializeSavedRecipe(recipe: ISavedRecipe, thumbnail = false): SavedRecipe {
+  const title = cleanTitle(
+    headingTitleFromMarkdown(recipe.documentMarkdown) ?? recipe.title,
     recipe.documentMarkdown,
-    recipe.recipe,
   );
+  const structuredRecipe = canonicalRecipe(recipe.recipe, recipe.documentMarkdown);
+  const categorization = serializeCategorization(recipe.categorization);
+  const descriptionTitle = titleForDescription(title, recipe.documentMarkdown, structuredRecipe);
   return {
     _id: idOf(recipe),
     user: recipe.user,
-    title: recipe.title,
+    title,
+    documentType: recipe.documentType ?? 'recipe',
     shortDescription: cleanShortDescription(
       recipe.shortDescription,
       descriptionTitle,
       recipe.documentMarkdown,
-      recipe.recipe,
+      structuredRecipe,
       categorization,
     ),
-    ...(recipe.illustrationUrl ? { illustrationUrl: recipe.illustrationUrl } : {}),
+    ...(recipe.illustrationStatus === 'complete' || hasIllustration(recipe)
+      ? { illustrationUrl: illustrationMediaUrl(recipe, thumbnail) }
+      : {}),
     illustrationStatus: recipe.illustrationStatus ?? 'pending',
     ...(recipe.illustrationModel ? { illustrationModel: recipe.illustrationModel } : {}),
     documentMarkdown: recipe.documentMarkdown,
-    ...(recipe.recipe ? { recipe: serializeRecipe(recipe.recipe) } : {}),
+    ...(structuredRecipe ? { recipe: structuredRecipe } : {}),
     ...(recipe.sourceConversationId ? { sourceConversationId: recipe.sourceConversationId } : {}),
     ...(recipe.sourceDraftId ? { sourceDraftId: recipe.sourceDraftId } : {}),
     ...(categorization ? { categorization } : {}),
     categorizationStatus: recipe.categorizationStatus,
     categorizationVersion: recipe.categorizationVersion,
+    createdAt: iso(recipe.createdAt),
+    updatedAt: iso(recipe.updatedAt),
+  };
+}
+
+async function repairLegacyWrapperTitles(user: string): Promise<void> {
+  if (usersWithRepairedTitles.has(user)) {
+    return;
+  }
+
+  const malformedRecipes = await model()
+    .find({
+      user,
+      $or: [{ title: { $in: ['{', '}'] } }, { 'recipe.title': { $in: ['{', '}'] } }],
+    })
+    .select('title recipe.title documentMarkdown');
+
+  await Promise.all(
+    malformedRecipes.map(async (recipe) => {
+      const title = headingTitleFromMarkdown(recipe.documentMarkdown);
+      if (!title) {
+        return;
+      }
+
+      const set: Partial<Pick<ISavedRecipe, 'title'>> & { 'recipe.title'?: string } = {};
+      if (isWrapperLine(recipe.title)) {
+        set.title = title;
+      }
+      if (recipe.recipe?.title && isWrapperLine(recipe.recipe.title)) {
+        set['recipe.title'] = title;
+      }
+      if (Object.keys(set).length === 0) {
+        return;
+      }
+      await model().updateOne({ _id: recipe._id, user }, { $set: set }, { timestamps: false });
+    }),
+  );
+  usersWithRepairedTitles.add(user);
+}
+
+function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
+  const categorization = serializeCategorization(recipe.categorization);
+  const storedTitle = recipe.title.trim();
+  const recipeTitle = recipe.recipe?.title?.trim();
+  let title = 'Saved recipe';
+  if (storedTitle && !isWrapperLine(storedTitle)) {
+    title = storedTitle;
+  } else if (recipeTitle && !isWrapperLine(recipeTitle)) {
+    title = recipeTitle;
+  }
+  const illustrationUrl =
+    recipe.illustrationStatus === 'complete' || hasIllustration(recipe)
+      ? illustrationMediaUrl(recipe, true)
+      : undefined;
+  return {
+    _id: idOf(recipe),
+    user: recipe.user,
+    title,
+    documentType: recipe.documentType ?? 'recipe',
+    ...(recipe.shortDescription?.trim()
+      ? { shortDescription: truncateSentence(recipe.shortDescription) }
+      : {}),
+    ...(illustrationUrl ? { illustrationUrl } : {}),
+    illustrationStatus: recipe.illustrationStatus ?? 'pending',
+    ...(recipe.illustrationModel ? { illustrationModel: recipe.illustrationModel } : {}),
+    ...(recipe.sourceConversationId ? { sourceConversationId: recipe.sourceConversationId } : {}),
+    ...(recipe.sourceDraftId ? { sourceDraftId: recipe.sourceDraftId } : {}),
+    ...(categorization ? { categorization } : {}),
+    categorizationStatus: recipe.categorizationStatus,
+    categorizationVersion: recipe.categorizationVersion,
+    ...(recipe.recipe?.servings ? { servings: recipe.recipe.servings } : {}),
     createdAt: iso(recipe.createdAt),
     updatedAt: iso(recipe.updatedAt),
   };
@@ -415,6 +544,9 @@ function cleanFilter(value: string | undefined): string | undefined {
 
 function listFilter(user: string, query: SavedRecipesQuery): RecipeListFilter {
   const filter: RecipeListFilter = { user };
+  if (query.documentType) {
+    filter.documentType = query.documentType;
+  }
   const q = query.q?.trim();
   if (q) {
     const expression = new RegExp(escapeRegex(q), 'i');
@@ -470,7 +602,7 @@ async function failStalePending(user: string): Promise<void> {
     model().updateMany(
       {
         user,
-        illustrationStatus: 'pending',
+        illustrationStatus: { $in: ['pending', 'generating'] },
         updatedAt: staleUpdatedAt,
       },
       { $set: { illustrationStatus: 'failed' } },
@@ -480,7 +612,9 @@ async function failStalePending(user: string): Promise<void> {
 
 async function runCategorization(recipeId: string, version: number): Promise<void> {
   const Recipe = model();
-  const recipe = await Recipe.findById(recipeId);
+  const recipe = await Recipe.findById(recipeId).select(
+    '-illustrationUrl -illustrationData -illustrationThumbnail',
+  );
   if (!recipe || recipe.categorizationVersion !== version) {
     return;
   }
@@ -507,51 +641,82 @@ function scheduleCategorization(recipeId: string, version: number): void {
 
 async function runIllustration(recipeId: string, version: number): Promise<void> {
   const Recipe = model();
-  const recipe = await Recipe.findById(recipeId);
-  if (!recipe || recipe.categorizationVersion !== version) {
+  const recipe = await Recipe.findOneAndUpdate(
+    { _id: recipeId, categorizationVersion: version, illustrationStatus: 'pending' },
+    { $set: { illustrationStatus: 'generating' } },
+    { new: true },
+  );
+  if (!recipe) {
     return;
   }
 
   try {
     const serialized = serializeSavedRecipe(recipe);
     const { illustrationUrl, model: illustrationModel } = await illustrateRecipe(serialized);
+    const illustration = decodeIllustrationDataUrl(illustrationUrl);
+    if (!illustration) {
+      throw new Error('Generated recipe illustration data is malformed.');
+    }
+    const thumbnail = await createIllustrationThumbnail(illustration);
     await Recipe.updateOne(
-      { _id: recipeId, categorizationVersion: version },
-      { $set: { illustrationUrl, illustrationModel, illustrationStatus: 'complete' } },
+      { _id: recipeId, categorizationVersion: version, illustrationStatus: 'generating' },
+      {
+        $set: {
+          illustrationData: illustration.buffer,
+          illustrationContentType: illustration.contentType,
+          illustrationThumbnail: thumbnail.buffer,
+          illustrationModel,
+          illustrationStatus: 'complete',
+        },
+        $unset: { illustrationUrl: 1 },
+      },
     );
   } catch {
     await Recipe.updateOne(
-      { _id: recipeId, categorizationVersion: version },
+      { _id: recipeId, categorizationVersion: version, illustrationStatus: 'generating' },
       { $set: { illustrationStatus: 'failed' } },
     );
   }
 }
 
 function scheduleIllustration(recipeId: string, version: number): void {
-  void runIllustration(recipeId, version);
+  const jobKey = `${recipeId}:${version}`;
+  if (activeIllustrationJobs.has(jobKey)) {
+    return;
+  }
+
+  activeIllustrationJobs.add(jobKey);
+  void runIllustration(recipeId, version).finally(() => {
+    activeIllustrationJobs.delete(jobKey);
+  });
 }
 
 function scheduleMissingIllustrations(recipes: ISavedRecipe[]): void {
   for (const recipe of recipes) {
-    if (recipe.illustrationUrl || recipe.illustrationStatus === 'complete') {
+    if (hasIllustration(recipe) || recipe.illustrationStatus !== 'pending') {
       continue;
     }
-    if (recipe.illustrationStatus === 'pending' && recipe.illustrationModel) {
+    if (recipe.illustrationModel) {
       continue;
     }
-    recipe.illustrationStatus = 'pending';
-    void recipe.save().then(() => scheduleIllustration(idOf(recipe), recipe.categorizationVersion));
+    scheduleIllustration(idOf(recipe), recipe.categorizationVersion);
   }
 }
 
 export async function saveRecipe(user: string, payload: SaveRecipeRequest): Promise<SavedRecipe> {
   const Recipe = model();
   const documentMarkdown = cleanMarkdown(payload.documentMarkdown);
-  const recipe = serializeRecipe(payload.recipe);
-  const title = cleanTitle(payload.title ?? recipe?.title, documentMarkdown);
+  const recipe = canonicalRecipe(payload.recipe, documentMarkdown);
+  const title = cleanTitle(
+    headingTitleFromMarkdown(documentMarkdown) ?? payload.title ?? recipe?.title,
+    documentMarkdown,
+  );
+  const documentType = payload.documentType ?? 'recipe';
+  const enrichRecipe = documentType === 'recipe';
   const saved = await Recipe.create({
     user,
     title,
+    documentType,
     shortDescription: cleanShortDescription(
       payload.shortDescription,
       title,
@@ -562,18 +727,23 @@ export async function saveRecipe(user: string, payload: SaveRecipeRequest): Prom
     ...(recipe ? { recipe } : {}),
     ...(payload.sourceConversationId ? { sourceConversationId: payload.sourceConversationId } : {}),
     ...(payload.sourceDraftId ? { sourceDraftId: payload.sourceDraftId } : {}),
-    categorizationStatus: 'pending',
+    categorizationStatus: enrichRecipe ? 'pending' : 'complete',
     illustrationStatus: 'pending',
     categorizationVersion: 1,
   });
-  scheduleCategorization(idOf(saved), saved.categorizationVersion);
+  if (enrichRecipe) {
+    scheduleCategorization(idOf(saved), saved.categorizationVersion);
+  }
   scheduleIllustration(idOf(saved), saved.categorizationVersion);
   return serializeSavedRecipe(saved);
 }
 
 export async function getRecipe(user: string, recipeId: string): Promise<SavedRecipe | null> {
+  await repairLegacyWrapperTitles(user);
   await failStalePending(user);
-  const recipe = await model().findOne({ _id: recipeId, user });
+  const recipe = await model()
+    .findOne({ _id: recipeId, user })
+    .select('-illustrationUrl -illustrationData -illustrationThumbnail');
   if (recipe) {
     scheduleMissingIllustrations([recipe]);
   }
@@ -581,26 +751,91 @@ export async function getRecipe(user: string, recipeId: string): Promise<SavedRe
 }
 
 export async function getRecipeByDraft(user: string, draftId: string): Promise<SavedRecipe | null> {
+  await repairLegacyWrapperTitles(user);
   await failStalePending(user);
-  const recipe = await model().findOne({ user, sourceDraftId: draftId }).sort({ updatedAt: -1 });
+  const recipe = await model()
+    .findOne({ user, sourceDraftId: draftId })
+    .select('-illustrationUrl -illustrationData -illustrationThumbnail')
+    .sort({ updatedAt: -1 });
   if (recipe) {
     scheduleMissingIllustrations([recipe]);
   }
   return recipe ? serializeSavedRecipe(recipe) : null;
 }
 
+export async function getRecipeIllustration(
+  user: string,
+  recipeId: string,
+  thumbnail = false,
+): Promise<IllustrationMedia | null> {
+  const recipe = await model()
+    .findOne({ _id: recipeId, user })
+    .select('illustrationUrl illustrationData illustrationContentType illustrationThumbnail');
+  if (!recipe) {
+    return null;
+  }
+
+  const illustration = storedIllustration(recipe);
+  if (!illustration) {
+    return null;
+  }
+
+  if (!thumbnail) {
+    return illustration;
+  }
+
+  if (recipe.illustrationThumbnail?.length) {
+    return { buffer: Buffer.from(recipe.illustrationThumbnail), contentType: 'image/webp' };
+  }
+
+  const generatedThumbnail = await createIllustrationThumbnail(illustration);
+  await model().updateOne(
+    { _id: recipe._id },
+    {
+      $set: {
+        illustrationData: illustration.buffer,
+        illustrationContentType: illustration.contentType,
+        illustrationThumbnail: generatedThumbnail.buffer,
+      },
+      $unset: { illustrationUrl: 1 },
+    },
+    { timestamps: false },
+  );
+  return generatedThumbnail;
+}
+
 export async function listRecipes(
   user: string,
   query: SavedRecipesQuery,
 ): Promise<SavedRecipesResponse> {
+  await repairLegacyWrapperTitles(user);
   await failStalePending(user);
   const limit = Math.min(Math.max(Number(query.limit) || 20, 1), maxLimit);
   const recipes = await model()
     .find(listFilter(user, query))
+    .select(
+      [
+        'user',
+        'title',
+        'documentType',
+        'shortDescription',
+        'illustrationStatus',
+        'illustrationModel',
+        'sourceConversationId',
+        'sourceDraftId',
+        'categorization',
+        'categorizationStatus',
+        'categorizationVersion',
+        'recipe.title',
+        'recipe.servings',
+        'createdAt',
+        'updatedAt',
+      ].join(' '),
+    )
     .sort({ updatedAt: -1 })
     .limit(limit + 1);
   scheduleMissingIllustrations(recipes);
-  const page = recipes.slice(0, limit).map(serializeSavedRecipe);
+  const page = recipes.slice(0, limit).map(serializeSavedRecipeSummary);
   const next = recipes.length > limit ? recipes[limit - 1] : undefined;
   return {
     recipes: page,
@@ -622,8 +857,12 @@ export async function updateSavedRecipe(
     typeof payload.documentMarkdown === 'string'
       ? cleanMarkdown(payload.documentMarkdown)
       : existing.documentMarkdown;
-  const recipe = payload.recipe ? serializeRecipe(payload.recipe) : existing.recipe;
-  existing.title = cleanTitle(payload.title ?? recipe?.title ?? existing.title, documentMarkdown);
+  const recipe = canonicalRecipe(payload.recipe ?? existing.recipe, documentMarkdown);
+  existing.title = cleanTitle(
+    headingTitleFromMarkdown(documentMarkdown) ?? payload.title ?? recipe?.title ?? existing.title,
+    documentMarkdown,
+  );
+  existing.documentType = payload.documentType ?? existing.documentType ?? 'recipe';
   existing.shortDescription = cleanShortDescription(
     payload.shortDescription,
     existing.title,
@@ -635,15 +874,26 @@ export async function updateSavedRecipe(
     existing.recipe = recipe;
   }
   existing.categorization = undefined;
-  existing.categorizationStatus = 'pending';
+  const enrichRecipe = existing.documentType === 'recipe';
+  existing.categorizationStatus = enrichRecipe ? 'pending' : 'complete';
   existing.illustrationUrl = '';
+  existing.illustrationData = undefined;
+  existing.illustrationContentType = undefined;
+  existing.illustrationThumbnail = undefined;
   existing.illustrationStatus = 'pending';
   existing.illustrationModel = undefined;
   existing.categorizationVersion += 1;
   await existing.save();
-  scheduleCategorization(idOf(existing), existing.categorizationVersion);
+  if (enrichRecipe) {
+    scheduleCategorization(idOf(existing), existing.categorizationVersion);
+  }
   scheduleIllustration(idOf(existing), existing.categorizationVersion);
   return serializeSavedRecipe(existing);
+}
+
+export async function deleteSavedRecipe(user: string, recipeId: string): Promise<boolean> {
+  const result = await model().deleteOne({ _id: recipeId, user });
+  return result.deletedCount === 1;
 }
 
 export { CookingValidationError };

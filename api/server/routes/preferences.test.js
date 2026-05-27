@@ -21,9 +21,20 @@ jest.mock('@librechat/api', () => {
     }
   }
 
+  class SpecialtyIngredientValidationError extends Error {
+    constructor(message) {
+      super(message);
+      this.name = 'SpecialtyIngredientValidationError';
+    }
+  }
+
   return {
     PreferencesValidationError,
+    SpecialtyIngredientValidationError,
     getPreferences: jest.fn(),
+    getSpecialtyIngredientImage: jest.fn(),
+    listSpecialtyIngredients: jest.fn(),
+    resolveSpecialtyIngredient: jest.fn(),
     updatePreferences: jest.fn(),
     runPreferencesChat: jest.fn(),
   };
@@ -64,6 +75,10 @@ describe('preferences routes', () => {
         markdown: '',
       },
       preferencesChanged: false,
+    });
+    preferencesApi.getSpecialtyIngredientImage.mockResolvedValue({
+      buffer: Buffer.from('cached-ingredient'),
+      contentType: 'image/webp',
     });
   });
 
@@ -144,5 +159,19 @@ describe('preferences routes', () => {
         measurementSystem: 'metric',
       },
     });
+  });
+
+  test('serves ingredient thumbnails with browser caching', async () => {
+    const response = await request(app)
+      .get('/api/preferences/ingredients/ingredient-1/image?variant=thumbnail&v=1')
+      .expect(200)
+      .expect('Content-Type', /image\/webp/)
+      .expect('Cache-Control', 'private, max-age=31536000, immutable');
+
+    expect(response.body).toEqual(Buffer.from('cached-ingredient'));
+    expect(preferencesApi.getSpecialtyIngredientImage).toHaveBeenCalledWith(
+      'ingredient-1',
+      true,
+    );
   });
 });

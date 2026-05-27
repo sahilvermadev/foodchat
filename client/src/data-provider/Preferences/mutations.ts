@@ -5,6 +5,8 @@ import type {
   PreferencesChatRequest,
   PreferencesChatResponse,
   PreferencesDocument,
+  ResolveSpecialtyIngredientRequest,
+  SpecialtyIngredientCatalogItem,
   UpdatePreferencesRequest,
 } from 'librechat-data-provider';
 
@@ -32,6 +34,36 @@ export const usePreferencesChatMutation = (): UseMutationResult<
     mutationFn: (payload: PreferencesChatRequest) => dataService.chatPreferences(payload),
     onSuccess: (response) => {
       queryClient.setQueryData([QueryKeys.preferences], response.preferences);
+    },
+  });
+};
+
+export const useResolvePreferenceIngredientMutation = (): UseMutationResult<
+  SpecialtyIngredientCatalogItem,
+  unknown,
+  ResolveSpecialtyIngredientRequest
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.resolvePreferenceIngredient], {
+    mutationFn: (payload: ResolveSpecialtyIngredientRequest) =>
+      dataService.resolvePreferenceIngredient(payload),
+    onSuccess: (ingredient) => {
+      queryClient.setQueriesData<{ ingredients: SpecialtyIngredientCatalogItem[] }>(
+        [QueryKeys.preferenceIngredients],
+        (current) => {
+          if (!current) {
+            return current;
+          }
+          const exists = current.ingredients.some((item) => item._id === ingredient._id);
+          return exists
+            ? {
+                ingredients: current.ingredients.map((item) =>
+                  item._id === ingredient._id ? ingredient : item,
+                ),
+              }
+            : { ingredients: [ingredient, ...current.ingredients] };
+        },
+      );
     },
   });
 };

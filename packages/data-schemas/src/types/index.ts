@@ -42,3 +42,4 @@ export * from './mcp';
 export * from './cooking';
 /* Preferences */
 export * from './preferences';
+export * from './ingredient';

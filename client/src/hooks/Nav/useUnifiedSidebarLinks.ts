@@ -15,6 +15,8 @@ export default function useUnifiedSidebarLinks() {
         icon: MessagesSquare,
         id: 'conversations',
         Component: ConversationsSection,
+        isActive: (pathname) =>
+          pathname === '/cook' || pathname.startsWith('/cook/') || pathname.startsWith('/c/'),
       },
       {
         title: 'com_recipes_library',
@@ -24,6 +26,7 @@ export default function useUnifiedSidebarLinks() {
         onClick: () => {
           navigate('/recipes');
         },
+        isActive: (pathname) => pathname === '/recipes' || pathname.startsWith('/recipes/'),
       },
       {
         title: 'com_nav_preferences',
@@ -33,6 +36,7 @@ export default function useUnifiedSidebarLinks() {
         onClick: () => {
           navigate('/preferences');
         },
+        isActive: (pathname) => pathname === '/preferences',
       },
     ],
     [navigate],

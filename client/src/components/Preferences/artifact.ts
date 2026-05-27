@@ -5,6 +5,7 @@ export const PREFERENCE_HEADINGS = [
   'Cooking Level',
   'Household',
   'Kitchen',
+  'Specialty Ingredients',
   'Taste',
   'Goals',
   'Location',
@@ -12,6 +13,94 @@ export const PREFERENCE_HEADINGS = [
 ] as const;
 
 export type PreferenceHeading = (typeof PREFERENCE_HEADINGS)[number];
+
+export const SPECIALTY_INGREDIENT_CATEGORIES = [
+  'Condiments & Sauces',
+  'Cheese & Dairy',
+  'Preserved & Pickled',
+  'Freezer',
+  'Meat & Protein',
+  'Other',
+] as const;
+
+export type SpecialtyIngredientCategory = (typeof SPECIALTY_INGREDIENT_CATEGORIES)[number];
+
+export type PreferenceSection = {
+  heading: PreferenceHeading;
+  lines: string[];
+};
+
+const specialtyCategoryPatterns: Array<{
+  category: SpecialtyIngredientCategory;
+  patterns: RegExp[];
+}> = [
+  {
+    category: 'Freezer',
+    patterns: [/\bfrozen\b/, /\bfreezer\b/, /\bice\b/, /\bfrozen\s+\w+/],
+  },
+  {
+    category: 'Cheese & Dairy',
+    patterns: [
+      /\bcheese\b/,
+      /\bcheddar\b/,
+      /\bmozzarella\b/,
+      /\bparmesan\b/,
+      /\bfeta\b/,
+      /\bpaneer\b/,
+      /\byogurt\b/,
+      /\bcream\b/,
+      /\bbutter\b/,
+    ],
+  },
+  {
+    category: 'Preserved & Pickled',
+    patterns: [
+      /\bpickled?\b/,
+      /\bpreserved\b/,
+      /\bfermented\b/,
+      /\bkimchi\b/,
+      /\bcapers?\b/,
+      /\bolives?\b/,
+      /\bsauerkraut\b/,
+      /\banchov(y|ies)\b/,
+    ],
+  },
+  {
+    category: 'Condiments & Sauces',
+    patterns: [
+      /\bsauce\b/,
+      /\bpaste\b/,
+      /\bgochujang\b/,
+      /\bmiso\b/,
+      /\btahini\b/,
+      /\bmustard\b/,
+      /\bvinegar\b/,
+      /\bsoy\b/,
+      /\bfish sauce\b/,
+      /\bhot sauce\b/,
+      /\bchutney\b/,
+      /\bsalsa\b/,
+    ],
+  },
+  {
+    category: 'Meat & Protein',
+    patterns: [
+      /\bchicken\b/,
+      /\bbeef\b/,
+      /\bpork\b/,
+      /\bbacon\b/,
+      /\bham\b/,
+      /\blamb\b/,
+      /\btofu\b/,
+      /\btempeh\b/,
+      /\beggs?\b/,
+      /\bbeans?\b/,
+      /\blentils?\b/,
+      /\bfish\b/,
+      /\bshrimp\b/,
+    ],
+  },
+];
 
 function cleanLines(markdown: string): string[] {
   return markdown.replace(/\r\n/g, '\n').split('\n');
@@ -91,13 +180,45 @@ export function populatedPreferenceSections(markdown: string): Array<{
   });
 }
 
-export function preferenceSections(markdown: string): Array<{
-  heading: PreferenceHeading;
-  lines: string[];
-}> {
+export function preferenceSections(markdown: string): PreferenceSection[] {
   const sections = parseSections(markdown);
   return PREFERENCE_HEADINGS.map((heading) => ({
     heading,
     lines: (sections.get(heading) ?? []).filter((line) => line.trim()),
   }));
+}
+
+export function replacePreferenceSection(
+  markdown: string,
+  heading: PreferenceHeading,
+  lines: string[],
+): string {
+  const sections = parseSections(markdown);
+  const cleanLines = lines
+    .map((line) => line.trim().replace(/^[-*]\s*/, ''))
+    .filter(Boolean)
+    .map((line) => `- ${line}`);
+
+  if (cleanLines.length > 0) {
+    sections.set(heading, cleanLines);
+  } else {
+    sections.delete(heading);
+  }
+
+  return renderSections(sections);
+}
+
+export function cleanPreferenceLine(line: string): string {
+  return line
+    .trim()
+    .replace(/^[-*]\s*/, '')
+    .replace(/\s+/g, ' ');
+}
+
+export function inferSpecialtyIngredientCategory(ingredient: string): SpecialtyIngredientCategory {
+  const normalized = ingredient.toLowerCase();
+  const match = specialtyCategoryPatterns.find(({ patterns }) =>
+    patterns.some((pattern) => pattern.test(normalized)),
+  );
+  return match?.category ?? 'Other';
 }

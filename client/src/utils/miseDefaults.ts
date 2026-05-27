@@ -3,6 +3,7 @@ import type { TPreset } from 'librechat-data-provider';
 
 export const MISE_DEFAULT_ENDPOINT = 'OpenRouter';
 export const MISE_DEFAULT_MODEL = 'google/gemini-3.1-flash-lite';
+export const MISE_ASSISTANT_NAME = 'Samwise';
 
 const migrationKey = 'mise.defaultModelPreference.v1';
 

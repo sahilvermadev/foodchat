@@ -1,15 +1,44 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ListFilter, MoreHorizontal, Plus, Search, Users, X } from 'lucide-react';
-import { Input } from '@librechat/client';
-import type { RecipeTimeBucket, SavedRecipe, SavedRecipesQuery } from 'librechat-data-provider';
+import {
+  ListFilter,
+  LoaderCircle,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Input,
+  OGDialog,
+  OGDialogTemplate,
+  useToastContext,
+} from '@librechat/client';
+import type {
+  RecipeTimeBucket,
+  SavedRecipeSummary,
+  SavedRecipesQuery,
+} from 'librechat-data-provider';
 import type { TranslationKeys } from '~/hooks';
-import { useRecipesQuery } from '~/data-provider';
+import { useDeleteSavedRecipeMutation, useRecipesQuery } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
-import { recipeDisplayTitle } from './recipe';
+import { ProtectedImage } from '~/components/ui';
 
-type FilterKey = 'cuisine' | 'mealType' | 'diet' | 'timeBucket' | 'mainIngredient' | 'equipment';
+type FilterKey =
+  | 'documentType'
+  | 'cuisine'
+  | 'mealType'
+  | 'diet'
+  | 'timeBucket'
+  | 'mainIngredient'
+  | 'equipment';
 type FilterGroup = {
   key: FilterKey;
   labelKey: TranslationKeys;
@@ -21,6 +50,7 @@ type ActiveFilter = {
   value: string;
 };
 const filterKeys: FilterKey[] = [
+  'documentType',
   'cuisine',
   'mealType',
   'diet',
@@ -29,6 +59,7 @@ const filterKeys: FilterKey[] = [
   'equipment',
 ];
 const filterLabelKeys: Record<FilterKey, TranslationKeys> = {
+  documentType: 'com_recipes_filter_document_type',
   cuisine: 'com_recipes_filter_cuisine',
   mealType: 'com_recipes_filter_meal_type',
   diet: 'com_recipes_filter_diet',
@@ -96,7 +127,7 @@ function arrayChips(value: unknown): string[] {
     : [];
 }
 
-function chips(recipe: SavedRecipe): string[] {
+function chips(recipe: SavedRecipeSummary): string[] {
   const categorization = recipe.categorization;
   if (!categorization) {
     return [];
@@ -114,8 +145,13 @@ function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
-function filterGroups(recipes: SavedRecipe[]): FilterGroup[] {
+function filterGroups(recipes: SavedRecipeSummary[]): FilterGroup[] {
   const groups: FilterGroup[] = [
+    {
+      key: 'documentType',
+      labelKey: filterLabelKeys.documentType,
+      values: unique(recipes.map((recipe) => recipe.documentType)),
+    },
     {
       key: 'cuisine',
       labelKey: filterLabelKeys.cuisine,
@@ -181,9 +217,9 @@ function formatRecipeDate(value?: string): string {
   }).format(date);
 }
 
-function recipeDescription(recipe: SavedRecipe): string {
-  const description = recipe.shortDescription?.trim() || recipe.recipe?.description?.trim();
-  const title = recipeDisplayTitle(recipe).toLowerCase();
+function recipeDescription(recipe: SavedRecipeSummary): string {
+  const description = recipe.shortDescription?.trim();
+  const title = recipe.title.toLowerCase();
 
   if (!description || description.toLowerCase() === title) {
     return '';
@@ -194,12 +230,15 @@ function recipeDescription(recipe: SavedRecipe): string {
 
 export default function RecipeLibrary() {
   const localize = useLocalize();
+  const { showToast } = useToastContext();
   const [query, setQuery] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [recipeToDelete, setRecipeToDelete] = useState<SavedRecipeSummary | null>(null);
   const params = useMemo<SavedRecipesQuery>(
     () => ({
       q: query,
+      documentType: filters.documentType as SavedRecipesQuery['documentType'],
       cuisine: filters.cuisine,
       mealType: filters.mealType,
       diet: filters.diet,
@@ -214,7 +253,9 @@ export default function RecipeLibrary() {
     refetchInterval: (data) =>
       data?.recipes.some(
         (recipe) =>
-          recipe.categorizationStatus === 'pending' || recipe.illustrationStatus === 'pending',
+          recipe.categorizationStatus === 'pending' ||
+          recipe.illustrationStatus === 'pending' ||
+          recipe.illustrationStatus === 'generating',
       )
         ? 3000
         : false,
@@ -224,6 +265,7 @@ export default function RecipeLibrary() {
   const filterOptionRecipes = filterOptionsQuery.data?.recipes ?? recipes;
   const groups = useMemo(() => filterGroups(filterOptionRecipes), [filterOptionRecipes]);
   const selectedFilters = useMemo(() => activeFilters(filters), [filters]);
+  const deleteRecipe = useDeleteSavedRecipeMutation();
 
   const setFilter = (key: FilterKey, value: string) => {
     setFilters((current) => ({
@@ -239,6 +281,21 @@ export default function RecipeLibrary() {
       ...current,
       [key]: '',
     }));
+  const confirmDelete = () => {
+    if (!recipeToDelete || deleteRecipe.isLoading) {
+      return;
+    }
+
+    deleteRecipe.mutate(recipeToDelete, {
+      onSuccess: () => {
+        showToast({ status: 'success', message: localize('com_recipes_delete_success') });
+        setRecipeToDelete(null);
+      },
+      onError: () => {
+        showToast({ status: 'error', message: localize('com_recipes_delete_error') });
+      },
+    });
+  };
   const recipeCountLabel =
     recipes.length === 1
       ? localize('com_recipes_count_short_one')
@@ -418,25 +475,33 @@ export default function RecipeLibrary() {
             {recipes.map((recipe) => {
               const description = recipeDescription(recipe);
               const updatedAt = formatRecipeDate(recipe.updatedAt);
-              const servings = recipe.recipe?.servings;
+              const servings = recipe.servings;
+              const recipeChips = chips(recipe);
 
               return (
-                <Link
+                <article
                   key={recipe._id}
-                  to={`/recipes/${recipe._id}`}
-                  className="group overflow-hidden rounded-lg border border-border-light bg-surface-primary shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)] transition-colors hover:border-surface-submit hover:bg-surface-primary-alt"
+                  className="group relative overflow-hidden rounded-lg border border-border-light bg-surface-primary shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)] transition-colors hover:border-surface-submit hover:bg-surface-primary-alt"
                 >
-                  <div className="relative aspect-[1.92/1] overflow-hidden bg-surface-hover">
+                  <Link
+                    to={`/recipes/${recipe._id}`}
+                    aria-label={localize('com_recipes_open_recipe', { 0: recipe.title })}
+                    className="absolute inset-0 z-0"
+                  />
+                  <div className="pointer-events-none relative aspect-[1.92/1] overflow-hidden bg-surface-hover">
                     {recipe.illustrationUrl ? (
-                      <img
+                      <ProtectedImage
                         src={recipe.illustrationUrl}
                         alt=""
                         className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                         loading="lazy"
+                        decoding="async"
+                        fallback={<div className="h-full w-full animate-pulse bg-surface-hover" />}
                       />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center bg-surface-hover">
-                        {recipe.illustrationStatus === 'pending' ? (
+                        {recipe.illustrationStatus === 'pending' ||
+                        recipe.illustrationStatus === 'generating' ? (
                           <div className="bg-surface-primary/50 h-10 w-10 rounded-full border border-border-heavy" />
                         ) : null}
                       </div>
@@ -447,15 +512,39 @@ export default function RecipeLibrary() {
                       </span>
                     ) : null}
                   </div>
-                  <div className="flex min-h-[178px] flex-col p-6">
+                  <div className="pointer-events-none relative flex min-h-[178px] flex-col p-6">
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <h2 className="line-clamp-2 font-serif text-[1.72rem] font-normal leading-[1.05] tracking-normal text-text-primary">
-                        {recipeDisplayTitle(recipe)}
+                        {recipe.title}
                       </h2>
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-hover text-text-secondary">
-                        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={localize('com_recipes_recipe_actions', { 0: recipe.title })}
+                            className="pointer-events-auto relative z-10 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-hover text-text-secondary transition-colors hover:bg-surface-active-alt hover:text-text-primary"
+                          >
+                            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="pointer-events-auto z-50 min-w-44"
+                        >
+                          <DropdownMenuItem
+                            variant="destructive"
+                            className="cursor-pointer"
+                            onSelect={() => setRecipeToDelete(recipe)}
+                          >
+                            <Trash2 className="size-4" aria-hidden="true" />
+                            {localize('com_recipes_delete_recipe')}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
+                    <span className="mt-3 w-fit rounded-full border border-border-light bg-surface-primary-alt px-2.5 py-1 text-xs capitalize text-text-secondary">
+                      {displayFilter(recipe.documentType)}
+                    </span>
                     {recipe.categorizationStatus === 'pending' ? (
                       <span className="mt-3 w-fit rounded-full border border-border-light bg-surface-primary-alt px-2.5 py-1 text-xs text-text-secondary">
                         {localize('com_recipes_categorizing')}
@@ -467,7 +556,9 @@ export default function RecipeLibrary() {
                       </p>
                     ) : null}
                     <div className="mt-5 flex flex-wrap gap-2 text-sm text-text-secondary">
-                      {typeof servings === 'number' && servings > 0 ? (
+                      {recipe.documentType === 'recipe' &&
+                      typeof servings === 'number' &&
+                      servings > 0 ? (
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-border-light bg-surface-primary-alt px-3 py-1.5">
                           <Users className="h-3.5 w-3.5" aria-hidden="true" />
                           {localize('com_cooking_servings_count', { 0: String(servings) })}
@@ -475,7 +566,7 @@ export default function RecipeLibrary() {
                       ) : null}
                     </div>
                     <div className="mt-auto flex flex-wrap gap-1.5 pt-4">
-                      {chips(recipe).map((chip) => (
+                      {recipeChips.map((chip) => (
                         <span
                           key={chip}
                           className={cn(
@@ -485,14 +576,14 @@ export default function RecipeLibrary() {
                           {displayFilter(chip)}
                         </span>
                       ))}
-                      {chips(recipe).length === 0 && recipe.categorizationStatus === 'failed' ? (
+                      {recipeChips.length === 0 && recipe.categorizationStatus === 'failed' ? (
                         <span className="rounded-full border border-border-light bg-surface-hover px-3 py-1.5 text-sm text-text-secondary">
                           {localize('com_recipes_saved')}
                         </span>
                       ) : null}
                     </div>
                   </div>
-                </Link>
+                </article>
               );
             })}
             <Link
@@ -516,6 +607,38 @@ export default function RecipeLibrary() {
           </div>
         ) : null}
       </div>
+      <OGDialog
+        open={recipeToDelete != null}
+        onOpenChange={(open) => {
+          if (!open && !deleteRecipe.isLoading) {
+            setRecipeToDelete(null);
+          }
+        }}
+      >
+        <OGDialogTemplate
+          showCloseButton={false}
+          title={localize('com_recipes_delete_recipe')}
+          className="max-w-[450px]"
+          main={
+            <p className="text-left text-sm text-text-primary">
+              {localize('com_recipes_delete_confirm', { 0: recipeToDelete?.title ?? '' })}
+            </p>
+          }
+          selection={
+            <button
+              type="button"
+              disabled={deleteRecipe.isLoading}
+              className="flex h-10 items-center justify-center gap-2 rounded-lg border-none bg-surface-destructive px-4 py-2 text-sm text-white transition-colors hover:bg-surface-destructive-hover disabled:cursor-not-allowed disabled:opacity-70"
+              onClick={confirmDelete}
+            >
+              {deleteRecipe.isLoading ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {localize('com_ui_delete')}
+            </button>
+          }
+        />
+      </OGDialog>
     </main>
   );
 }

@@ -55,6 +55,19 @@ function metadataTags(recipe: ReturnType<typeof useRecipeQuery>['data']): string
   ]).slice(0, 6);
 }
 
+function documentTypeLabel(
+  localize: ReturnType<typeof useLocalize>,
+  documentType: 'recipe' | 'guide' | 'prep_plan',
+): string {
+  if (documentType === 'prep_plan') {
+    return localize('com_cooking_document_type_prep_plan');
+  }
+  if (documentType === 'guide') {
+    return localize('com_cooking_document_type_guide');
+  }
+  return localize('com_cooking_document_type_recipe');
+}
+
 export default function RecipeDetail() {
   const localize = useLocalize();
   const { recipeId } = useParams();
@@ -64,7 +77,9 @@ export default function RecipeDetail() {
   const [draftMarkdown, setDraftMarkdown] = useState('');
   const recipeQuery = useRecipeQuery(recipeId, {
     refetchInterval: (recipe) =>
-      recipe?.categorizationStatus === 'pending' || recipe?.illustrationStatus === 'pending'
+      recipe?.categorizationStatus === 'pending' ||
+      recipe?.illustrationStatus === 'pending' ||
+      recipe?.illustrationStatus === 'generating'
         ? 3000
         : false,
   });
@@ -168,6 +183,11 @@ export default function RecipeDetail() {
                 ) : null}
               </div>
             </div>
+            {!isEditing ? (
+              <p className="mt-3 text-xs uppercase tracking-wide text-text-secondary">
+                {documentTypeLabel(localize, recipe.documentType)}
+              </p>
+            ) : null}
             {!isEditing && metadata.length > 0 ? (
               <p className="mt-4 text-sm capitalize text-text-secondary">
                 {metadata.map(displayTag).join(' · ')}

@@ -28,6 +28,7 @@ import type { TAskFunction, ExtendedFile } from '~/common';
 import useSetFilesToDelete from '~/hooks/Files/useSetFilesToDelete';
 import useGetSender from '~/hooks/Conversations/useGetSender';
 import { logger, createDualMessageContent } from '~/utils';
+import { MISE_ASSISTANT_NAME } from '~/utils/miseDefaults';
 import store, { useGetEphemeralAgent } from '~/store';
 import { startupConfigKey } from '~/data-provider';
 import { getCookingNewChatPath } from '~/components/Cooking/artifact';
@@ -256,7 +257,9 @@ export default function useChatFunctions({
     } else {
       endpointOption.key = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     }
-    const responseSender = getSender({ model: conversation?.model, ...endpointOption });
+    const responseSender = location.pathname.startsWith('/cook')
+      ? MISE_ASSISTANT_NAME
+      : getSender({ model: conversation?.model, ...endpointOption });
 
     const currentMsg: TMessage = {
       text,

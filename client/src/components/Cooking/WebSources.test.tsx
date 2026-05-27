@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/extend-expect';
@@ -46,10 +45,13 @@ describe('Cooking web sources', () => {
   test('renders cooking assistant source links from metadata', () => {
     renderSources();
 
-    const link = screen.getByRole('link', { name: 'USDA Complete Guide' });
+    const link = screen.getByRole('link', { name: /USDA Complete Guide/ });
 
     expect(link).toHaveAttribute('href', 'https://www.nifa.usda.gov/example');
     expect(screen.getByLabelText('Cooking sources')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Cooking sources' })).toBeInTheDocument();
+    expect(screen.getByText('nifa.usda.gov')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'USDA Complete Guide' })).not.toBeInTheDocument();
   });
 
   test('hides sources outside cooking assistant messages', () => {

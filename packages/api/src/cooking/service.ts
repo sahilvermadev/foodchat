@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import type {
+  ConversationCookingDocuments,
+  CookingDocumentType,
   CookingDraft,
   CookingSession,
   CookingSessionEvent,
@@ -8,8 +10,6 @@ import type {
 import type { ICookingDraft, ICookingSession } from '@librechat/data-schemas';
 import { reduceSessionEvent } from './reducer';
 import { CookingValidationError, normalizeRecipe } from './validation';
-
-const draftTtlMs = 1000 * 60 * 60 * 24 * 14;
 
 function idOf(doc: { _id: unknown }): string {
   return String(doc._id);
@@ -38,9 +38,11 @@ function serializeDraft(draft: ICookingDraft): CookingDraft {
     ...(draft.conversationId ? { conversationId: draft.conversationId } : {}),
     prompt: draft.prompt,
     status: draft.status,
+    documentType: draft.documentType ?? 'recipe',
+    selected: draft.selected ?? false,
     ...(draft.documentMarkdown ? { documentMarkdown: draft.documentMarkdown } : {}),
     recipe: serializeStructuredRecipe(draft.recipe),
-    expiresAt: iso(draft.expiresAt),
+    ...(draft.expiresAt ? { expiresAt: iso(draft.expiresAt) } : {}),
     createdAt: iso(draft.createdAt),
     updatedAt: iso(draft.updatedAt),
   };
@@ -77,6 +79,21 @@ function assertPrompt(prompt: string): string {
     throw new CookingValidationError('Prompt is required.');
   }
   return clean;
+}
+
+function assertDocumentType(documentType?: CookingDocumentType): CookingDocumentType {
+  if (!documentType) {
+    return 'recipe';
+  }
+  if (documentType === 'recipe' || documentType === 'guide' || documentType === 'prep_plan') {
+    return documentType;
+  }
+  throw new CookingValidationError('Cooking document type is malformed.');
+}
+
+function markdownTitle(markdown?: string): string | undefined {
+  const title = markdown?.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  return title && title !== '{' && title !== '}' ? title : undefined;
 }
 
 function blankRecipe(title: string): StructuredRecipe {
@@ -119,42 +136,109 @@ export async function generateCookingDraft(
   prompt: string,
   conversationId?: string,
   documentMarkdown?: string,
+  documentType?: CookingDocumentType,
 ): Promise<CookingDraft> {
   const { Draft } = models();
   const cleanPrompt = assertPrompt(prompt);
-  const recipe = normalizeRecipe(blankRecipe(cleanPrompt));
   const cleanDocumentMarkdown = documentMarkdown?.trim();
+  const recipe = normalizeRecipe(blankRecipe(markdownTitle(cleanDocumentMarkdown) ?? cleanPrompt));
+  const selectedDocumentType = assertDocumentType(documentType);
   const payload = {
     user,
     ...(conversationId ? { conversationId } : {}),
     prompt: cleanPrompt,
     status: 'active',
+    documentType: selectedDocumentType,
+    selected: true,
     ...(cleanDocumentMarkdown ? { documentMarkdown: cleanDocumentMarkdown } : {}),
     recipe,
-    expiresAt: new Date(Date.now() + draftTtlMs),
   };
-  const draft = conversationId
-    ? await Draft.findOneAndUpdate(
-        { user, conversationId, status: 'active' },
-        { $set: payload },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
-      )
-    : await Draft.create(payload);
+  if (conversationId) {
+    await Draft.updateMany(
+      { user, conversationId, status: 'active', selected: true },
+      { $set: { selected: false } },
+    );
+  }
+  const draft = await Draft.create(payload);
   return serializeDraft(draft);
 }
 
-export async function getCookingDraftByConversation(
+export const createCookingDocument = generateCookingDraft;
+
+export async function listCookingDocuments(
+  user: string,
+  conversationId: string,
+): Promise<ConversationCookingDocuments> {
+  const { Draft } = models();
+  let documents = await Draft.find({ user, conversationId, status: 'active' }).sort({
+    updatedAt: -1,
+  });
+  if (!documents.length) {
+    return { documents: [] };
+  }
+  let selectedDocument = documents.find((document) => document.selected);
+  if (!selectedDocument) {
+    selectedDocument = documents[0];
+    await Draft.updateOne({ _id: selectedDocument._id, user }, { $set: { selected: true } });
+    documents = documents.map((document) => {
+      if (idOf(document) === idOf(selectedDocument!)) {
+        document.selected = true;
+      }
+      return document;
+    });
+  }
+  return {
+    documents: documents.map(serializeDraft),
+    selectedDocumentId: idOf(selectedDocument),
+  };
+}
+
+export async function getSelectedCookingDocument(
   user: string,
   conversationId: string,
 ): Promise<CookingDraft | null> {
+  const collection = await listCookingDocuments(user, conversationId);
+  return (
+    collection.documents.find((document) => document._id === collection.selectedDocumentId) ?? null
+  );
+}
+
+export const getCookingDraftByConversation = getSelectedCookingDocument;
+
+export async function selectCookingDocument(
+  user: string,
+  documentId: string,
+): Promise<ConversationCookingDocuments | null> {
   const { Draft } = models();
-  const draft = await Draft.findOne({
-    user,
-    conversationId,
-    status: 'active',
-    expiresAt: { $gt: new Date() },
-  }).sort({ updatedAt: -1 });
-  return draft ? serializeDraft(draft) : null;
+  const selected = await Draft.findOne({ _id: documentId, user, status: 'active' });
+  if (!selected?.conversationId) {
+    return null;
+  }
+  await Draft.updateMany(
+    { user, conversationId: selected.conversationId, status: 'active' },
+    { $set: { selected: false } },
+  );
+  await Draft.updateOne({ _id: selected._id, user }, { $set: { selected: true } });
+  return listCookingDocuments(user, selected.conversationId);
+}
+
+export async function deleteCookingDocument(
+  user: string,
+  documentId: string,
+): Promise<ConversationCookingDocuments | null> {
+  const { Draft } = models();
+  const deleted = await Draft.findOneAndDelete({ _id: documentId, user, status: 'active' });
+  if (!deleted) {
+    return null;
+  }
+  if (!deleted.conversationId) {
+    return { documents: [] };
+  }
+  const collection = await listCookingDocuments(user, deleted.conversationId);
+  if (!deleted.selected || !collection.documents.length) {
+    return collection;
+  }
+  return selectCookingDocument(user, collection.documents[0]._id);
 }
 
 export async function updateCookingDraft(
@@ -164,12 +248,19 @@ export async function updateCookingDraft(
   documentMarkdown?: string,
 ): Promise<CookingDraft | null> {
   const { Draft } = models();
-  const set: Partial<Pick<ICookingDraft, 'recipe' | 'documentMarkdown'>> = {};
+  const set: Partial<Pick<ICookingDraft, 'recipe' | 'documentMarkdown'>> & {
+    'recipe.title'?: string;
+  } = {};
+  const cleanDocumentMarkdown = documentMarkdown?.trim();
+  const documentTitle = markdownTitle(cleanDocumentMarkdown);
   if (recipe) {
-    set.recipe = normalizeRecipe(recipe);
+    set.recipe = normalizeRecipe(documentTitle ? { ...recipe, title: documentTitle } : recipe);
   }
   if (typeof documentMarkdown === 'string') {
     set.documentMarkdown = documentMarkdown.trim();
+    if (!recipe && documentTitle) {
+      set['recipe.title'] = documentTitle;
+    }
   }
   if (!set.recipe && set.documentMarkdown == null) {
     throw new CookingValidationError('Draft update is empty.');
@@ -181,6 +272,8 @@ export async function updateCookingDraft(
   );
   return draft ? serializeDraft(draft) : null;
 }
+
+export const updateCookingDocument = updateCookingDraft;
 
 export async function startCookingSession(params: {
   user: string;

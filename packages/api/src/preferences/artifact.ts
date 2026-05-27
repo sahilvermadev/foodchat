@@ -5,6 +5,7 @@ export const PREFERENCE_HEADINGS = [
   'Cooking Level',
   'Household',
   'Kitchen',
+  'Specialty Ingredients',
   'Taste',
   'Goals',
   'Location',
@@ -46,6 +47,8 @@ const headingKeywords: Record<PreferenceHeading, RegExp> = {
   Household: /\b(parent|mom|dad|family|people|serving|household|cook for|meal prep)\b/i,
   Kitchen:
     /\b(oven|microwave|griddle|grill|bbq|freezer|blender|juicer|air ?fryer|stove|pan|equipment|appliance|cookware)\b/i,
+  'Specialty Ingredients':
+    /\b(ingredient|pantry|fridge|freezer|on hand|usually keep|keep around|stock|condiment|sauce|paste|pickle|preserve|cheese|miso|gochujang|capers|olives|anchov|kimchi|harissa|tahini|mustard)\b/i,
   Taste:
     /\b(spicy|savou?ry|sweet|sour|bitter|fresh|herby|texture|mouthfeel|flavo[u]?r|tasty|authentic)\b/i,
   Goals:
@@ -65,6 +68,8 @@ const nextQuestions: Record<PreferenceHeading, string> = {
     'How would you describe your cooking level and the kind of difficulty you enjoy?',
   Household: 'Who do you usually cook for, and how many servings should I assume?',
   Kitchen: 'What equipment should I assume you have or do not have?',
+  'Specialty Ingredients':
+    'Are there specialty ingredients, condiments, cheeses, pickles, sauces, or pastes you usually keep around?',
   Taste: 'Are there flavors or textures you especially like or dislike?',
   Goals:
     'What are you usually trying to get from this app: speed, authenticity, learning, entertaining, or something else?',

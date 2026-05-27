@@ -4,7 +4,6 @@ import { useRecoilValue } from 'recoil';
 import type { TMessageAudio } from '~/common';
 import { VolumeIcon, VolumeMuteIcon, Spinner } from '@librechat/client';
 import { useLocalize, useTTSBrowser, useTTSExternal } from '~/hooks';
-import { logger } from '~/utils';
 import store from '~/store';
 
 export function BrowserTTS({
@@ -47,12 +46,6 @@ export function BrowserTTS({
     }
   }, [audioRef, isSpeaking, playbackRate, messageId]);
 
-  logger.log(
-    'MessageAudio: audioRef.current?.src, audioRef.current',
-    audioRef.current?.src,
-    audioRef.current,
-  );
-
   const handleClick = () => {
     if (audioRef.current) {
       audioRef.current.muted = false;
@@ -88,10 +81,6 @@ export function BrowserTTS({
           display: 'none',
           height: '0px',
           width: '0px',
-        }}
-        src={audioRef.current?.src}
-        onError={(error) => {
-          logger.error('Error fetching audio:', error);
         }}
         id={`audio-${messageId}`}
         autoPlay
@@ -140,12 +129,6 @@ export function ExternalTTS({
     }
   }, [audioRef, isSpeaking, playbackRate, messageId]);
 
-  logger.log(
-    'MessageAudio: audioRef.current?.src, audioRef.current',
-    audioRef.current?.src,
-    audioRef.current,
-  );
-
   return (
     <>
       {renderButton ? (
@@ -186,10 +169,6 @@ export function ExternalTTS({
           display: 'none',
           height: '0px',
           width: '0px',
-        }}
-        src={audioRef.current?.src}
-        onError={(error) => {
-          logger.error('Error fetching audio:', error);
         }}
         id={`audio-${messageId}`}
         autoPlay

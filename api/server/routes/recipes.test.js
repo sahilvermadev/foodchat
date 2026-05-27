@@ -23,8 +23,10 @@ jest.mock('@librechat/api', () => {
 
   return {
     CookingValidationError,
+    deleteSavedRecipe: jest.fn(),
     getRecipe: jest.fn(),
     getRecipeByDraft: jest.fn(),
+    getRecipeIllustration: jest.fn(),
     listRecipes: jest.fn(),
     saveRecipe: jest.fn(),
     updateSavedRecipe: jest.fn(),
@@ -67,7 +69,12 @@ describe('recipes routes', () => {
     recipesApi.listRecipes.mockResolvedValue({ recipes: [] });
     recipesApi.getRecipe.mockResolvedValue({ _id: 'recipe-1' });
     recipesApi.getRecipeByDraft.mockResolvedValue({ _id: 'recipe-1' });
+    recipesApi.getRecipeIllustration.mockResolvedValue({
+      buffer: Buffer.from('cached-image'),
+      contentType: 'image/webp',
+    });
     recipesApi.updateSavedRecipe.mockResolvedValue({ _id: 'recipe-1' });
+    recipesApi.deleteSavedRecipe.mockResolvedValue(true);
   });
 
   test('blocks unauthenticated requests', async () => {
@@ -90,6 +97,7 @@ describe('recipes routes', () => {
       .patch('/api/recipes/recipe-1')
       .send({ documentMarkdown: '# Soup v2' })
       .expect(200, { _id: 'recipe-1' });
+    await request(app).delete('/api/recipes/recipe-1').expect(204);
 
     expect(recipesApi.saveRecipe).toHaveBeenCalledWith('auth-user', {
       title: 'Body title',
@@ -105,6 +113,18 @@ describe('recipes routes', () => {
     expect(recipesApi.updateSavedRecipe).toHaveBeenCalledWith('auth-user', 'recipe-1', {
       documentMarkdown: '# Soup v2',
     });
+    expect(recipesApi.deleteSavedRecipe).toHaveBeenCalledWith('auth-user', 'recipe-1');
+  });
+
+  test('serves versioned thumbnail illustrations with browser caching', async () => {
+    const response = await request(app)
+      .get('/api/recipes/recipe-1/illustration?variant=thumbnail&v=1')
+      .expect(200)
+      .expect('Content-Type', /image\/webp/)
+      .expect('Cache-Control', 'private, max-age=31536000, immutable');
+
+    expect(response.body).toEqual(Buffer.from('cached-image'));
+    expect(recipesApi.getRecipeIllustration).toHaveBeenCalledWith('auth-user', 'recipe-1', true);
   });
 
   test.each([
@@ -122,6 +142,13 @@ describe('recipes routes', () => {
       'patch',
       '/recipe-1',
       { documentMarkdown: '# Soup' },
+    ],
+    [
+      'delete recipe',
+      () => recipesApi.deleteSavedRecipe.mockResolvedValue(false),
+      'delete',
+      '/recipe-1',
+      null,
     ],
   ])('%s maps service null to 404', async (_name, setup, method, path, body) => {
     setup();

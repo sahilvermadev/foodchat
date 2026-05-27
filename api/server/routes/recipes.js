@@ -1,8 +1,10 @@
 const express = require('express');
 const {
   CookingValidationError,
+  deleteSavedRecipe,
   getRecipe,
   getRecipeByDraft,
+  getRecipeIllustration,
   listRecipes,
   saveRecipe,
   updateSavedRecipe,
@@ -45,12 +47,19 @@ function assertRecipe(value) {
   }
 }
 
+function assertDocumentType(value) {
+  if (value != null && !['recipe', 'guide', 'prep_plan'].includes(value)) {
+    throw new CookingValidationError('Cooking document type is malformed.');
+  }
+}
+
 function assertSaveBody(body) {
   const payload = isObject(body) ? body : {};
   assertDocumentMarkdown(payload.documentMarkdown);
   assertOptionalText(payload.title, 'Recipe title is malformed.');
   assertOptionalText(payload.sourceConversationId, 'Conversation id is malformed.');
   assertOptionalText(payload.sourceDraftId, 'Draft id is malformed.');
+  assertDocumentType(payload.documentType);
   if (payload.recipe != null) {
     assertRecipe(payload.recipe);
   }
@@ -59,6 +68,7 @@ function assertSaveBody(body) {
 function assertPatchBody(body) {
   const payload = isObject(body) ? body : {};
   assertOptionalText(payload.title, 'Recipe title is malformed.');
+  assertDocumentType(payload.documentType);
   if (payload.documentMarkdown != null) {
     assertDocumentMarkdown(payload.documentMarkdown);
   }
@@ -75,6 +85,18 @@ function handleError(res, error) {
     return res.status(400).json({ error: error.message });
   }
   return res.status(500).json({ error: error.message });
+}
+
+function sendIllustration(res, illustration) {
+  if (!illustration) {
+    return res.sendStatus(404);
+  }
+
+  res.set({
+    'Cache-Control': 'private, max-age=31536000, immutable',
+    'Content-Type': illustration.contentType,
+  });
+  return res.send(illustration.buffer);
 }
 
 router.post('/', async (req, res) => {
@@ -108,6 +130,19 @@ router.get('/by-draft/:draftId', async (req, res) => {
   }
 });
 
+router.get('/:id/illustration', async (req, res) => {
+  try {
+    const illustration = await getRecipeIllustration(
+      userId(req),
+      req.params.id,
+      req.query.variant === 'thumbnail',
+    );
+    return sendIllustration(res, illustration);
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const recipe = await getRecipe(userId(req), req.params.id);
@@ -130,6 +165,18 @@ router.patch('/:id', async (req, res) => {
     res.json(recipe);
   } catch (error) {
     handleError(res, error);
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const deleted = await deleteSavedRecipe(userId(req), req.params.id);
+    if (!deleted) {
+      return res.sendStatus(404);
+    }
+    return res.sendStatus(204);
+  } catch (error) {
+    return handleError(res, error);
   }
 });
 

@@ -51,6 +51,11 @@ jest.mock('@librechat/api', () => {
     })),
     getExistingPreferences: jest.fn(),
     getCookingDraftByConversation: jest.fn(),
+    listCookingDocuments: jest.fn(),
+    createCookingDocument: jest.fn(),
+    selectCookingDocument: jest.fn(),
+    deleteCookingDocument: jest.fn(),
+    updateCookingDocument: jest.fn(),
     generateCookingDraft: jest.fn(),
     updateCookingDraft: jest.fn(),
     startCookingSession: jest.fn(),
@@ -117,6 +122,14 @@ describe('cooking routes', () => {
     cookingApi.updateCookingDraft.mockResolvedValue({ _id: 'draft-1' });
     cookingApi.getExistingPreferences.mockResolvedValue(null);
     cookingApi.getCookingDraftByConversation.mockResolvedValue(null);
+    cookingApi.listCookingDocuments.mockResolvedValue({ documents: [] });
+    cookingApi.createCookingDocument.mockResolvedValue({ _id: 'document-1' });
+    cookingApi.updateCookingDocument.mockResolvedValue({ _id: 'document-1' });
+    cookingApi.selectCookingDocument.mockResolvedValue({
+      documents: [{ _id: 'document-1', selected: true }],
+      selectedDocumentId: 'document-1',
+    });
+    cookingApi.deleteCookingDocument.mockResolvedValue({ documents: [] });
     cookingApi.curatePendingPreferences.mockResolvedValue({
       attempted: false,
       changed: false,
@@ -169,6 +182,31 @@ describe('cooking routes', () => {
     expect(draftResponse.status).toBe(201);
   });
 
+  test('document endpoints create, list, select, update, and delete cooking documents', async () => {
+    await request(app)
+      .post('/api/cooking/documents')
+      .send({ prompt: 'Starter', conversationId: 'conversation-1', documentType: 'guide' })
+      .expect(201, { _id: 'document-1' });
+    await request(app)
+      .get('/api/cooking/documents/by-conversation/conversation-1')
+      .expect(200, { documents: [] });
+    await request(app)
+      .patch('/api/cooking/documents/document-1')
+      .send({ documentMarkdown: '# Starter' })
+      .expect(200, { _id: 'document-1' });
+    await request(app).post('/api/cooking/documents/document-1/select').expect(200);
+    await request(app).delete('/api/cooking/documents/document-1').expect(200, { documents: [] });
+
+    expect(cookingApi.createCookingDocument).toHaveBeenCalledWith(
+      'auth-user',
+      'Starter',
+      'conversation-1',
+      undefined,
+      'guide',
+    );
+    expect(cookingApi.listCookingDocuments).toHaveBeenCalledWith('auth-user', 'conversation-1');
+  });
+
   test('passes authenticated user id into every service call', async () => {
     await request(app)
       .post('/api/cooking/drafts/generate')
@@ -190,6 +228,7 @@ describe('cooking routes', () => {
     expect(cookingApi.generateCookingDraft).toHaveBeenCalledWith(
       'auth-user',
       'Soup',
+      undefined,
       undefined,
       undefined,
     );
@@ -241,6 +280,7 @@ describe('cooking routes', () => {
         conversationId: 'conversation-1',
         text: 'I prefer spicy weeknight dinners',
         preferencesMarkdown: '## Safety\n- Avoid peanuts',
+        documents: [],
         webSearchConfig: mockWebSearchConfig,
         loadAuthValues: expect.any(Function),
         conversationCreatedAt: expect.any(Date),
@@ -309,6 +349,7 @@ describe('cooking routes', () => {
       expect.anything(),
       expect.objectContaining({
         messageId: 'message-2',
+        sender: 'Samwise',
         metadata: {
           cookingPromptSuggestions: [
             'How should I prep this for a weeknight dinner?',

@@ -21,6 +21,16 @@ type RecipeCanvasProps = {
   isPreparingDraft?: boolean;
 };
 
+function documentTypeKey(draft: CookingDraft) {
+  if (draft.documentType === 'prep_plan') {
+    return 'com_cooking_document_type_prep_plan' as const;
+  }
+  if (draft.documentType === 'guide') {
+    return 'com_cooking_document_type_guide' as const;
+  }
+  return 'com_cooking_document_type_recipe' as const;
+}
+
 function recipeToMarkdown(recipe: StructuredRecipe): string {
   const timing = [
     recipe.timing.prepMinutes ? `Prep ${recipe.timing.prepMinutes}m` : '',
@@ -63,7 +73,9 @@ export default function RecipeCanvas({
   const savedRecipeQuery = useSavedRecipeByDraftQuery(draft?._id, {
     enabled: Boolean(draft?._id),
     refetchInterval: (recipe) =>
-      recipe?.categorizationStatus === 'pending' || recipe?.illustrationStatus === 'pending'
+      recipe?.categorizationStatus === 'pending' ||
+      recipe?.illustrationStatus === 'pending' ||
+      recipe?.illustrationStatus === 'generating'
         ? 3000
         : false,
   });
@@ -88,20 +100,23 @@ export default function RecipeCanvas({
   const hasChangedSavedRecipe =
     hasSavedRecipe && savedRecipe?.documentMarkdown.trim() !== documentMarkdown.trim();
   const isSaving = saveRecipe.isLoading || updateSavedRecipe.isLoading;
-  const buttonLabel = isSaving
-    ? localize('com_recipes_saving')
-    : hasChangedSavedRecipe
-      ? localize('com_recipes_update_saved')
-      : hasSavedRecipe
-        ? localize('com_recipes_saved')
-        : localize('com_recipes_save_recipe');
-  const saveIcon = isSaving ? (
-    <RefreshCw className="h-4 w-4 animate-spin" aria-hidden="true" />
-  ) : hasSavedRecipe && !hasChangedSavedRecipe ? (
-    <BookmarkCheck className="h-4 w-4" aria-hidden="true" />
-  ) : (
-    <BookmarkPlus className="h-4 w-4" aria-hidden="true" />
-  );
+  let buttonLabel = localize('com_recipes_save_recipe');
+  if (hasSavedRecipe) {
+    buttonLabel = localize('com_recipes_saved');
+  }
+  if (hasChangedSavedRecipe) {
+    buttonLabel = localize('com_recipes_update_saved');
+  }
+  if (isSaving) {
+    buttonLabel = localize('com_recipes_saving');
+  }
+  let saveIcon = <BookmarkPlus className="h-4 w-4" aria-hidden="true" />;
+  if (hasSavedRecipe && !hasChangedSavedRecipe) {
+    saveIcon = <BookmarkCheck className="h-4 w-4" aria-hidden="true" />;
+  }
+  if (isSaving) {
+    saveIcon = <RefreshCw className="h-4 w-4 animate-spin" aria-hidden="true" />;
+  }
   const documentParts = recipeMarkdownDisplay(documentMarkdown, draft?.recipe.title);
 
   const handleCopyMarkdown = () => {
@@ -123,6 +138,7 @@ export default function RecipeCanvas({
 
     const payload = {
       title: draft.recipe.title,
+      documentType: draft.documentType,
       documentMarkdown,
       recipe: draft.recipe,
       sourceDraftId: draft._id,
@@ -143,7 +159,7 @@ export default function RecipeCanvas({
   };
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col bg-surface-primary-alt text-text-primary">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-primary-alt text-text-primary">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7 lg:px-10">
         <article className="mx-auto min-h-full max-w-[56rem] rounded-lg border border-border-light bg-surface-primary shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)]">
           {documentMarkdown ? (
@@ -154,6 +170,11 @@ export default function RecipeCanvas({
                     <h1 className="font-serif text-3xl font-normal leading-tight tracking-normal text-text-primary sm:text-4xl">
                       {documentParts.title}
                     </h1>
+                  ) : null}
+                  {draft ? (
+                    <p className="mt-2 text-xs uppercase tracking-wide text-text-secondary">
+                      {localize(documentTypeKey(draft))}
+                    </p>
                   ) : null}
                   {savedRecipe?.categorizationStatus === 'pending' ? (
                     <p className="mt-2 text-xs text-text-secondary">

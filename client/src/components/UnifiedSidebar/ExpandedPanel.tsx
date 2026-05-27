@@ -1,14 +1,16 @@
 import { memo, useCallback, lazy, Suspense } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilValue } from 'recoil';
+import { useLocation } from 'react-router-dom';
 import { SquarePen } from 'lucide-react';
 import { QueryKeys } from 'librechat-data-provider';
 import { Skeleton, Button, TooltipAnchor, ThemeSelector } from '@librechat/client';
 import type { NavLink } from '~/common';
-import { useActivePanel, resolveActivePanel, DEFAULT_PANEL } from '~/Providers';
+import { useActivePanel, DEFAULT_PANEL } from '~/Providers';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { clearMessagesCache, cn } from '~/utils';
 import store from '~/store';
+import { resolveRenderedPanel } from '~/components/SidePanel/panelSelection';
 
 const AccountSettings = lazy(() => import('~/components/Nav/AccountSettings'));
 
@@ -131,8 +133,9 @@ function ExpandedPanel({
   onExpand?: () => void;
 }) {
   const localize = useLocalize();
+  const location = useLocation();
   const { active, setActive } = useActivePanel();
-  const effectiveActive = resolveActivePanel(active, links);
+  const renderedPanel = resolveRenderedPanel(active, links, location.pathname);
 
   return (
     <div
@@ -168,7 +171,11 @@ function ExpandedPanel({
             <NavIconButton
               key={link.id}
               link={link}
-              isActive={link.id === effectiveActive}
+              isActive={
+                link.Component
+                  ? link.id === renderedPanel
+                  : Boolean(link.isActive?.(location.pathname))
+              }
               expanded={expanded ?? true}
               setActive={setActive}
               onExpand={onExpand}
