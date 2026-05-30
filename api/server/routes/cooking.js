@@ -345,6 +345,8 @@ router.post('/chat', async (req, res) => {
         ? { cookingPromptSuggestions: result.promptSuggestions }
         : {}),
       ...(result.webSources?.length ? { cookingWebSources: result.webSources } : {}),
+      ...(result.activeIntent ? { cookingActiveIntent: result.activeIntent } : {}),
+      ...(result.activeAction ? { cookingActiveAction: result.activeAction } : {}),
     };
     const responseMessage = {
       messageId: responseMessageId,
@@ -505,13 +507,30 @@ router.post('/documents', async (req, res) => {
     assertOptionalText(req.body?.conversationId, 'Conversation id is malformed.');
     assertOptionalText(req.body?.documentMarkdown, 'Cooking document is malformed.');
     assertDocumentType(req.body?.documentType);
+    if (req.body?.recipe != null) {
+      assertRecipe(req.body.recipe);
+    }
     const document = await createCookingDocument(
       userId(req),
       req.body.prompt,
       req.body.conversationId,
       req.body.documentMarkdown,
       req.body.documentType,
+      req.body.recipe,
     );
+    if (req.body.conversationId) {
+      const db = models();
+      const reqCtx = requestContext(req);
+      await db.saveConvo(
+        reqCtx,
+        {
+          conversationId: req.body.conversationId,
+          endpoint: 'agents',
+          title: conversationTitle(req.body.prompt),
+        },
+        { context: 'POST /api/cooking/documents - precreate conversation' }
+      );
+    }
     res.status(201).json(document);
   } catch (error) {
     handleError(res, error);

@@ -1,9 +1,15 @@
-import { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import copy from 'copy-to-clipboard';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import supersub from 'remark-supersub';
+import rehypeKatex from 'rehype-katex';
+import ReactMarkdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
+import remarkDirective from 'remark-directive';
 import type { CookingDraft, StructuredRecipe } from 'librechat-data-provider';
-import { BookmarkCheck, BookmarkPlus, Check, Copy, RefreshCw } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, Check, Copy, RefreshCw, Play, Pause, RotateCcw } from 'lucide-react';
 import { Button, TooltipAnchor, useToastContext } from '@librechat/client';
-import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import {
   useSaveRecipeMutation,
   useSavedRecipeByDraftQuery,
@@ -11,8 +17,129 @@ import {
 } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { NotificationSeverity } from '~/common';
+import { code, a as standardA, p, img } from '~/components/Chat/Messages/Content/MarkdownComponents';
+import { Citation, CompositeCitation, HighlightedText } from '~/components/Web/Citation';
+import { MCPUIResource, MCPUIResourceCarousel, mcpUIResourcePlugin } from '~/components/MCPUIResource';
+import { CodeBlockProvider } from '~/Providers';
+import { unicodeCitation } from '~/components/Web';
+import { langSubset } from '~/utils';
 import RecipeMetrics from './Metrics';
 import { recipeMarkdownDisplay } from './recipe';
+
+// KitchenTimer Component
+function KitchenTimer({ seconds }: { seconds: number }) {
+  const [timeLeft, setTimeLeft] = useState(seconds);
+  const [isRunning, setIsRunning] = useState(false);
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (isRunning && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+    } else if (timeLeft === 0 && isRunning) {
+      setIsRunning(false);
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const playBeep = (time: number, freq: number) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, time);
+          gain.gain.setValueAtTime(0.3, time);
+          gain.gain.exponentialRampToValueAtTime(0.01, time + 0.25);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(time);
+          osc.stop(time + 0.3);
+        };
+        // Pleasant triple high-pitch chime sound
+        playBeep(audioCtx.currentTime, 880);
+        playBeep(audioCtx.currentTime + 0.3, 880);
+        playBeep(audioCtx.currentTime + 0.6, 1200);
+      } catch (err) {
+        console.error('Audio chime failed:', err);
+      }
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRunning, timeLeft]);
+
+  const handleStartPause = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsRunning(!isRunning);
+  };
+
+  const handleReset = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsRunning(false);
+    setTimeLeft(seconds);
+  };
+
+  const minutes = Math.floor(timeLeft / 60);
+  const secs = timeLeft % 60;
+  const timeString = `${minutes}:${secs.toString().padStart(2, '0')}`;
+  const isCompleted = timeLeft === 0;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-2 px-3 py-1 mx-1.5 rounded-full text-xs font-semibold select-none border transition-all duration-300 ${
+        isCompleted
+          ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400 animate-pulse'
+          : isRunning
+          ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.05)]'
+          : 'bg-surface-active border-border-medium text-text-secondary hover:text-text-primary'
+      }`}
+      style={{ verticalAlign: 'middle' }}
+    >
+      <span className="relative flex h-3 w-3 items-center justify-center">
+        {isRunning && (
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-30"></span>
+        )}
+        <span
+          className={`relative inline-flex rounded-full h-2 w-2 ${
+            isCompleted ? 'bg-red-500' : isRunning ? 'bg-amber-500' : 'bg-text-tertiary'
+          }`}
+        ></span>
+      </span>
+      
+      <span className="font-mono text-sm leading-none">{timeString}</span>
+
+      <button
+        type="button"
+        onClick={handleStartPause}
+        className="p-0.5 rounded-full hover:bg-surface-hover transition-colors"
+        title={isRunning ? 'Pause' : 'Start'}
+      >
+        {isRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+      </button>
+
+      <button
+        type="button"
+        onClick={handleReset}
+        className="p-0.5 rounded-full hover:bg-surface-hover transition-colors"
+        title="Reset"
+      >
+        <RotateCcw className="h-3.5 w-3.5" />
+      </button>
+    </span>
+  );
+}
+
+// Custom Anchor Component
+const customA: React.ElementType = React.memo(function CustomAnchor(props: any) {
+  const { href, children } = props;
+  if (href && href.startsWith('#timer-')) {
+    const seconds = parseInt(href.substring(7), 10);
+    if (!isNaN(seconds)) {
+      return <KitchenTimer seconds={seconds} />;
+    }
+  }
+  return <standardA {...props} />;
+});
 
 type RecipeCanvasProps = {
   draft?: CookingDraft;
@@ -90,6 +217,50 @@ export default function RecipeCanvas({
     return draft ? recipeToMarkdown(draft.recipe) : '';
   }, [draft, markdown]);
 
+  const documentParts = useMemo(() => recipeMarkdownDisplay(documentMarkdown, draft?.recipe.title), [documentMarkdown, draft?.recipe.title]);
+
+  const processedBody = useMemo(() => {
+    if (!documentParts.body) {
+      return '';
+    }
+    const formatSeconds = (secStr: string) => {
+      const totalSec = parseInt(secStr, 10);
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+    return documentParts.body.replace(/\[timer:(\d+)\]/g, (match, seconds) => {
+      return `[⏱️ ${formatSeconds(seconds)}](#timer-${seconds})`;
+    });
+  }, [documentParts.body]);
+
+  const rehypePlugins = useMemo(
+    () => [
+      [rehypeKatex],
+      [
+        rehypeHighlight,
+        {
+          detect: true,
+          ignoreMissing: true,
+          subset: langSubset,
+        },
+      ],
+    ],
+    [],
+  );
+
+  const remarkPlugins = useMemo(
+    () => [
+      supersub,
+      remarkGfm,
+      remarkDirective,
+      [remarkMath, { singleDollarTextMath: false }],
+      unicodeCitation,
+      mcpUIResourcePlugin,
+    ],
+    [],
+  );
+
   if (!documentMarkdown && !isPreparingDraft) {
     return null;
   }
@@ -117,7 +288,6 @@ export default function RecipeCanvas({
   if (isSaving) {
     saveIcon = <RefreshCw className="h-4 w-4 animate-spin" aria-hidden="true" />;
   }
-  const documentParts = recipeMarkdownDisplay(documentMarkdown, draft?.recipe.title);
 
   const handleCopyMarkdown = () => {
     const copied = copy(documentMarkdown, { format: 'text/plain' });
@@ -225,7 +395,27 @@ export default function RecipeCanvas({
             <div className="px-5 py-6 sm:px-8 sm:py-7 lg:px-10">
               <RecipeMetrics metrics={documentParts.metrics} />
               <div className="cooking-recipe-markdown markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
-                <Markdown content={documentParts.body} isLatestMessage={false} />
+                <CodeBlockProvider>
+                  <ReactMarkdown
+                    remarkPlugins={remarkPlugins as any}
+                    rehypePlugins={rehypePlugins as any}
+                    components={
+                      {
+                        code,
+                        a: customA,
+                        p,
+                        img,
+                        citation: Citation,
+                        'highlighted-text': HighlightedText,
+                        'composite-citation': CompositeCitation,
+                        'mcp-ui-resource': MCPUIResource,
+                        'mcp-ui-carousel': MCPUIResourceCarousel,
+                      } as any
+                    }
+                  >
+                    {processedBody}
+                  </ReactMarkdown>
+                </CodeBlockProvider>
               </div>
             </div>
           ) : (

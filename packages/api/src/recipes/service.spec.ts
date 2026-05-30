@@ -4,7 +4,7 @@ import { createModels } from '@librechat/data-schemas';
 
 import type { StructuredRecipe } from 'librechat-data-provider';
 
-import { deleteSavedRecipe, getRecipe, listRecipes, saveRecipe } from './service';
+import { deleteSavedRecipe, getRecipe, listRecipes, saveRecipe, updateSavedRecipe, parseServingsFromMarkdown } from './service';
 import { categorizeRecipe } from './categorize';
 import { illustrateRecipe } from './illustrate';
 
@@ -14,6 +14,19 @@ jest.mock('./categorize', () => ({
 
 jest.mock('./illustrate', () => ({
   illustrateRecipe: jest.fn(),
+}));
+
+jest.mock('../illustrations/media', () => ({
+  decodeIllustrationDataUrl: jest.fn((url) => {
+    if (url === 'data:image/png;base64,mockimagedata') {
+      return { buffer: Buffer.from('mockimagedata'), contentType: 'image/png' };
+    }
+    return null;
+  }),
+  createIllustrationThumbnail: jest.fn(async (media) => ({
+    buffer: Buffer.from('thumbnail'),
+    contentType: 'image/webp',
+  })),
 }));
 
 jest.setTimeout(60000);
@@ -243,5 +256,108 @@ describe('saved recipe illustrations', () => {
 
     expect(result?.illustrationUrl).toContain(`/api/recipes/${stored._id}/illustration?v=`);
     expect(result).not.toHaveProperty('illustrationData');
+  });
+
+  test('preserves existing illustration when title is unchanged', async () => {
+    const stored = await mongoose.models.SavedRecipe.create({
+      user: 'preserve-image-user',
+      title: 'Thai Iced Tea',
+      documentMarkdown: markdown,
+      recipe: recipe('Thai Iced Tea'),
+      categorizationStatus: 'complete',
+      illustrationStatus: 'complete',
+      illustrationData: Buffer.from('illustration'),
+      illustrationContentType: 'image/png',
+      categorizationVersion: 1,
+    });
+
+    const updated = await updateSavedRecipe('preserve-image-user', String(stored._id), {
+      documentMarkdown: markdown + '\n\nExtra instruction step.',
+    });
+
+    expect(updated?.title).toBe('Thai Iced Tea');
+    expect(updated?.illustrationStatus).toBe('complete');
+    expect(updated?.illustrationUrl).toContain(`/api/recipes/${stored._id}/illustration?v=`);
+
+    const persisted = await mongoose.models.SavedRecipe.findById(stored._id).lean();
+    expect(persisted?.illustrationStatus).toBe('complete');
+    expect(persisted?.illustrationData).toBeDefined();
+    expect(illustrateRecipe).not.toHaveBeenCalled();
+  });
+
+  test('resets and regenerates illustration when title is changed', async () => {
+    const stored = await mongoose.models.SavedRecipe.create({
+      user: 'change-image-user',
+      title: 'Thai Iced Tea',
+      documentMarkdown: markdown,
+      recipe: recipe('Thai Iced Tea'),
+      categorizationStatus: 'complete',
+      illustrationStatus: 'complete',
+      illustrationData: Buffer.from('illustration'),
+      illustrationContentType: 'image/png',
+      categorizationVersion: 1,
+    });
+
+    jest.mocked(illustrateRecipe).mockResolvedValueOnce({
+      illustrationUrl: 'data:image/png;base64,mockimagedata',
+      model: 'mock-model',
+    });
+
+    const updated = await updateSavedRecipe('change-image-user', String(stored._id), {
+      title: 'Green Iced Tea',
+      documentMarkdown: markdown.replace('Thai Iced Tea', 'Green Iced Tea'),
+    });
+
+    expect(updated?.title).toBe('Green Iced Tea');
+    expect(updated?.illustrationStatus).toBe('pending');
+
+    let persisted = await mongoose.models.SavedRecipe.findById(stored._id).lean();
+    for (let attempt = 0; attempt < 30 && persisted?.illustrationStatus !== 'complete'; attempt += 1) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      persisted = await mongoose.models.SavedRecipe.findById(stored._id).lean();
+    }
+
+    expect(persisted?.illustrationStatus).toBe('complete');
+    expect(persisted?.illustrationData).toBeDefined();
+    expect(illustrateRecipe).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('servings parsing and serialization overrides', () => {
+  test('parseServingsFromMarkdown extracts servings correctly from various formats', () => {
+    expect(parseServingsFromMarkdown('- **Servings:** 4-5')).toBe(4);
+    expect(parseServingsFromMarkdown('- Servings: 2')).toBe(2);
+    expect(parseServingsFromMarkdown('* **Yield:** 3–4 servings')).toBe(3);
+    expect(parseServingsFromMarkdown('- Servings: 6 rolls')).toBe(6);
+    expect(parseServingsFromMarkdown('Some other text without servings')).toBeUndefined();
+  });
+
+  test('listRecipes and saveRecipe overrides/includes correct servings count', async () => {
+    const user = 'servings-test-user';
+    const testMarkdown = '# Test Recipe\n\n- **Servings:** 4\n\n## Ingredients\n- 1 cup oats\n\n## Instructions\n1. Cook oats';
+    
+    // Save recipe with servings count in markdown
+    const saved = await saveRecipe(user, {
+      title: 'Test Recipe',
+      documentMarkdown: testMarkdown,
+      recipe: {
+        title: 'Test Recipe',
+        description: '',
+        servings: 2, // structured payload has 2
+        timing: { prepMinutes: 5, cookMinutes: 10, totalMinutes: 15 },
+        ingredients: [{ id: 'i1', originalText: '1 cup oats', item: 'oats', quantityType: 'measured' }],
+        steps: [{ id: 's1', order: 1, text: 'Cook oats', ingredientIds: ['i1'], timers: [], warnings: [], tips: [] }],
+        notes: [],
+        tags: [],
+      },
+    });
+
+    // Expect the persisted recipe to have the parsed servings count (4) instead of payload's default (2)
+    expect(saved.recipe?.servings).toBe(4);
+
+    // Query listRecipes and check if serializeSavedRecipeSummary returns the parsed servings count
+    const list = await listRecipes(user, {});
+    expect(list.recipes).toHaveLength(1);
+    expect(list.recipes[0].servings).toBe(4);
   });
 });

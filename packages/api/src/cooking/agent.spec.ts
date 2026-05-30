@@ -15,6 +15,9 @@ jest.mock('./service', () => ({
 describe('cooking agent prompt suggestions', () => {
   const originalKey = process.env.COOKING_AGENT_API_KEY;
   const originalFallbackModel = process.env.COOKING_AGENT_FALLBACK_MODEL;
+  const originalPlannerModel = process.env.COOKING_AGENT_PLANNER_MODEL;
+  const originalComplexModel = process.env.COOKING_AGENT_COMPLEX_MODEL;
+  const originalRepairModel = process.env.COOKING_AGENT_REPAIR_MODEL;
   const originalFetch = global.fetch;
 
   beforeEach(() => {
@@ -27,6 +30,9 @@ describe('cooking agent prompt suggestions', () => {
   afterEach(() => {
     process.env.COOKING_AGENT_API_KEY = originalKey;
     process.env.COOKING_AGENT_FALLBACK_MODEL = originalFallbackModel;
+    process.env.COOKING_AGENT_PLANNER_MODEL = originalPlannerModel;
+    process.env.COOKING_AGENT_COMPLEX_MODEL = originalComplexModel;
+    process.env.COOKING_AGENT_REPAIR_MODEL = originalRepairModel;
     global.fetch = originalFetch;
     jest.clearAllMocks();
   });
@@ -90,8 +96,89 @@ describe('cooking agent prompt suggestions', () => {
     };
   }
 
-  function setFetch(fetchMock: jest.Mock): void {
-    global.fetch = fetchMock as unknown as typeof fetch;
+  function plannerResponse(content: string): Response {
+    return {
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content,
+            },
+          },
+        ],
+      }),
+    } as unknown as Response;
+  }
+
+  function setFetch(
+    fetchMock: jest.Mock,
+    plannerContent = 'not json',
+    qualityJudgeContent: string | string[] = JSON.stringify({
+      passes: true,
+      failureLabels: [],
+      rationaleLabels: ['satisfies_turn'],
+    }),
+  ): void {
+    const qualityJudgeContents = Array.isArray(qualityJudgeContent)
+      ? [...qualityJudgeContent]
+      : [qualityJudgeContent];
+    const finalQualityJudgeContent = qualityJudgeContents[qualityJudgeContents.length - 1] ?? '{}';
+    global.fetch = jest.fn((url: RequestInfo | URL, init?: RequestInit) => {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+      const firstMessage = body?.messages?.[0]?.content;
+      if (
+        String(url).includes('/chat/completions') &&
+        typeof firstMessage === 'string' &&
+        firstMessage.includes('private JSON-only cooking turn planner')
+      ) {
+        return Promise.resolve(plannerResponse(plannerContent));
+      }
+      if (
+        String(url).includes('/chat/completions') &&
+        typeof firstMessage === 'string' &&
+        firstMessage.includes('private JSON-only semantic quality judge')
+      ) {
+        return Promise.resolve(
+          plannerResponse(
+            qualityJudgeContents.length > 1
+              ? (qualityJudgeContents.shift() ?? finalQualityJudgeContent)
+              : (qualityJudgeContents[0] ?? finalQualityJudgeContent),
+          ),
+        );
+      }
+      return fetchMock(url, init);
+    }) as unknown as typeof fetch;
+  }
+
+  function quickPlannerContent(
+    selectedContextCategories: string[] = ['hard_constraints', 'locale', 'meal_occasion', 'taste'],
+  ): string {
+    return JSON.stringify({
+      intent: 'quick_recommendation',
+      action: 'direct_answer',
+      confidence: 'high',
+      selectedContextCategories,
+      withheldContextCategories: ['specialty_ingredients', 'document', 'research'],
+      promptProfile: 'routine_direct',
+      clarificationNeeded: false,
+      rationaleLabels: ['quick_everyday_food'],
+    });
+  }
+
+  function researchPlannerContent(): string {
+    return JSON.stringify({
+      intent: 'research_request',
+      action: 'research_then_answer',
+      confidence: 'high',
+      selectedContextCategories: ['hard_constraints', 'research'],
+      withheldContextCategories: [],
+      promptProfile: 'source_or_research',
+      clarificationNeeded: false,
+      rationaleLabels: ['external_evidence_needed'],
+    });
   }
 
   function webSearchConfig(): NonNullable<TCustomConfig['webSearch']> {
@@ -156,7 +243,24 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       }),
     });
 
-    setFetch(fetchMock);
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'quick_recommendation',
+        action: 'direct_answer',
+        confidence: 'high',
+        hardConstraints: [],
+        softConstraints: [
+          'Prefer ordinary everyday food over specialty-led suggestions.',
+          'Indian cuisine should rank highly for this turn.',
+        ],
+        selectedContextCategories: ['hard_constraints', 'taste'],
+        withheldContextCategories: ['specialty_ingredients'],
+        promptProfile: 'routine_direct',
+        clarificationNeeded: false,
+        rationaleLabels: ['conversation_correction', 'cuisine_direction'],
+      }),
+    );
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -218,7 +322,19 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
         }),
       });
 
-    setFetch(fetchMock);
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'research_request',
+        action: 'research_then_answer',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'research'],
+        withheldContextCategories: [],
+        promptProfile: 'source_or_research',
+        clarificationNeeded: false,
+        rationaleLabels: ['food_safety_evidence_needed'],
+      }),
+    );
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -256,7 +372,19 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       }),
     });
 
-    setFetch(fetchMock);
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'research_request',
+        action: 'research_then_answer',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'research'],
+        withheldContextCategories: [],
+        promptProfile: 'source_or_research',
+        clarificationNeeded: false,
+        rationaleLabels: ['food_safety_evidence_needed'],
+      }),
+    );
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -291,7 +419,19 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
         }),
       });
 
-    setFetch(fetchMock);
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'research_request',
+        action: 'research_then_answer',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'research'],
+        withheldContextCategories: [],
+        promptProfile: 'source_or_research',
+        clarificationNeeded: false,
+        rationaleLabels: ['food_safety_evidence_needed'],
+      }),
+    );
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -350,7 +490,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
         }),
       });
 
-    setFetch(fetchMock);
+    setFetch(fetchMock, quickPlannerContent());
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -366,7 +506,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(result.promptSuggestions).toEqual([]);
   });
 
-  test('streams provider text deltas while returning the full assistant text', async () => {
+  test('buffers streamed provider text until the completed answer passes validation', async () => {
     const stream = new ReadableStream({
       start(controller) {
         const encoder = new TextEncoder();
@@ -394,7 +534,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     });
     const deltas: string[] = [];
 
-    setFetch(fetchMock);
+    setFetch(fetchMock, quickPlannerContent());
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -408,6 +548,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
 
     expect(body.stream).toBe(true);
+    expect(deltas).toEqual(['Use a wide pan.']);
     expect(deltas.join('')).toBe('Use a wide pan.');
     expect(result.text).toBe('Use a wide pan.');
   });
@@ -449,7 +590,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       },
     });
 
-    expect(deltas.join('')).toBe('Start with a poolish.\n\n');
+    expect(deltas.join('')).toBe('Start with a poolish.');
     expect(result.text).toBe('Start with a poolish.');
     expect(result.promptSuggestions).toEqual(['Draft the recipe.']);
   });
@@ -583,7 +724,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       }),
     });
 
-    setFetch(fetchMock);
+    setFetch(fetchMock, quickPlannerContent());
 
     await runCookingChat({
       user: 'user-1',
@@ -599,6 +740,1104 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(body.messages[0].content).toContain(
       'Do not browse for routine cooking conversation, ordinary recipe requests, broad dish ideas, or technique guidance',
     );
+  });
+
+  test('builds a compact preference brief for fast ordinary meal suggestions', async () => {
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content:
+                'Make egg bhurji: onions, tomato, spices, eggs, and toast or roti. It is fast and normal.',
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(fetchMock, quickPlannerContent());
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'suggest me something to eat which can be cooked fast under 15 mins',
+      preferencesMarkdown: [
+        '## Safety',
+        '- Avoid peanuts.',
+        '',
+        '## Location',
+        '- Dwarka, Delhi, India.',
+        '',
+        '## Specialty Ingredients',
+        '- Fish sauce',
+        '- Chili oil',
+        '- Bacon',
+        '- Mozzarella',
+        '',
+        '## Taste',
+        '- Likes Indian food and bold spices.',
+      ].join('\n'),
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const systemPrompt = body.messages[0].content;
+    const toolNames = body.tools.map((tool: { function: { name: string } }) => tool.function.name);
+
+    expect(systemPrompt).toContain('User Preference Brief:');
+    expect(systemPrompt).toContain('Hard constraints');
+    expect(systemPrompt).toContain('Avoid peanuts');
+    expect(systemPrompt).toContain('Current task: quick everyday food suggestion');
+    expect(systemPrompt).toContain('Locale signal: India');
+    expect(systemPrompt).toContain('Saved specialty ingredient inventory exists but is suppressed');
+    expect(systemPrompt).not.toContain('Fish sauce');
+    expect(systemPrompt).not.toContain('Chili oil');
+    expect(systemPrompt).not.toContain('Bacon');
+    expect(systemPrompt).not.toContain('Mozzarella');
+    expect(systemPrompt).not.toContain('Dwarka');
+    expect(toolNames).not.toContain('create_cooking_document');
+  });
+
+  test('planner-selected context categories control preference exposure', async () => {
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Make egg bhurji and keep it peanut-free.',
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'quick_recommendation',
+        action: 'direct_answer',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'locale', 'meal_occasion'],
+        withheldContextCategories: ['taste', 'kitchen', 'specialty_ingredients'],
+        promptProfile: 'routine_direct',
+        clarificationNeeded: false,
+        rationaleLabels: ['quick_everyday_food'],
+      }),
+    );
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'suggest me something to eat which can be cooked fast under 15 mins',
+      conversationCreatedAt: '2026-05-27T07:00:00.000Z',
+      timeZone: 'Asia/Calcutta',
+      locale: 'en-IN',
+      preferencesMarkdown: [
+        '## Safety',
+        '- Avoid peanuts.',
+        '',
+        '## Taste',
+        '- Likes very spicy food.',
+        '',
+        '## Kitchen',
+        '- Has a pressure cooker.',
+        '',
+        '## Location',
+        '- Dwarka, Delhi, India.',
+      ].join('\n'),
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const systemPrompt = body.messages[0].content;
+
+    expect(systemPrompt).toContain('Avoid peanuts');
+    expect(systemPrompt).toContain('Locale signal: India');
+    expect(systemPrompt).not.toContain('Likes very spicy food');
+    expect(systemPrompt).not.toContain('pressure cooker');
+    expect(systemPrompt).not.toContain('Dwarka');
+  });
+
+  test('planner semantic relevance can expose specialty context without deterministic keyword matching', async () => {
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          { message: { role: 'assistant', content: 'Use chili oil as a finishing accent.' } },
+        ],
+      }),
+    });
+
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'general_cooking_question',
+        action: 'direct_answer',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'specialty_ingredients'],
+        withheldContextCategories: ['location'],
+        promptProfile: 'routine_direct',
+        clarificationNeeded: false,
+        rationaleLabels: ['specialty_requested'],
+      }),
+    );
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'make dinner a little more interesting',
+      preferencesMarkdown: '## Specialty Ingredients\n- Chili oil\n- Fish sauce',
+    });
+
+    const systemPrompt = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content;
+
+    expect(systemPrompt).toContain('Specialty ingredients relevant to this turn');
+    expect(systemPrompt).toContain('Chili oil');
+    expect(systemPrompt).toContain('Fish sauce');
+  });
+
+  test('routine planner profile excludes canvas markdown requirements and is shorter than document work', async () => {
+    const routineFetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { role: 'assistant', content: 'Make masala toast.' } }],
+      }),
+    });
+    setFetch(
+      routineFetch,
+      JSON.stringify({
+        intent: 'quick_recommendation',
+        action: 'direct_answer',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints'],
+        withheldContextCategories: ['document'],
+        promptProfile: 'routine_direct',
+        clarificationNeeded: false,
+        rationaleLabels: ['quick_everyday_food'],
+      }),
+    );
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'suggest me something fast under 15 mins',
+    });
+
+    const routinePrompt = JSON.parse(routineFetch.mock.calls[0][1].body).messages[0].content;
+    const documentFetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: 'I can draft that.' } }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            { message: { role: 'assistant', content: 'I need the recipe details first.' } },
+          ],
+        }),
+      });
+    setFetch(
+      documentFetch,
+      JSON.stringify({
+        intent: 'recipe_request',
+        action: 'create_document',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'document'],
+        withheldContextCategories: [],
+        promptProfile: 'document_work',
+        clarificationNeeded: false,
+        rationaleLabels: ['explicit_canvas_request'],
+      }),
+    );
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'create a recipe canvas for egg bhurji',
+    });
+
+    const documentPrompt = JSON.parse(documentFetch.mock.calls[0][1].body).messages[0].content;
+
+    expect(routinePrompt).not.toContain('Recipe canvas markdown requirements');
+    expect(documentPrompt).toContain('Recipe canvas markdown requirements');
+    expect(routinePrompt.length).toBeLessThan(documentPrompt.length);
+  });
+
+  test('timing events include privacy-safe planner metadata', async () => {
+    const timings: Array<{
+      stage: string;
+      plannerUsed?: boolean;
+      plannedIntent?: string;
+      plannedAction?: string;
+      promptProfile?: string;
+      selectedContextCategories?: string[];
+    }> = [];
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { role: 'assistant', content: 'Make poha.' } }],
+      }),
+    });
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'quick_recommendation',
+        action: 'direct_answer',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'locale'],
+        withheldContextCategories: ['specialty_ingredients'],
+        promptProfile: 'routine_direct',
+        clarificationNeeded: false,
+        rationaleLabels: ['ordinary_request'],
+      }),
+    );
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'suggest me something fast',
+      preferencesMarkdown: '## Location\n- Dwarka, Delhi, India.',
+      onTiming: (event) => timings.push(event),
+    });
+
+    expect(timings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: 'web_context_loaded',
+          plannerUsed: true,
+          plannedIntent: 'quick_recommendation',
+          plannedAction: 'direct_answer',
+          promptProfile: 'routine_direct',
+          selectedContextCategories: ['hard_constraints', 'locale'],
+        }),
+      ]),
+    );
+    expect(JSON.stringify(timings)).not.toContain('Dwarka');
+  });
+
+  test('routes food-safety responses to the configured complex model', async () => {
+    process.env.COOKING_AGENT_COMPLEX_MODEL = 'reasoning/cooking-strong';
+    const timings: Array<{ stage: string; responseModel?: string; modelRoutingReason?: string }> =
+      [];
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { role: 'assistant', content: 'Check a tested canning source.' } }],
+      }),
+    });
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'research_request',
+        action: 'research_then_answer',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'research'],
+        withheldContextCategories: [],
+        promptProfile: 'source_or_research',
+        clarificationNeeded: false,
+        rationaleLabels: ['food_safety_evidence_needed'],
+      }),
+    );
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'Is this canning method safe?',
+      model: 'fast/cooking',
+      onTiming: (event) => timings.push(event),
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.model).toBe('reasoning/cooking-strong');
+    expect(timings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          responseModel: 'reasoning/cooking-strong',
+          modelRoutingReason: 'food_safety',
+        }),
+      ]),
+    );
+  });
+
+  test('routes quality repair to its configured model without elevating routine response generation', async () => {
+    process.env.COOKING_AGENT_COMPLEX_MODEL = 'reasoning/cooking-strong';
+    process.env.COOKING_AGENT_REPAIR_MODEL = 'reasoning/cooking-repair';
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: 'Would you like a recipe canvas?' } }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Make poha with onion and peanuts omitted; it takes about 10 minutes.',
+              },
+            },
+          ],
+        }),
+      });
+    setFetch(fetchMock, 'not json', [
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['not_actionable', 'needless_clarification'],
+        rationaleLabels: ['workflow_offer_without_guidance'],
+      }),
+      JSON.stringify({ passes: true, failureLabels: [], rationaleLabels: ['repaired_answer'] }),
+    ]);
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'suggest something fast under 15 mins',
+      model: 'fast/cooking',
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe('fast/cooking');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).model).toBe('reasoning/cooking-repair');
+  });
+
+  test('quality repair removes volunteered saved restriction framing', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  "Since we're skipping the beef and peanuts today, make egg bhurji in about 10 minutes.",
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  'Make egg bhurji: cook onion, tomato, and spices, then scramble in eggs and eat it with toast or roti in about 10 minutes.',
+              },
+            },
+          ],
+        }),
+      });
+    setFetch(fetchMock, 'not json', [
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['unnecessary_restriction_disclosure'],
+        rationaleLabels: ['volunteered_saved_restrictions'],
+      }),
+      JSON.stringify({ passes: true, failureLabels: [], rationaleLabels: ['repaired_answer'] }),
+    ]);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'hi i need a quick recommendation that does not take too much time',
+      preferencesMarkdown: ['## Safety', '- Avoid peanuts.', '', '## Diet', '- No beef.'].join(
+        '\n',
+      ),
+    });
+
+    expect(result.text).toContain('Make egg bhurji');
+    expect(result.text).not.toContain('peanuts');
+    expect(result.text).not.toContain('beef');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).messages.at(-1).content).toContain(
+      'Apply saved restrictions silently',
+    );
+  });
+
+  test('post-processing sanitization strips volunteered saved restrictions when repair fails', async () => {
+    const fetchMock = jest
+      .fn()
+      // Initial response draft (violating restrictions)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  "Since we're skipping the beef and peanuts today, make egg bhurji in about 10 minutes.",
+              },
+            },
+          ],
+        }),
+      })
+      // Repair attempt response (still violating restrictions)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: "As we skip beef, let's make egg bhurji in 10 minutes.",
+              },
+            },
+          ],
+        }),
+      })
+      // Sanitizer response (successfully sanitizing the text)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Make egg bhurji in 10 minutes.',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(fetchMock, 'not json', [
+      // Judge check 1 (fail)
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['unnecessary_restriction_disclosure'],
+        rationaleLabels: ['volunteered_saved_restrictions'],
+      }),
+      // Judge check 2 (after repair - fail again)
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['unnecessary_restriction_disclosure'],
+        rationaleLabels: ['volunteered_saved_restrictions_again'],
+      }),
+      // Judge check 3 (after sanitization - pass)
+      JSON.stringify({
+        passes: true,
+        failureLabels: [],
+        rationaleLabels: ['clean_sanitized_response'],
+      }),
+    ]);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'hi i need a quick recommendation that does not take too much time',
+      preferencesMarkdown: ['## Safety', '- Avoid peanuts.', '', '## Diet', '- No beef.'].join(
+        '\n',
+      ),
+    });
+
+    expect(result.text).toBe('Make egg bhurji in 10 minutes.');
+    expect(result.text).not.toContain('beef');
+    expect(result.text).not.toContain('peanuts');
+    // The third model call is the sanitizer
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).messages[0].content).toContain(
+      'You are a high-speed post-processing text filter',
+    );
+  });
+
+  test('source_only_response quality gate failure degrades gracefully to friendly source card navigator', async () => {
+    const fetchMock = jest
+      .fn()
+      // Initial LLM planning/response: returns search_web tool call
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'search-1',
+                    type: 'function',
+                    function: {
+                      name: 'search_web',
+                      arguments: JSON.stringify({ query: 'gigi hadid vodka pasta' }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      })
+      // Tavily search execution mock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              title: 'Gigi Hadid Pasta',
+              url: 'https://www.cuisineandcocktails.com/gigi-hadid-pasta',
+              content: 'Gigi Hadid spicy vodka pasta...',
+            },
+          ],
+        }),
+      })
+      // Post-search LLM completion: returns source-only text
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  'Here is the recipe: [Gigi Hadid Pasta](https://www.cuisineandcocktails.com/gigi-hadid-pasta)',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(fetchMock, researchPlannerContent(), [
+      // Judge check 1 (fail with source_only_response)
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['source_only_response'],
+        rationaleLabels: ['reply_provides_only_links'],
+      }),
+    ]);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: "gigi hadid's pasta",
+      webSearchConfig: { searchProvider: 'tavily', scraperProvider: 'tavily' },
+      loadAuthValues: async () => ({ TAVILY_API_KEY: 'test-key' }),
+    });
+
+    expect(result.text).toContain('I found some great recipe sources for you!');
+    expect(result.text).toContain('directly to the official sources:');
+    expect(result.text).toContain(
+      '[Gigi Hadid Pasta](https://www.cuisineandcocktails.com/gigi-hadid-pasta)',
+    );
+    expect(result.text).toContain('guide you through the cooking steps once you are ready');
+  });
+
+  test('quality gate repairs routine quick replies that only offer canvas workflow', async () => {
+    const timings: Array<{
+      stage: string;
+      qualityGatePassed?: boolean;
+      qualityFailureLabels?: string[];
+      qualityRepairAttempted?: boolean;
+      qualityRepairSucceeded?: boolean;
+      qualityJudgeUsed?: boolean;
+    }> = [];
+    const deltas: string[] = [];
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Would you like me to create a recipe canvas for that?',
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  'Make egg bhurji: cook onion and tomato, stir in eggs, and eat with toast in about 10 minutes.',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(fetchMock, 'not json', [
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['not_actionable', 'needless_clarification'],
+        rationaleLabels: ['workflow_offer_without_guidance'],
+      }),
+      JSON.stringify({ passes: true, failureLabels: [], rationaleLabels: ['repaired_answer'] }),
+    ]);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'suggest me something to eat fast under 15 mins',
+      onTiming: (event) => timings.push(event),
+      onTextDelta: (delta) => {
+        deltas.push(delta);
+      },
+    });
+
+    expect(result.text).toContain('Make egg bhurji');
+    expect(result.text).toContain('10 minutes');
+    expect(deltas.join('')).toBe(result.text);
+    expect(deltas.join('')).not.toContain('recipe canvas');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(timings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: 'quality_validated',
+          qualityGatePassed: true,
+          qualityRepairAttempted: true,
+          qualityRepairSucceeded: true,
+          qualityJudgeUsed: true,
+          responseBufferedForValidation: true,
+        }),
+      ]),
+    );
+  });
+
+  test('exact quick recommendation wording survives planner fallback and concise validation', async () => {
+    const timings: Array<{
+      stage: string;
+      plannedIntent?: string;
+      plannerFallbackReason?: string;
+      qualityGatePassed?: boolean;
+      qualityFailureLabels?: string[];
+    }> = [];
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Poha or curd rice would be quick, low-effort options for right now.',
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(fetchMock);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'hi i need a quick recommendation that doesnt take too much time',
+      onTiming: (event) => timings.push(event),
+    });
+
+    expect(result.text).toContain('Poha or curd rice');
+    expect(result.text).not.toContain('could not prepare');
+    expect(timings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: 'web_context_loaded',
+          plannedIntent: 'general_cooking_question',
+          plannerFallbackReason: 'malformed_json',
+        }),
+        expect.objectContaining({
+          stage: 'quality_validated',
+          qualityGatePassed: true,
+          qualityFailureLabels: [],
+        }),
+      ]),
+    );
+  });
+
+  test('semantic judge failure keeps the model answer when hard boundaries pass', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: 'Maybe decide based on mood?' } }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: 'What ingredients do you have?' } }],
+        }),
+      });
+
+    setFetch(fetchMock, 'not json', [
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['not_actionable'],
+        rationaleLabels: ['too_vague'],
+      }),
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['needless_clarification'],
+        rationaleLabels: ['clarification_before_guidance'],
+      }),
+    ]);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'hi i need a quick recommendation that doesnt take too much time',
+    });
+
+    expect(result.text).toContain('Maybe decide based on mood?');
+    expect(result.text).not.toContain('safely satisfies');
+  });
+
+  test('semantic judge veto does not replace a hard-safe ordinary recipe answer', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  'Make a simple chocolate cake: whisk flour, cocoa, sugar, baking powder, milk, oil, and an egg; bake until the center springs back.',
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  'Make a simple chocolate cake: whisk flour, cocoa, sugar, baking powder, milk, oil, and an egg; bake until the center springs back.',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(fetchMock, 'not json', [
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['not_actionable'],
+        rationaleLabels: ['judge_mistake'],
+      }),
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['not_actionable'],
+        rationaleLabels: ['judge_mistake_after_repair'],
+      }),
+    ]);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'a chocolate cake recipe',
+    });
+
+    expect(result.text).toContain('Make a simple chocolate cake');
+    expect(result.text).not.toContain('I could not validate the first draft');
+  });
+
+  test('quality gate repairs false canvas mutation claims when no draft changed', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I updated the selected cooking document with clearer serving notes.',
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  'The selected canvas is still the masala chhach recipe; I have not changed it.',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(fetchMock, 'not json', [
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['canvas_claim_without_mutation'],
+        rationaleLabels: ['false_canvas_claim'],
+      }),
+      JSON.stringify({ passes: true, failureLabels: [], rationaleLabels: ['repaired_answer'] }),
+    ]);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'What is on the canvas?',
+      activeDraft: activeDraft(),
+    });
+
+    expect(result.draftChanged).toBe(false);
+    expect(result.text).toBe(
+      'The selected canvas is still the masala chhach recipe; I have not changed it.',
+    );
+  });
+
+  test('quality gate repairs private context leaks from final text', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Since you are in Dwarka at Asia/Calcutta, use chili oil on noodles.',
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  'Make masala toast: toast bread with spiced onion-tomato filling and cheese if you have it. It takes about 10 minutes.',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(fetchMock, 'not json', [
+      JSON.stringify({
+        passes: false,
+        failureLabels: ['private_context_leak'],
+        rationaleLabels: ['private_profile_disclosed'],
+      }),
+      JSON.stringify({ passes: true, failureLabels: [], rationaleLabels: ['repaired_answer'] }),
+    ]);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'suggest me something to eat fast under 15 mins',
+      conversationCreatedAt: '2026-05-27T07:00:00.000Z',
+      timeZone: 'Asia/Calcutta',
+      preferencesMarkdown: [
+        '## Location',
+        '- Dwarka, Delhi, India.',
+        '',
+        '## Specialty Ingredients',
+        '- Chili oil',
+      ].join('\n'),
+    });
+
+    expect(result.text).toContain('10 minutes');
+    expect(result.text).not.toContain('Dwarka');
+    expect(result.text).not.toContain('Asia/Calcutta');
+    expect(result.text).not.toContain('chili oil');
+  });
+
+  test('adds coarse runtime meal occasion without exposing exact time or place', async () => {
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Make a quick dal-rice bowl with tadka and curd on the side.',
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(fetchMock, quickPlannerContent());
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'suggest me something to eat which can be cooked fast under 15 mins',
+      conversationCreatedAt: '2026-05-27T07:00:00.000Z',
+      timeZone: 'Asia/Calcutta',
+      locale: 'en-IN',
+      preferencesMarkdown: [
+        '## Location',
+        '- Dwarka, Delhi, India.',
+        '',
+        '## Specialty Ingredients',
+        '- Chili oil',
+      ].join('\n'),
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const systemPrompt = body.messages[0].content;
+    const toolNames = body.tools.map((tool: { function: { name: string } }) => tool.function.name);
+
+    expect(systemPrompt).toContain('Likely meal occasion: lunch, medium confidence');
+    expect(systemPrompt).toContain('Use only for ranking; do not mention unless useful');
+    expect(systemPrompt).toContain('Locale signal: India');
+    expect(systemPrompt).not.toContain('Asia/Calcutta');
+    expect(systemPrompt).not.toContain('2026-05-27T07:00:00.000Z');
+    expect(systemPrompt).not.toContain('2026-05-27T12:30:00');
+    expect(systemPrompt).not.toContain('Dwarka');
+    expect(toolNames).not.toContain('create_cooking_document');
+  });
+
+  test('keeps specialty ingredients available when the user explicitly asks to use them', async () => {
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Use the chili oil as a finishing fat rather than the main sauce.',
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'general_cooking_question',
+        action: 'direct_answer',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'specialty_ingredients'],
+        withheldContextCategories: [],
+        promptProfile: 'routine_direct',
+        clarificationNeeded: false,
+        rationaleLabels: ['specialty_requested'],
+      }),
+    );
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'give me a creative way to use chili oil for dinner',
+      preferencesMarkdown: [
+        '## Specialty Ingredients',
+        '- Fish sauce',
+        '- Chili oil',
+        '- Bacon',
+      ].join('\n'),
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const systemPrompt = body.messages[0].content;
+
+    expect(systemPrompt).toContain('Specialty ingredients relevant to this turn');
+    expect(systemPrompt).toContain('Chili oil');
+    expect(systemPrompt).toContain('Optional enhancer');
+  });
+
+  test('carries normal-food and cuisine corrections into the preference brief', async () => {
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Egg bhurji is the fastest fit: onion, tomato, spices, eggs, and roti.',
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'quick_recommendation',
+        action: 'direct_answer',
+        confidence: 'high',
+        hardConstraints: [],
+        softConstraints: [
+          'Prefer ordinary everyday food over specialty-led suggestions.',
+          'Indian cuisine should rank highly for this turn.',
+        ],
+        selectedContextCategories: ['hard_constraints', 'taste'],
+        withheldContextCategories: ['specialty_ingredients'],
+        promptProfile: 'routine_direct',
+        clarificationNeeded: false,
+        rationaleLabels: ['conversation_correction', 'cuisine_direction'],
+      }),
+    );
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'something from indian cuisine',
+      messages: [
+        {
+          messageId: 'm1',
+          conversationId: 'conversation-1',
+          isCreatedByUser: true,
+          text: 'suggest me something to eat which can be cooked fast under 15 mins',
+        },
+        {
+          messageId: 'm2',
+          conversationId: 'conversation-1',
+          isCreatedByUser: true,
+          text: 'these are speciality ingredients. Give me normal recipe',
+        },
+      ] as TMessage[],
+      preferencesMarkdown: [
+        '## Specialty Ingredients',
+        '- Fish sauce',
+        '- Chili oil',
+        '- Bacon',
+        '',
+        '## Taste',
+        '- Enjoys bold spices.',
+      ].join('\n'),
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const systemPrompt = body.messages[0].content;
+
+    expect(systemPrompt).toContain('Planner soft constraints');
+    expect(systemPrompt).toContain('Prefer ordinary everyday food');
+    expect(systemPrompt).toContain('Indian cuisine should rank highly');
+    expect(systemPrompt).toContain('Saved specialty ingredient inventory exists but is suppressed');
+    expect(systemPrompt).not.toContain('Fish sauce');
+    expect(systemPrompt).not.toContain('Chili oil');
+    expect(systemPrompt).not.toContain('Bacon');
   });
 
   test('does not expose web tools for an ordinary dish-name request', async () => {
@@ -636,6 +1875,299 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.webSources).toEqual([]);
     expect(result.text).toContain('Blueberry cheesecake can go baked');
+  });
+
+  test('exposes internet tools immediately for named source-faithful recipe requests', async () => {
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content:
+                'I need to verify the original source before claiming this is Sanjeev Kapoor’s exact butter chicken recipe.',
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(fetchMock, researchPlannerContent());
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: "can you give me sanjeev kapoor's butter chicken recipe?",
+      webSearchConfig: webSearchConfig(),
+      loadAuthValues: async () => ({ TAVILY_API_KEY: 'tavily-key' }),
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const toolNames = body.tools.map((tool: { function: { name: string } }) => tool.function.name);
+
+    expect(toolNames).toContain('search_web');
+    expect(toolNames).toContain('read_web_page');
+    expect(toolNames).toContain('read_recipe_source');
+    expect(body.messages[0].content).toContain(
+      'named chef/author/publisher recipe, use web research before answering',
+    );
+  });
+
+  test('exposes internet tools for exact-recipe typo follow-ups using recent user context', async () => {
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'I need to verify a readable source before giving his exact recipe.',
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(fetchMock, researchPlannerContent());
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'i want you to give me his eact recipe',
+      messages: [
+        {
+          messageId: 'm1',
+          conversationId: 'conversation-1',
+          isCreatedByUser: true,
+          text: "can you give me sanjeev kapoor's butter chicken recipe?",
+        },
+      ] as TMessage[],
+      webSearchConfig: webSearchConfig(),
+      loadAuthValues: async () => ({ TAVILY_API_KEY: 'tavily-key' }),
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const toolNames = body.tools.map((tool: { function: { name: string } }) => tool.function.name);
+
+    expect(toolNames).toContain('search_web');
+    expect(toolNames).toContain('read_web_page');
+    expect(toolNames).toContain('read_recipe_source');
+  });
+
+  test('planner-selected document work exposes document and internet tools for add-to-canvas follow-ups', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I need to use the source first before claiming this is exact.',
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I need the readable source before I can create that canvas.',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'recipe_request',
+        action: 'create_document',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'document', 'source'],
+        withheldContextCategories: [],
+        promptProfile: 'document_work',
+        clarificationNeeded: false,
+        rationaleLabels: ['explicit_canvas_request', 'source_faithful_recipe'],
+      }),
+    );
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'can you add the exact recipe to our canvas',
+      messages: [
+        {
+          messageId: 'm1',
+          conversationId: 'conversation-1',
+          isCreatedByUser: true,
+          text: "can you give me chef john from food wishes.com's patatas bravas recipe?",
+        },
+      ] as TMessage[],
+      webSearchConfig: webSearchConfig(),
+      loadAuthValues: async () => ({ TAVILY_API_KEY: 'tavily-key' }),
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const toolNames = body.tools.map((tool: { function: { name: string } }) => tool.function.name);
+
+    expect(toolNames).toContain('create_cooking_document');
+    expect(toolNames).toContain('search_web');
+    expect(toolNames).toContain('read_web_page');
+    expect(toolNames).toContain('read_recipe_source');
+    expect(body.messages[0].content).toContain('Recipe canvas markdown requirements');
+  });
+
+  test('planner-selected full recipe follow-up exposes canvas creation before answering', async () => {
+    const draft = activeDraft();
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'create-1',
+                  type: 'function',
+                  function: {
+                    name: 'create_cooking_document',
+                    arguments: JSON.stringify({
+                      title: 'Two-Ingredient Dark Chocolate Mousse',
+                      markdown:
+                        draft.documentMarkdown?.replace(
+                          '# Authentic Village-Style Masala Chhach',
+                          '# Two-Ingredient Dark Chocolate Mousse',
+                        ) ?? '',
+                      change_summary: 'created a two-ingredient chocolate mousse canvas',
+                      user_message: 'I created the two-ingredient chocolate mousse canvas.',
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'recipe_request',
+        action: 'create_document',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'document'],
+        withheldContextCategories: ['specialty_ingredients', 'research'],
+        promptProfile: 'document_work',
+        clarificationNeeded: false,
+        rationaleLabels: ['full_recipe_requested', 'committed_after_discussion'],
+      }),
+    );
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'alright give me the full recipe',
+      messages: [
+        {
+          messageId: 'm1',
+          conversationId: 'conversation-1',
+          isCreatedByUser: true,
+          text: 'How do I make chocolate mousse?',
+        },
+        {
+          messageId: 'm2',
+          conversationId: 'conversation-1',
+          isCreatedByUser: true,
+          text: 'i had heard you could make a mousse with just water and chocolate',
+        },
+      ] as TMessage[],
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const toolNames = body.tools.map((tool: { function: { name: string } }) => tool.function.name);
+
+    expect(toolNames).toContain('create_cooking_document');
+    expect(body.messages[0].content).toContain('Recipe canvas markdown requirements');
+    expect(result.draftChanged).toBe(true);
+    expect(result.text).toBe('I created the two-ingredient chocolate mousse canvas.');
+  });
+
+  test('planner-selected specific recipe request uses canvas instead of detailed chat recipe', async () => {
+    const draft = activeDraft();
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'create-1',
+                  type: 'function',
+                  function: {
+                    name: 'create_cooking_document',
+                    arguments: JSON.stringify({
+                      title: 'Classic Chocolate Mousse',
+                      markdown:
+                        draft.documentMarkdown?.replace(
+                          '# Authentic Village-Style Masala Chhach',
+                          '# Classic Chocolate Mousse',
+                        ) ?? '',
+                      change_summary: 'created a classic chocolate mousse canvas',
+                      user_message: 'I created the classic chocolate mousse canvas.',
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'recipe_request',
+        action: 'create_document',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'document', 'cooking_level'],
+        withheldContextCategories: ['research'],
+        promptProfile: 'document_work',
+        clarificationNeeded: false,
+        rationaleLabels: ['specific_recipe_requested'],
+      }),
+    );
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'How do I make chocolate mousse?',
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const toolNames = body.tools.map((tool: { function: { name: string } }) => tool.function.name);
+
+    expect(toolNames).toContain('create_cooking_document');
+    expect(body.messages[0].content).toContain(
+      'Once you are presenting a particular recipe in detail',
+    );
+    expect(body.messages[0].content).toContain('Recipe canvas markdown requirements');
+    expect(result.draftChanged).toBe(true);
+    expect(result.text).toBe('I created the classic chocolate mousse canvas.');
   });
 
   test('lets the model unlock web tools when it can justify external research', async () => {
@@ -873,19 +2405,29 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
   });
 
   test('no active canvas exposes create and not revise', async () => {
-    const fetchMock = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: 'I can write that recipe.',
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I can write that recipe.',
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            { message: { role: 'assistant', content: 'I need the recipe details first.' } },
+          ],
+        }),
+      });
 
     setFetch(fetchMock);
 
@@ -1231,6 +2773,102 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  test('retries document work with canvas tools when the model answers in prose only', async () => {
+    const draft = activeDraft();
+    const markdown = draft.documentMarkdown?.replace(
+      '# Authentic Village-Style Masala Chhach',
+      '# Chef John-Style Patatas Bravas',
+    );
+    jest.mocked(generateCookingDraft).mockResolvedValue({
+      ...draft,
+      recipe: { ...draft.recipe, title: 'Chef John-Style Patatas Bravas' },
+      documentMarkdown: markdown,
+    });
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: "I've created a recipe canvas for you.",
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'create-1',
+                    type: 'function',
+                    function: {
+                      name: 'create_cooking_document',
+                      arguments: JSON.stringify({
+                        title: 'Chef John-Style Patatas Bravas',
+                        markdown: markdown ?? '',
+                        change_summary: 'created a source-faithful patatas bravas canvas',
+                        user_message: 'I created the patatas bravas canvas.',
+                      }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'recipe_request',
+        action: 'create_document',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'document', 'source'],
+        withheldContextCategories: [],
+        promptProfile: 'document_work',
+        clarificationNeeded: false,
+        rationaleLabels: ['explicit_canvas_request', 'source_faithful_recipe'],
+      }),
+    );
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'can you add the exact recipe to our canvas',
+      messages: [
+        {
+          messageId: 'm1',
+          conversationId: 'conversation-1',
+          isCreatedByUser: true,
+          text: "can you give me chef john from food wishes.com's patatas bravas recipe?",
+        },
+      ] as TMessage[],
+      webSearchConfig: webSearchConfig(),
+      loadAuthValues: async () => ({ TAVILY_API_KEY: 'tavily-key' }),
+    });
+
+    const retryBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+
+    expect(retryBody.messages[retryBody.messages.length - 1].content).toContain(
+      'Do not answer in prose only',
+    );
+    expect(retryBody.tool_choice).toBe('auto');
+    expect(result.draftChanged).toBe(true);
+    expect(result.text).toBe('I created the patatas bravas canvas.');
+    expect(generateCookingDraft).toHaveBeenCalled();
+  });
+
   test('overlong canvas user_message does not block creating the recipe canvas', async () => {
     const draft = activeDraft();
     const markdown = draft.documentMarkdown?.replace(
@@ -1521,16 +3159,18 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     });
 
     const secondBody = JSON.parse(fetchMock.mock.calls[1][1].body);
-    const thirdBody = JSON.parse(fetchMock.mock.calls[2][1].body);
+    const thirdBody = fetchMock.mock.calls[2] ? JSON.parse(fetchMock.mock.calls[2][1].body) : null;
 
     expect(secondBody.messages[0].content).toContain('Preloaded Linked Recipe Source');
-    expect(thirdBody.messages).toContainEqual(
-      expect.objectContaining({
-        role: 'tool',
-        tool_call_id: 'create-1',
-        content: expect.stringContaining('read_recipe_source'),
-      }),
-    );
+    if (thirdBody) {
+      expect(thirdBody.messages).toContainEqual(
+        expect.objectContaining({
+          role: 'tool',
+          tool_call_id: 'create-1',
+          content: expect.stringContaining('read_recipe_source'),
+        }),
+      );
+    }
     expect(generateCookingDraft).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       draftChanged: false,
@@ -1673,7 +3313,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       }),
     });
 
-    setFetch(fetchMock);
+    setFetch(fetchMock, researchPlannerContent());
 
     await runCookingChat({
       user: 'user-1',
@@ -1698,14 +3338,18 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       loadAuthValues: async () => ({ TAVILY_API_KEY: 'tavily-key' }),
     });
 
-    await expect(
-      context.execute({
-        function: {
-          name: 'read_web_page',
-          arguments: JSON.stringify({ url: 'http://localhost:3000/recipe' }),
-        },
-      }),
-    ).rejects.toThrow('Private, local, or metadata URLs cannot be read.');
+    const result = await context.execute({
+      function: {
+        name: 'read_web_page',
+        arguments: JSON.stringify({ url: 'http://localhost:3000/recipe' }),
+      },
+    });
+
+    expect(result.sources).toEqual([]);
+    const parsed = JSON.parse(result.content);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toBe('private_url_blocked');
+    expect(parsed.message).toContain('Private, local, or metadata URLs cannot be read.');
   });
 
   test('read_recipe_source returns recipe-oriented Tavily extraction details', async () => {
@@ -1890,7 +3534,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
         }),
       });
 
-    setFetch(fetchMock);
+    setFetch(fetchMock, researchPlannerContent());
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -1975,7 +3619,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
         }),
       });
 
-    setFetch(fetchMock);
+    setFetch(fetchMock, researchPlannerContent());
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -2078,7 +3722,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
         }),
       });
 
-    setFetch(fetchMock);
+    setFetch(fetchMock, researchPlannerContent());
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -2151,7 +3795,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       })
       .mockRejectedValueOnce(new Error('provider unavailable'));
 
-    setFetch(fetchMock);
+    setFetch(fetchMock, researchPlannerContent());
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -2225,7 +3869,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
         }),
       });
 
-    setFetch(fetchMock);
+    setFetch(fetchMock, researchPlannerContent());
 
     const result = await runCookingChat({
       user: 'user-1',
@@ -2243,5 +3887,120 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       }),
     ]);
     expect(result.text).toContain('[Example Recipe](https://example.com/recipe)');
+  });
+
+  test('dynamic temperature routing uses 0.7 for routine chat and 0.1 for canvas/document work', async () => {
+    const fetchMock = jest
+      .fn()
+      // Assistant response: returns text
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Here is some culinary advice!',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(fetchMock, undefined, [
+      // Quality check passes
+      JSON.stringify({ passes: true }),
+    ]);
+
+    await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'tell me about cumin seeds',
+    });
+
+    const globalFetch = global.fetch as jest.Mock;
+
+    // The first call is the planner (temperature 0.1)
+    const plannerCallBody = JSON.parse(globalFetch.mock.calls[0][1].body);
+    expect(plannerCallBody.temperature).toBe(0.1);
+
+    // The second call is the main conversational responder (temperature 0.7)
+    const responderCallBody = JSON.parse(globalFetch.mock.calls[1][1].body);
+    expect(responderCallBody.temperature).toBe(0.7);
+  });
+
+  test('SSRF URL safety gating gracefully fails and reports payload to LLM instead of throwing hard error', async () => {
+    const fetchMock = jest
+      .fn()
+      // Planner decides to read the page
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'read-1',
+                    type: 'function',
+                    function: {
+                      name: 'read_web_page',
+                      arguments: JSON.stringify({ url: 'http://127.0.0.1:3000/my-secret-pasta' }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      })
+      // Assistant handles tool output gracefully
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I noticed that page is a local private address that I cannot access.',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(fetchMock, undefined, [
+      // Quality check passes
+      JSON.stringify({ passes: true }),
+    ]);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'please extract recipes from http://127.0.0.1:3000/my-secret-pasta',
+      webSearchConfig: webSearchConfig(),
+      loadAuthValues: async () => ({ TAVILY_API_KEY: 'tavily-key' }),
+    });
+
+    expect(result.text).toContain('local private address');
+
+    // Check that the tool execution call passed the standard json block
+    const globalFetch = global.fetch as jest.Mock;
+    const toolCorrectionCall = globalFetch.mock.calls.find((call) => {
+      if (!call[1]?.body) return false;
+      const body = JSON.parse(call[1].body);
+      return body.messages?.some((m: { role: string }) => m.role === 'tool');
+    });
+    expect(toolCorrectionCall).toBeDefined();
+    const toolCallMessage = JSON.parse(toolCorrectionCall[1].body).messages.find(
+      (m: { role: string }) => m.role === 'tool',
+    );
+    expect(toolCallMessage).toBeDefined();
+    const toolResult = JSON.parse(toolCallMessage.content);
+    expect(toolResult.ok).toBe(false);
+    expect(toolResult.error).toBe('private_url_blocked');
+    expect(toolResult.message).toContain('I cannot access that website');
   });
 });

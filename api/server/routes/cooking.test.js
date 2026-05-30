@@ -203,6 +203,7 @@ describe('cooking routes', () => {
       'conversation-1',
       undefined,
       'guide',
+      undefined,
     );
     expect(cookingApi.listCookingDocuments).toHaveBeenCalledWith('auth-user', 'conversation-1');
   });
@@ -430,6 +431,29 @@ describe('cooking routes', () => {
     expect(response.text).toContain('"text":"Use a wide "');
     expect(response.text).toContain('"text":"pan."');
     expect(response.text).not.toContain('"text":"Use a wide pan.","messageId":"message-2"');
+  });
+
+  test('chat exposes only the validated cooking reply emitted by the agent', async () => {
+    cookingApi.runCookingChat.mockImplementation(async ({ onTextDelta }) => {
+      onTextDelta('Make egg bhurji in about 10 minutes.');
+      return {
+        text: 'Make egg bhurji in about 10 minutes.',
+        draftChanged: false,
+      };
+    });
+
+    const response = await request(app)
+      .post('/api/cooking/chat')
+      .send({
+        text: 'suggest me something fast under 15 mins',
+        conversationId: 'conversation-1',
+        messageId: 'message-1',
+        responseMessageId: 'message-2',
+      })
+      .expect(200);
+
+    expect(response.text).toContain('Make egg bhurji in about 10 minutes.');
+    expect(response.text).not.toContain('Would you like me to create a recipe canvas');
   });
 
   test.each([

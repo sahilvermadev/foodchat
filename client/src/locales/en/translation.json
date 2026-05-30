@@ -1342,7 +1342,7 @@
   "com_preferences_kitchen_group_unavailable": "Unavailable",
   "com_preferences_not_set": "Not set",
   "com_preferences_privacy": "These preferences are stored in your account and only used to tailor cooking help.",
-  "com_preferences_preview_profile": "Preview my profile",
+  "com_preferences_preview_profile": "Ask Mise to refine",
   "com_preferences_review_action": "Ask Mise to improve this profile",
   "com_preferences_remove_detail": "Remove detail",
   "com_preferences_save_changes": "Save changes",
@@ -1852,5 +1852,7 @@
   "com_recipes_search_placeholder": "Search recipes, guides, ingredients, or ideas",
   "com_recipes_update_saved": "Update saved",
   "com_recipes_view_tags": "View {{count}} more tags",
+  "com_recipes_discuss_ai": "Chat",
+  "com_recipes_edit_markdown_btn": "Edit Markdown",
   "com_user_message": "You"
 }

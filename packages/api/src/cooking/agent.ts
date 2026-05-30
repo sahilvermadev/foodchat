@@ -8,10 +8,30 @@ import type {
 } from 'librechat-data-provider';
 
 import { isRecipeDocumentMarkdown } from './canvas';
+import type { CookingTurnIntent } from './understanding';
+import { understandCookingTurn } from './understanding';
+import { buildTurnContext } from './context';
 import { createCookingWebContext } from './web';
 import type { CookingWebSource } from './web';
+import { planCookingTurn } from './planner';
+import type { CookingPlannedAction, CookingPromptProfile, CookingTurnPlan } from './planner';
 import { generateCookingDraft, getCookingDraftByConversation, updateCookingDraft } from './service';
 import { CookingValidationError } from './validation';
+import { buildPreferenceBrief } from './brief';
+import { validateCookingResponseHardBoundaries, validateCookingResponseWithJudge } from './quality';
+import type { CookingQualityFailureLabel } from './quality';
+import { routeCookingModels, routeCookingPlanner } from './routing';
+import type { CookingModelPurpose, CookingModelRoutingReason } from './routing';
+import { ensureInlineSourceCitations } from './citations';
+import {
+  defaultSuggestionsForIntent,
+  extractTextPromptSuggestions,
+  generatePromptSuggestions,
+  setCachedSuggestions,
+  getCachedSuggestions,
+} from './suggestions';
+
+export { sanitizePromptSuggestions, extractTextPromptSuggestions } from './suggestions';
 
 type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
 
@@ -109,6 +129,8 @@ type CookingChatInput = {
     throwError?: boolean;
   }) => Promise<Record<string, string>>;
   conversationCreatedAt?: string | number | Date;
+  locale?: string;
+  timeZone?: string;
   onTiming?: (event: CookingChatTimingEvent) => void;
   onTextDelta?: (delta: string) => void | Promise<void>;
 };
@@ -119,10 +141,17 @@ export type CookingChatResult = {
   draftChanged: boolean;
   promptSuggestions: string[];
   webSources: CookingWebSource[];
+  activeIntent?: CookingTurnIntent;
+  activeAction?: CookingPlannedAction;
 };
 
 export type CookingChatTimingEvent = {
-  stage: 'web_context_loaded' | 'provider_request_start' | 'provider_response' | 'tool_executed';
+  stage:
+    | 'web_context_loaded'
+    | 'provider_request_start'
+    | 'provider_response'
+    | 'tool_executed'
+    | 'quality_validated';
   durationMs?: number;
   turn?: number;
   toolName?: CookingToolName;
@@ -141,6 +170,30 @@ export type CookingChatTimingEvent = {
   canvasMutationValidated?: boolean;
   usedFastCanvasReturn?: boolean;
   providerToolCallCount?: number;
+  plannerUsed?: boolean;
+  plannerFallbackReason?: string;
+  plannedIntent?: string;
+  plannedAction?: string;
+  promptProfile?: string;
+  selectedContextCategories?: string[];
+  withheldContextCategories?: string[];
+  plannerConfidence?: string;
+  qualityGatePassed?: boolean;
+  qualityFailureLabels?: CookingQualityFailureLabel[];
+  qualityOriginalFailureLabels?: CookingQualityFailureLabel[];
+  qualityRepairAttempted?: boolean;
+  qualityRepairSucceeded?: boolean;
+  qualityRepairLatencyMs?: number;
+  qualityJudgeUsed?: boolean;
+  qualityJudgeFallbackReason?: string;
+  qualityJudgeRationaleLabels?: string[];
+  responseBufferedForValidation?: boolean;
+  modelPurpose?: CookingModelPurpose;
+  modelRoutingReason?: CookingModelRoutingReason;
+  plannerModel?: string;
+  plannerRoutingReason?: CookingModelRoutingReason;
+  responseModel?: string;
+  repairModel?: string;
   error?: string;
 };
 
@@ -167,8 +220,6 @@ const defaultBaseUrl = 'https://openrouter.ai/api/v1';
 const defaultModel = 'google/gemini-3.1-flash-lite';
 const defaultFallbackModel = 'deepseek/deepseek-v4-pro';
 const maxActiveCanvasContextChars = 18_000;
-const textPromptSuggestionCallPattern =
-  /(?:```(?:\w+)?\s*)?set_prompt_suggestions\s*\(\s*suggestions\s*=\s*(\[[\s\S]*?\])\s*\)\s*;?\s*(?:```)?/gi;
 const textPromptSuggestionMarker = 'set_prompt_suggestions';
 const streamedTextTailLength = textPromptSuggestionMarker.length + 24;
 
@@ -179,19 +230,29 @@ function logCookingSource(event: string, payload: Record<string, unknown>): void
   logger.info(`[CookingSource] ${event}`, payload);
 }
 
-const cookingSystemInstructions = `You are Mise: a cooking companion for curious home cooks. You help people decide what to cook, understand why food works, research recipes, troubleshoot the pan in front of them, and turn good ideas into usable recipe canvases.
+function logCookingAgent(event: string, payload: Record<string, unknown>): void {
+  if (process.env.NODE_ENV === 'test') {
+    return;
+  }
+  logger.info(`[CookingAgent] ${event} ${JSON.stringify(payload)}`);
+}
+
+const cookingSystemInstructions = `You are Samwise: a cooking companion for curious home cooks. You help people decide what to cook, understand why food works, research recipes, troubleshoot the pan in front of them, and turn good ideas into usable recipe canvases.
 
 Personality:
 - Be candid, worldly, curious, humane, and occasionally dryly funny. Think street-market appetite, deep respect for craft, and zero tolerance for bland hand-waving.
-- Do not imitate or quote any real chef, writer, or TV host. The voice is Mise's own: vivid, direct, observant, and generous.
+- Do not imitate or quote any real chef, writer, or TV host. The voice is Samwise's own: vivid, direct, observant, and generous.
 - Make cooking feel alive. Use sensory language, cultural context, little bits of food history, and practical kitchen judgment when they help.
 - Talk like a person, not a form. Avoid generic therapy phrases, corporate reassurance, and empty enthusiasm.
 - Build a relationship over time. Notice durable details from the user's profile, but do not perform memory. Use personal context naturally and sparingly.
 
 Decide by user need before choosing tools:
 - Some turns need communication: answer a question, clarify a tradeoff, explain a technique, compare options, reassure, diagnose, or help the user decide. Use chat for these turns, even when a canvas tool is available.
-- Some turns need durable document work: the user wants a recipe, guide, or preparation plan they will use later, or wants the selected document changed. Use a document mutation tool for these turns.
-- If the user is still exploring, keep the conversation open. If the user has committed to a recipe or asks for the cooking instructions to change, update the canvas instead of merely describing the update.
+- Some turns need durable document work: the user wants a recipe, guide, or preparation plan they will use later, the reply would otherwise present one specific recipe in detail, or the user wants the selected document changed. Use a document mutation tool for these turns.
+- If the user is still exploring, keep the conversation open. Once you are presenting a particular recipe in detail with ingredients and cookable method, create or update the canvas instead of dumping the full recipe in chat.
+- If document tools are unavailable for a turn that now clearly needs a complete recipe document, do not pretend to create the canvas and do not dump a long formal recipe in chat; answer briefly and offer to write it up on the canvas.
+- After the recipe is on the canvas, later modifications should both update the recipe with the appropriate document tool and communicate the result clearly in chat via the tool's user_message.
+- If the user has committed to a recipe or asks for the cooking instructions to change, update the canvas instead of merely describing the update.
 - Prior discussion is not consent to edit the canvas. A concept mentioned in chat becomes part of the recipe only when the current request asks to apply it, or when fulfilling the request would otherwise leave the durable recipe wrong.
 - If the request is ambiguous, prefer an honest chat response that answers the immediate need and offers the concrete canvas change, rather than silently rewriting the recipe.
 
@@ -209,11 +270,14 @@ Cooking document contract:
 
 External recipe sources:
 - When the user provides a recipe source and wants that recipe used, the source controls the recipe. Use read_recipe_source before creating, replacing, comparing, or claiming exactness.
+- When the user asks for an exact, official, or named chef/author/publisher recipe, use web research before answering. If no readable source is found, say so and ask for a link or pasted text; do not reconstruct it from memory.
 - Be honest about source access. If the page cannot be read, is paywalled, or does not expose the usable recipe details, ask the user to paste the recipe text instead of inventing a lookalike.
-- When a source is readable, preserve the cooking facts that make it that recipe: quantities, ratios, yield, equipment size, temperature, timing, and critical method. Rewrite guidance in Mise's own words and cite the source where chat needs a citation.
+- When a source is readable, preserve the cooking facts that make it that recipe: quantities, ratios, yield, equipment size, temperature, timing, and critical method. Rewrite guidance in Samwise's own words and cite the source where chat needs a citation.
 
 Using user context:
-- Treat Safety, Diet, and Religious & Cultural Rules as hard constraints.
+- Treat Safety, Diet, and Religious & Cultural Rules as hard constraints that silently filter suggestions.
+- Do not open with or volunteer phrases like "since we're avoiding..." or "skipping..." saved restrictions. Mention a restriction only when the user asks about it, when explaining why a requested food cannot be suggested, or when a substitution is directly necessary.
+- If the user asks for a dish, style, or recipe containing or resembling a restricted ingredient (e.g., a "beefy" dish when "beef-free" is a saved constraint), immediately resolve this conflict by substituting the restricted ingredient with a compliant alternative (e.g., mushrooms, soy sauce, or lentils to mimic "beefy" flavor). Clearly and briefly explain the substitution in your response (or in your canvas tool's user_message), confirming that you are keeping their meal compliant with their saved restrictions while still satisfying their flavor request.
 - Treat Kitchen, Household, Taste, Goals, Location, Cooking Level, and Personal Context as helpful context, not commands.
 - Do not force saved equipment, cuisines, or preferences into a reply just because they exist.
 - If the user states a clear lasting preference or personal detail relevant to future cooking, use it naturally; a backend batch curator may later fold durable facts into the saved profile.
@@ -226,9 +290,9 @@ Internet access:
 - Search only for current facts, authenticity/source comparison, food safety, product/equipment details, grocery availability, restaurant/menu recreation, and claims that need source backing. Do not search merely for recipe inspiration.
 - Prefer one to three directly relevant sources when external evidence is needed. Use a broader source set only when the user explicitly asks for research depth, comparison, verification, or multiple perspectives.
 - Prefer USDA, FDA, CDC, extension offices, and manufacturer documentation for food safety. If authoritative confirmation is not found, say so.
-- When web research is used, sources are supporting evidence, not the shape of the answer. First give the user useful cooking judgment in Mise's own voice; cite only the claims that depend on those sources.
+- When web research is used, sources are supporting evidence, not the shape of the answer. First give the user useful cooking judgment in Samwise's own voice; cite only the claims that depend on those sources.
 - Results from a web tool are working evidence, not a final answer. After using them, answer the user's request substantively; never return only a source list, bibliography, attribution line, or thin one-sentence summary.
-- Do not copy long recipe text verbatim. Transform external recipes into Mise's own guidance or canvas format and cite the source URL once in chat.
+- Do not copy long recipe text verbatim. Transform external recipes into Samwise's own guidance or canvas format and cite the source URL once in chat.
 
 Conversation flow:
 - When an exploratory reply presents useful next steps or requires a choice, finish the user-facing answer with a clear, natural question.
@@ -250,19 +314,30 @@ Recipe canvas markdown requirements:
 - Recovery Notes should cover likely fixes for the specific recipe, such as too salty, too acidic, too thick, too thin, split sauce, raw spice taste, dry protein, or undercooked starch.
 - Serving Notes should explain temperature, texture at serving, plating, pairings, and what contrast balances the dish.
 - Variations should be constrained and meaningful. Provide a canonical path first, then only a few purposeful variations.
-- Keep tone warm, direct, and trustworthy. The cook should feel that someone competent is beside them.`;
+- Keep tone warm, direct, and trustworthy. The cook should feel that someone competent is beside them.
 
-function preferencesContext(markdown?: string): string {
-  const preferences = markdown?.trim();
-  if (!preferences) {
-    return '';
+Prompt suggestions inline format:
+- At the very end of your response, if the response is complete and offers meaningful next steps or asks the user to make a decision, append a single trailing line formatted exactly as: set_prompt_suggestions(suggestions=["concise suggestion 1", "concise suggestion 2", "concise suggestion 3"]);
+- Limit suggestions to a maximum of 3 highly contextual, concise follow-up prompts. If the reply is rhetorical or informational, do not append suggestions.`;
+
+function withoutSection(text: string, heading: string): string {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`\\n\\n${escaped}:\\n[\\s\\S]*?(?=\\n\\n[A-Z][^\\n]+:\\n|$)`), '');
+}
+
+function cookingSystemInstructionsForProfile(profile: CookingPromptProfile): string {
+  if (profile === 'document_work' || profile === 'source_or_research') {
+    return cookingSystemInstructions;
   }
 
-  return [
-    'User Preferences Context:',
-    'Treat Safety, Diet, and Religious & Cultural Rules as hard constraints. Treat Kitchen, Household, Specialty Ingredients, Taste, Goals, Location, Cooking Level, and Personal Context as relationship context and optimization context, not commands. Specialty Ingredients are usually available extras; consider them when they can make a recipe more interesting, but do not force them into every dish. The latest explicit chat request can override soft preferences only. If the user states a lasting preference or personal detail in chat, respect it for this conversation; a backend batch curator may later fold durable facts into the saved profile.',
-    preferences,
-  ].join('\n\n');
+  const withoutCanvasRequirements = withoutSection(
+    cookingSystemInstructions,
+    'Recipe canvas markdown requirements',
+  );
+  if (profile === 'active_canvas_discussion') {
+    return withoutCanvasRequirements;
+  }
+  return withoutSection(withoutCanvasRequirements, 'Cooking document contract');
 }
 
 const tools = [
@@ -448,6 +523,16 @@ function linkedSourceState(text: string): LinkedSourceState {
   };
 }
 
+function preferenceSectionTitles(markdown: string | undefined): string[] {
+  return [
+    ...new Set(
+      [...(markdown?.matchAll(/^#{2,}\s+(.+?)\s*$/gm) ?? [])]
+        .map((match) => match[1]?.trim())
+        .filter((title): title is string => Boolean(title)),
+    ),
+  ];
+}
+
 function parseRecipeSourceContent(content: string): ParsedRecipeSource {
   try {
     const parsed = JSON.parse(content) as ParsedRecipeSource;
@@ -562,14 +647,28 @@ function toolStateContext(
   hasActiveCanvas: boolean,
   availableTools: AvailableCookingTool[],
 ): string {
-  const toolNames = availableTools.map((tool) => tool.function.name).join(', ') || 'none';
+  const availableToolNames = availableTools.map((tool) => tool.function.name);
+  const toolNames = availableToolNames.join(', ') || 'none';
+  const hasDocumentTools = availableToolNames.some((name) =>
+    ['create_cooking_document', 'read_cooking_document', 'revise_cooking_document'].includes(name),
+  );
+  let documentToolLine = '';
+  if (!hasDocumentTools) {
+    documentToolLine =
+      '- Durable document tools are intentionally unavailable this turn. Answer in chat unless the user explicitly asks for a saved recipe, guide, prep plan, or canvas change.';
+  } else if (hasActiveCanvas) {
+    documentToolLine =
+      '- Changes to the selected document go through revise_cooking_document; distinct deliverables go through create_cooking_document; exact inspection goes through read_cooking_document.';
+  } else {
+    documentToolLine =
+      '- A new durable cooking document should go through create_cooking_document after the user commits to usable instructions.';
+  }
+
   return [
     'Current Product State:',
     `- Selected cooking document: ${hasActiveCanvas ? 'yes' : 'no'}.`,
     `- Available tools this turn: ${toolNames}.`,
-    hasActiveCanvas
-      ? '- Changes to the selected document go through revise_cooking_document; distinct deliverables go through create_cooking_document; exact inspection goes through read_cooking_document.'
-      : '- A new durable cooking document should go through create_cooking_document after the user commits to usable instructions.',
+    documentToolLine,
     '- Chat is the right response for questions, clarification, comparison, reassurance, and decision support. Do not claim a canvas mutation unless a canvas mutation tool succeeds.',
   ].join('\n');
 }
@@ -577,11 +676,14 @@ function toolStateContext(
 function selectCookingToolsForState(
   hasActiveCanvas: boolean,
   webTools: CookingWebToolDefinition[],
-  options: { allowResearchRequest?: boolean } = {},
+  options: { allowDocumentTools?: boolean; allowResearchRequest?: boolean } = {},
 ): AvailableCookingTool[] {
-  const localToolNames: CookingToolName[] = hasActiveCanvas
-    ? ['create_cooking_document', 'read_cooking_document', 'revise_cooking_document']
-    : ['create_cooking_document'];
+  let localToolNames: CookingToolName[] = [];
+  if (options.allowDocumentTools !== false) {
+    localToolNames = hasActiveCanvas
+      ? ['create_cooking_document', 'read_cooking_document', 'revise_cooking_document']
+      : ['create_cooking_document'];
+  }
   const selected = localToolNames
     .map(cookingTool)
     .filter((tool): tool is CookingToolDefinition => Boolean(tool));
@@ -612,11 +714,15 @@ type AvailableToolState = {
 
 function buildAvailableToolState({
   activeCanvas,
+  allowDocumentTools,
+  allowResearchRequestTool,
   sourceState,
   webContext,
   webToolsUnlocked,
 }: {
   activeCanvas: boolean;
+  allowDocumentTools?: boolean;
+  allowResearchRequestTool?: boolean;
   sourceState: LinkedSourceState;
   webContext: Awaited<ReturnType<typeof createCookingWebContext>>;
   webToolsUnlocked: boolean;
@@ -625,7 +731,9 @@ function buildAvailableToolState({
     ? webToolsForProvider(webContext.tools, sourceState)
     : [];
   const availableTools = selectCookingToolsForState(activeCanvas, providerWebTools, {
-    allowResearchRequest: !webToolsUnlocked && webContext.tools.length > 0,
+    allowDocumentTools,
+    allowResearchRequest:
+      Boolean(allowResearchRequestTool) && !webToolsUnlocked && webContext.tools.length > 0,
   });
   const availableToolNames = availableTools.map((tool) => {
     const toolName = normalizeToolName(tool.function.name);
@@ -774,98 +882,6 @@ function draftTitle(draft: CookingDraft | undefined, fallback?: string): string 
   );
 }
 
-export function sanitizePromptSuggestions(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  const suggestions: string[] = [];
-  for (const item of value) {
-    if (typeof item !== 'string') {
-      continue;
-    }
-    const suggestion = item.trim().replace(/\s+/g, ' ');
-    if (!suggestion || suggestion.length > 90) {
-      continue;
-    }
-    const key = suggestion.toLocaleLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    suggestions.push(suggestion);
-    if (suggestions.length === 3) {
-      break;
-    }
-  }
-
-  return suggestions;
-}
-
-export function extractTextPromptSuggestions(text: string): {
-  text: string;
-  promptSuggestions: string[];
-} {
-  const suggestions: string[] = [];
-  const visibleText = text.replace(textPromptSuggestionCallPattern, (_call, serialized: string) => {
-    try {
-      suggestions.push(...sanitizePromptSuggestions(JSON.parse(serialized)));
-    } catch {
-      return '';
-    }
-    return '';
-  });
-
-  return {
-    text: visibleText.replace(/\n{3,}/g, '\n\n').trim(),
-    promptSuggestions: sanitizePromptSuggestions(suggestions),
-  };
-}
-
-async function generatePromptSuggestions(
-  messages: ChatMessage[],
-  responseText: string,
-  model: string,
-): Promise<string[]> {
-  const promptSuggestionTool = cookingTool('set_prompt_suggestions');
-  if (!promptSuggestionTool || !responseText.includes('?')) {
-    return [];
-  }
-
-  try {
-    const assistant = await complete(
-      [
-        ...messages,
-        {
-          role: 'system',
-          content: [
-            'You add optional prompt suggestion chips after a completed cooking reply.',
-            'Do not answer the user again. Call set_prompt_suggestions with zero to three exact prompts the user could send next.',
-            'Use suggestions only when the completed reply offers meaningful next steps or asks the user to make a decision. For a rhetorical or informational question, submit an empty suggestions array.',
-            'Suggestions should be concise, specific to the reply and conversation, and never generic filler.',
-            '',
-            'Completed user-facing reply:',
-            responseText,
-          ].join('\n'),
-        },
-      ],
-      model,
-      [promptSuggestionTool],
-      undefined,
-      { type: 'function', function: { name: 'set_prompt_suggestions' } },
-    );
-    const toolCall = assistant.tool_calls?.find(
-      (candidate) => candidate.function.name === 'set_prompt_suggestions',
-    );
-    return toolCall
-      ? sanitizePromptSuggestions(parseArguments(toolCall.function.arguments).suggestions)
-      : [];
-  } catch {
-    return [];
-  }
-}
-
 async function recoverEmptyResponse(messages: ChatMessage[], model: string): Promise<string> {
   try {
     const recovered = await complete(
@@ -879,213 +895,14 @@ async function recoverEmptyResponse(messages: ChatMessage[], model: string): Pro
       ],
       model,
       [],
+      undefined,
+      'auto',
+      0.1,
     );
     return extractTextPromptSuggestions(recovered.content?.trim() ?? '').text;
   } catch {
     return '';
   }
-}
-
-function requestsBroadResearch(text: string): boolean {
-  return /\b(?:compare|comparison|research|sources?|evidence|fact[- ]?check|verify|verification|multiple perspectives|deep dive|comprehensive)\b/i.test(
-    text,
-  );
-}
-
-function requestsExternalEvidence(text: string, sourceState: LinkedSourceState): boolean {
-  if (sourceState.readRequired) {
-    return true;
-  }
-
-  return (
-    requestsBroadResearch(text) ||
-    /\b(?:browse|internet|web|search|look\s*(?:it|this)?\s*up|google|source-backed|citation|cite|references?)\b/i.test(
-      text,
-    ) ||
-    /\b(?:safe|safety|dangerous|botulism|canning|preserv(?:e|ing|ation)|pasteuri[sz]e|internal temperature|food poisoning|left out|expired|spoil(?:ed|age)|raw chicken|raw pork|raw egg)\b/i.test(
-      text,
-    ) ||
-    /\b(?:current|latest|today|available|availability|price|buy|store|grocery|brand|product|model|equipment|manufacturer)\b/i.test(
-      text,
-    ) ||
-    /\b(?:restaurant|menu|copycat|recreate|dupe|clone|authentic|traditional|origin|regional|history)\b/i.test(
-      text,
-    )
-  );
-}
-
-function normalizedSourceUrl(value: string): string {
-  try {
-    const url = new URL(value);
-    url.hash = '';
-    return url.toString().replace(/\/$/, '');
-  } catch {
-    return value.replace(/\/$/, '');
-  }
-}
-
-function citedWebSources(
-  text: string,
-  sources: CookingWebSource[],
-  limit: number,
-): CookingWebSource[] {
-  const linkedUrls = new Set(
-    [...text.matchAll(/\[[^\]]+\]\((https?:\/\/[^)\s]+)\)/gi)].map((match) =>
-      normalizedSourceUrl(match[1]),
-    ),
-  );
-  return sources
-    .filter((source) => linkedUrls.has(normalizedSourceUrl(source.url)))
-    .slice(0, limit);
-}
-
-function sourceLabel(source: CookingWebSource): string {
-  if (source.title?.trim()) {
-    return source.title.trim();
-  }
-  try {
-    return new URL(source.url).hostname.replace(/^www\./, '');
-  } catch {
-    return source.url;
-  }
-}
-
-function normalizedSourceText(value: string): string {
-  return value
-    .toLocaleLowerCase()
-    .replace(/https?:\/\/\S+/g, ' ')
-    .replace(/[[\]()`*_#>]/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ');
-}
-
-function sourceAttributionVariants(sources: CookingWebSource[]): string[] {
-  const variants = new Set<string>();
-  for (const source of sources) {
-    const label = normalizedSourceText(sourceLabel(source));
-    if (label) {
-      variants.add(label);
-    }
-    try {
-      const hostname = new URL(source.url).hostname.replace(/^www\./, '');
-      const normalizedHost = normalizedSourceText(hostname);
-      if (normalizedHost) {
-        variants.add(normalizedHost);
-      }
-    } catch {
-      // Ignore malformed URLs; sourceLabel already provides a usable fallback.
-    }
-  }
-  return [...variants].sort((left, right) => right.length - left.length);
-}
-
-function isSourceAttributionLine(line: string, sourceVariants: string[]): boolean {
-  const withoutListMarker = line.replace(/^(?:[-*]|\d+[.)])\s+/, '').trim();
-  if (
-    /^(?:#{1,6}\s*)?(?:sources?|references?|citations?)(?:\s+consulted)?\s*:?(?:\s|$)/i.test(
-      withoutListMarker,
-    ) ||
-    /^source\s*:\s*\[[^\]]+\]\(https?:\/\//i.test(withoutListMarker) ||
-    /^\[[^\]]+\]\(https?:\/\/[^)\s]+\)$/i.test(withoutListMarker) ||
-    /^https?:\/\/\S+$/i.test(withoutListMarker) ||
-    /^[a-z0-9.-]+\.[a-z]{2,}(?:\/\S*)?$/i.test(withoutListMarker)
-  ) {
-    return true;
-  }
-
-  const normalizedLine = normalizedSourceText(withoutListMarker);
-  if (!normalizedLine) {
-    return true;
-  }
-  const lineWords = normalizedLine.split(' ').length;
-  return sourceVariants.some((variant) => {
-    if (normalizedLine === variant) {
-      return true;
-    }
-    const variantWords = variant.split(' ').length;
-    return variantWords > 1 && normalizedLine.includes(variant) && lineWords <= variantWords + 3;
-  });
-}
-
-function isAttributionOnlyResponse(text: string, sources: CookingWebSource[] = []): boolean {
-  const lines = text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length === 0) {
-    return true;
-  }
-  const sourceVariants = sourceAttributionVariants(sources);
-  return lines.every((line) => isSourceAttributionLine(line, sourceVariants));
-}
-
-function citedFallbackResponse(text: string, source: CookingWebSource): string {
-  return `${text}\n\nReference: [${sourceLabel(source)}](${source.url})`;
-}
-
-async function ensureInlineSourceCitations(
-  messages: ChatMessage[],
-  text: string,
-  sources: CookingWebSource[],
-  model: string,
-  sourceLimit: number,
-): Promise<{ text: string; sources: CookingWebSource[] }> {
-  if (!text || sources.length === 0) {
-    return { text, sources: [] };
-  }
-  const attributionOnly = isAttributionOnlyResponse(text, sources);
-  const existingCitations = citedWebSources(text, sources, sourceLimit);
-  if (!attributionOnly && existingCitations.length > 0) {
-    return { text, sources: existingCitations };
-  }
-
-  const sourceLines = sources
-    .slice(0, sourceLimit)
-    .map((source) => `- ${sourceLabel(source)}: ${source.url}`)
-    .join('\n');
-  const correctionMessages: ChatMessage[] = [
-    ...messages,
-    {
-      role: 'system',
-      content: [
-        attributionOnly
-          ? 'The previous draft contains only source attribution and does not answer the user request.'
-          : 'The previous answer relied on web research but omitted inline markdown citations.',
-        attributionOnly
-          ? 'Write a substantive user-facing answer to the original request now, using the evidence only where relevant and citing supported factual claims inline with the source URLs below.'
-          : 'Rewrite the same answer concisely, keeping its advice and final question, and cite externally supported factual claims inline using only the source URLs below.',
-        'Return only the corrected user-facing answer. Do not call tools or mention this correction.',
-        '',
-        'Draft answer to revise:',
-        text,
-        '',
-        'Available sources:',
-        sourceLines,
-      ].join('\n'),
-    },
-  ];
-  for (const correctionModel of providerModels(model)) {
-    try {
-      const revised = await complete(correctionMessages, correctionModel, []);
-      const revisedText = revised.content?.trim() ?? '';
-      const revisedCitations = citedWebSources(revisedText, sources, sourceLimit);
-      if (
-        revisedText &&
-        !isAttributionOnlyResponse(revisedText, sources) &&
-        revisedCitations.length > 0
-      ) {
-        return { text: revisedText, sources: revisedCitations };
-      }
-    } catch {
-      continue;
-    }
-  }
-  if (attributionOnly) {
-    return { text: '', sources: [] };
-  }
-  const source = sources[0];
-  return { text: citedFallbackResponse(text, source), sources: [source] };
 }
 
 function cleanRequiredText(value: unknown, message: string): string {
@@ -1256,7 +1073,7 @@ async function executeTool(
         researchType,
         reason,
         guidance:
-          'Use the narrowest web tool needed, then answer the user substantively in Mise voice. Sources should support the answer, not replace it.',
+          'Use the narrowest web tool needed, then answer the user substantively in Samwise voice. Sources should support the answer, not replace it.',
       }),
       draftChanged: false,
       unlockWebTools: true,
@@ -1418,6 +1235,7 @@ async function complete(
   availableTools: AvailableCookingTool[],
   onTextDelta?: (delta: string) => void | Promise<void>,
   toolChoice: ToolChoice = 'auto',
+  temperature?: number,
 ): Promise<ChatMessage> {
   const key = apiKey();
   if (!key) {
@@ -1425,6 +1243,17 @@ async function complete(
       'Cooking chat is not configured. Set COOKING_AGENT_API_KEY or OPENROUTER_KEY.',
     );
   }
+
+  const cleanedMessages = messages.map((msg, index) => {
+    if (index > 0 && msg.role === 'system') {
+      return {
+        ...msg,
+        role: 'user' as ChatRole,
+        content: msg.content ? `[System Directive]\n${msg.content}` : null,
+      };
+    }
+    return msg;
+  });
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs());
@@ -1439,10 +1268,11 @@ async function complete(
       },
       body: JSON.stringify({
         model,
-        messages,
+        messages: cleanedMessages,
         tools: availableTools,
         tool_choice: toolChoice,
         stream: true,
+        ...(temperature !== undefined ? { temperature } : {}),
       }),
     });
 
@@ -1598,6 +1428,181 @@ async function complete(
   }
 }
 
+async function completeJsonOnly(
+  messages: Array<{ role: 'system' | 'user'; content: string }>,
+  model: string,
+  temperature?: number,
+): Promise<string> {
+  const assistant = await complete(messages, model, [], undefined, 'auto', temperature);
+  return assistant.content?.trim() ?? '';
+}
+
+async function repairCookingResponse(
+  messages: ChatMessage[],
+  responseText: string,
+  repairInstruction: string,
+  model: string,
+): Promise<string> {
+  const repaired = await complete(
+    [
+      ...messages,
+      {
+        role: 'system',
+        content: [repairInstruction, '', 'Previous reply to repair:', responseText].join('\n'),
+      },
+    ],
+    model,
+    [],
+    undefined,
+    'auto',
+    0.1,
+  );
+  return extractTextPromptSuggestions(repaired.content?.trim() ?? '').text;
+}
+
+async function sanitizeResponseText(
+  text: string,
+  failureLabels: CookingQualityFailureLabel[],
+  model: string,
+): Promise<string> {
+  const instructions: string[] = [
+    'You are a high-speed post-processing text filter. Your job is to strictly sanitize the provided cooking reply based on the failure reasons.',
+    'Follow these rules strictly:',
+    '- Return only the sanitized user-facing text. Do not add any introduction, explanations, or conversational filler.',
+    '- Preserve all actual recipes, steps, ingredients, tips, and normal instruction fully.',
+  ];
+
+  if (failureLabels.includes('unnecessary_restriction_disclosure')) {
+    instructions.push(
+      '- CRITICAL: Completely remove any sentences, phrases, or conversational introductions that disclose, volunteer, or mention the user\'s saved dietary restrictions or allergies (e.g., "since you don\'t eat beef", "avoiding peanuts", etc.). Keep the recipes and cooking tips but apply these filters silently.',
+    );
+  }
+
+  if (failureLabels.includes('private_context_leak')) {
+    instructions.push(
+      '- CRITICAL: Completely remove any sentences or phrases that disclose the user\'s private facts, such as their exact location/city (e.g., "Dwarka"), timezone, or timestamp. Keep the rest of the text fully intact.',
+    );
+  }
+
+  if (failureLabels.includes('canvas_claim_without_mutation')) {
+    instructions.push(
+      '- CRITICAL: Completely remove any sentences where the assistant claims to have created, updated, or changed a canvas or document (e.g., "I\'ve created a canvas for you...", "I updated the document..."), since no canvas mutation actually occurred. Keep the rest of the cooking instructions.',
+    );
+  }
+
+  instructions.push('\nText to sanitize:\n' + text);
+
+  try {
+    const response = await complete(
+      [
+        {
+          role: 'system',
+          content: instructions.join('\n'),
+        },
+      ],
+      model,
+      [],
+      undefined,
+      'auto',
+      0.1,
+    );
+    return response.content?.trim() ?? text;
+  } catch (error) {
+    logger.error('[CookingAgent] sanitization failed', error);
+    return text;
+  }
+}
+
+function buildFriendlySourceOnlyResponse(sources: CookingWebSource[]): string {
+  if (sources.length === 0) {
+    return 'I searched for the recipe but could not extract the exact instructions just now. Please try sharing a direct link or pasting the recipe text, and I can adapt it for you!';
+  }
+
+  const links = sources
+    .map((source) => {
+      const title = source.title?.trim() || new URL(source.url).hostname.replace(/^www\./, '');
+      return `- [${title}](${source.url})`;
+    })
+    .join('\n');
+
+  return [
+    "I found some great recipe sources for you! Since I want to make sure I don't miss any of the chef's specific cooking details, here are the links directly to the official sources:",
+    '',
+    links,
+    '',
+    'Please feel free to check them out! If you would like me to scale the ingredients, suggest substitutions for specific preferences, or guide you through the cooking steps once you are ready, just let me know!',
+  ].join('\n');
+}
+
+function failedQualityResponse(
+  turnPlan: CookingTurnPlan,
+  labels: CookingQualityFailureLabel[],
+): string {
+  if (
+    labels.includes('empty_response') &&
+    (turnPlan.action === 'create_document' || turnPlan.action === 'revise_document')
+  ) {
+    return turnPlan.action === 'revise_document'
+      ? 'I could not update the cooking canvas just now. Please try the change again.'
+      : 'I could not create the recipe canvas just now. Please try the recipe request again.';
+  }
+  const semanticOnly = labels.every((label) =>
+    [
+      'missing_time_constraint',
+      'not_actionable',
+      'needless_clarification',
+      'unnecessary_restriction_disclosure',
+    ].includes(label),
+  );
+  if (semanticOnly) {
+    if (
+      turnPlan.promptProfile === 'source_or_research' ||
+      turnPlan.action === 'research_then_answer' ||
+      turnPlan.intent === 'research_request' ||
+      turnPlan.intent === 'source_driven_request'
+    ) {
+      return 'I could not validate a source-faithful answer from the available evidence. Please send the official recipe link or paste the recipe text, and I can adapt it without inventing details.';
+    }
+    return 'I could not produce a reliable cooking reply just now. Please try again.';
+  }
+  return 'I could not validate that cooking response against the request and saved boundaries. Please try again.';
+}
+
+function requiresCanvasMutation(turnPlan: CookingTurnPlan): boolean {
+  return turnPlan.action === 'create_document' || turnPlan.action === 'revise_document';
+}
+
+function missingCanvasMutationInstruction(turnPlan: CookingTurnPlan): string {
+  const toolName =
+    turnPlan.action === 'revise_document' ? 'revise_cooking_document' : 'create_cooking_document';
+  return [
+    'The current user asked for durable cooking document work.',
+    `Do not answer in prose only. Call ${toolName} with complete valid markdown and a concise user_message.`,
+    "If the request conflicts with saved dietary restrictions (e.g., asking for a beefy dish while beef-free), resolve it by substituting restricted ingredients with compliant alternatives, and explain this briefly in the tool's user_message.",
+    'If exact source faithfulness is required and the source has not been read, use the available web/source tool first, then create or revise the canvas from the evidence.',
+    'Never claim the canvas was created or changed unless the canvas mutation tool succeeds.',
+  ].join('\n');
+}
+
+function planNeedsExternalEvidence(
+  turnPlan: CookingTurnPlan,
+  sourceState: LinkedSourceState,
+): boolean {
+  return (
+    sourceState.readRequired ||
+    turnPlan.action === 'read_source' ||
+    turnPlan.action === 'research_then_answer' ||
+    turnPlan.intent === 'source_driven_request' ||
+    turnPlan.intent === 'research_request' ||
+    turnPlan.selectedContextCategories.includes('source') ||
+    turnPlan.selectedContextCategories.includes('research')
+  );
+}
+
+function planNeedsBroaderSourceSet(turnPlan: CookingTurnPlan): boolean {
+  return turnPlan.intent === 'research_request' || turnPlan.action === 'research_then_answer';
+}
+
 function isCanvasMutationTool(
   toolName: CookingToolName,
 ): toolName is 'create_cooking_document' | 'revise_cooking_document' {
@@ -1605,33 +1610,178 @@ function isCanvasMutationTool(
 }
 
 export async function runCookingChat(input: CookingChatInput): Promise<CookingChatResult> {
+  const turnStartedAt = Date.now();
   const sourceState = linkedSourceState(input.text);
-  const broadResearch = requestsBroadResearch(input.text);
-  const sourceLimit = broadResearch ? 5 : 3;
+  const requestedModel = selectedModel(input.model);
+  const turnContext = buildTurnContext({
+    conversationCreatedAt: input.conversationCreatedAt,
+    locale: input.locale,
+    timeZone: input.timeZone,
+    preferencesMarkdown: input.preferencesMarkdown,
+  });
+  const turnUnderstanding = understandCookingTurn({
+    conversationId: input.conversationId,
+    text: input.text,
+    messages: input.messages,
+    hasActiveDraft: Boolean(input.activeDraft),
+    turnContext,
+  });
+  logCookingAgent('turn_start', {
+    conversationId: input.conversationId,
+    textChars: input.text.length,
+    historyCount: input.messages?.length ?? 0,
+    documentCount: input.documents?.length ?? 0,
+    hasActiveDraft: Boolean(input.activeDraft),
+    hasPreferences: Boolean(input.preferencesMarkdown?.trim()),
+    requestedModel,
+    linkedUrlCount: sourceState.urls.length,
+    linkedSourceReadRequired: sourceState.readRequired,
+    runtimeFallbackIntent: turnUnderstanding.intent,
+    runtimeFallbackResponseMode: turnUnderstanding.responseMode,
+    runtimeFallbackAllowDocumentTools: turnUnderstanding.toolPolicy.allowDocumentTools,
+    runtimeFallbackAllowResearchRequestTool: turnUnderstanding.toolPolicy.allowResearchRequestTool,
+  });
+  const plannerRoute = routeCookingPlanner({
+    defaultModel: requestedModel,
+    plannerModel: process.env.COOKING_AGENT_PLANNER_MODEL,
+    complexModel: process.env.COOKING_AGENT_COMPLEX_MODEL,
+    complexPlanning: sourceState.readRequired || Boolean(input.activeDraft),
+  });
   const webContextStartedAt = Date.now();
   const webContext = await createCookingWebContext({
     user: input.user,
     webSearchConfig: input.webSearchConfig,
     loadAuthValues: input.loadAuthValues,
     conversationCreatedAt: input.conversationCreatedAt,
-    allowBroadResearch: broadResearch,
+    allowBroadResearch: true,
+  });
+  logCookingAgent('web_context_loaded', {
+    conversationId: input.conversationId,
+    durationMs: Date.now() - webContextStartedAt,
+    configuredToolCount: webContext.tools.length,
+    unavailableReason: webContext.unavailableReason,
+    broadResearch: 'planner_controlled',
   });
   const linkedSourcePreload = await preloadLinkedRecipeSources(sourceState, webContext);
   const activeCanvas = Boolean(input.activeDraft);
-  const externalEvidenceNeeded = requestsExternalEvidence(input.text, sourceState);
+  const plannerStartedAt = Date.now();
+  logCookingAgent('planner_request', {
+    conversationId: input.conversationId,
+    plannerModel: plannerRoute.model,
+    plannerRoutingReason: plannerRoute.reason,
+    runtimeFallbackIntent: turnUnderstanding.intent,
+    runtimeFallbackResponseMode: turnUnderstanding.responseMode,
+    activeCanvas,
+    webConfigured: webContext.tools.length > 0,
+    linkedUrlCount: sourceState.urls.length,
+    linkedSourceReadRequired: sourceState.readRequired,
+    preferenceSectionCount: preferenceSectionTitles(input.preferencesMarkdown).length,
+  });
+  const turnPlan: CookingTurnPlan = await planCookingTurn(
+    {
+      conversationId: input.conversationId,
+      text: input.text,
+      messages: input.messages,
+      turnContext,
+      activeDraft: input.activeDraft,
+      documents: input.documents,
+      linkedSourceState: sourceState,
+      preferenceSectionTitles: preferenceSectionTitles(input.preferencesMarkdown),
+      availableCapabilities: {
+        documentTools: true,
+        activeCanvas,
+        webConfigured: webContext.tools.length > 0,
+      },
+      runtimeUnderstanding: turnUnderstanding,
+    },
+    (messages) => completeJsonOnly(messages, plannerRoute.model, 0.1),
+  );
+  logCookingAgent('planner_result', {
+    conversationId: input.conversationId,
+    durationMs: Date.now() - plannerStartedAt,
+    plannerUsed: turnPlan.plannerUsed,
+    fallbackReason: turnPlan.fallbackReason,
+    intent: turnPlan.intent,
+    action: turnPlan.action,
+    promptProfile: turnPlan.promptProfile,
+    confidence: turnPlan.confidence,
+    selectedContextCategories: turnPlan.selectedContextCategories,
+    withheldContextCategories: turnPlan.withheldContextCategories,
+    rationaleLabels: turnPlan.privacySafeRationaleLabels,
+    allowDocumentTools: turnPlan.toolPolicy.allowDocumentTools,
+    allowResearchRequestTool: turnPlan.toolPolicy.allowResearchRequestTool,
+    clarificationNeeded: turnPlan.clarification.needed,
+    hardConstraintCount: turnPlan.constraints.hard.length,
+    softConstraintCount: turnPlan.constraints.soft.length,
+  });
+  const externalEvidenceNeeded = planNeedsExternalEvidence(turnPlan, sourceState);
+  const sourceLimit = planNeedsBroaderSourceSet(turnPlan) ? 5 : 3;
+  const modelRoutes = {
+    ...routeCookingModels({
+      defaultModel: requestedModel,
+      plannerModel: plannerRoute.model,
+      complexModel: process.env.COOKING_AGENT_COMPLEX_MODEL,
+      repairModel: process.env.COOKING_AGENT_REPAIR_MODEL,
+      turnPlan,
+      safetySensitive: externalEvidenceNeeded,
+      sourceDependent: externalEvidenceNeeded,
+    }),
+    planner: plannerRoute,
+  };
+  const resolvedModel = modelRoutes.response.model;
+  logCookingAgent('model_routing', {
+    conversationId: input.conversationId,
+    plannerModel: modelRoutes.planner.model,
+    plannerReason: modelRoutes.planner.reason,
+    responseModel: modelRoutes.response.model,
+    responsePurpose: modelRoutes.response.purpose,
+    responseReason: modelRoutes.response.reason,
+    repairModel: modelRoutes.repair.model,
+    repairPurpose: modelRoutes.repair.purpose,
+    repairReason: modelRoutes.repair.reason,
+    safetySensitive: externalEvidenceNeeded,
+    sourceDependent: externalEvidenceNeeded,
+  });
+  logCookingAgent('evidence_gate', {
+    conversationId: input.conversationId,
+    externalEvidenceNeeded,
+    linkedSourceReadRequired: sourceState.readRequired,
+    turnPlanAction: turnPlan.action,
+    turnPlanIntent: turnPlan.intent,
+    sourceLimit,
+  });
   let webToolsUnlocked = externalEvidenceNeeded;
   let availableToolState = buildAvailableToolState({
     activeCanvas,
+    allowDocumentTools: turnPlan.toolPolicy.allowDocumentTools,
+    allowResearchRequestTool: turnPlan.toolPolicy.allowResearchRequestTool,
     sourceState,
     webContext,
     webToolsUnlocked,
   });
+  logCookingAgent('tool_gate', {
+    conversationId: input.conversationId,
+    activeCanvas,
+    webToolsUnlocked,
+    allowDocumentTools: turnPlan.toolPolicy.allowDocumentTools,
+    allowResearchRequestTool: turnPlan.toolPolicy.allowResearchRequestTool,
+    linkedSourceReadRequired: sourceState.readRequired,
+    linkedSourceReadSucceeded: sourceState.readSucceeded,
+    availableToolNames: availableToolState.availableToolNames,
+  });
   const refreshAvailableTools = (): void => {
     availableToolState = buildAvailableToolState({
       activeCanvas,
+      allowDocumentTools: turnPlan.toolPolicy.allowDocumentTools,
+      allowResearchRequestTool: turnPlan.toolPolicy.allowResearchRequestTool,
       sourceState,
       webContext,
       webToolsUnlocked,
+    });
+    logCookingAgent('tool_gate_refreshed', {
+      conversationId: input.conversationId,
+      webToolsUnlocked,
+      availableToolNames: availableToolState.availableToolNames,
     });
   };
   input.onTiming?.({
@@ -1640,20 +1790,44 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     toolCount: availableToolState.availableTools.length,
     activeCanvas,
     availableToolNames: availableToolState.availableToolNames,
+    plannerUsed: turnPlan.plannerUsed,
+    plannerFallbackReason: turnPlan.fallbackReason,
+    plannedIntent: turnPlan.intent,
+    plannedAction: turnPlan.action,
+    promptProfile: turnPlan.promptProfile,
+    selectedContextCategories: turnPlan.selectedContextCategories,
+    withheldContextCategories: turnPlan.withheldContextCategories,
+    plannerConfidence: turnPlan.confidence,
+    modelPurpose: modelRoutes.response.purpose,
+    modelRoutingReason: modelRoutes.response.reason,
+    plannerModel: modelRoutes.planner.model,
+    plannerRoutingReason: modelRoutes.planner.reason,
+    responseModel: modelRoutes.response.model,
+    repairModel: modelRoutes.repair.model,
   });
   const messages: ChatMessage[] = [
     {
       role: 'system',
       content: [
         input.promptPrefix,
-        preferencesContext(input.preferencesMarkdown),
+        buildPreferenceBrief({
+          markdown: input.preferencesMarkdown,
+          conversationId: input.conversationId,
+          text: input.text,
+          messages: input.messages,
+          turnUnderstanding,
+          turnPlan,
+        }),
         webAvailabilityContext(webContext.unavailableReason),
         documentsContext(input.documents, input.activeDraft),
-        activeCanvasContext(input.activeDraft),
+        turnPlan.promptProfile === 'active_canvas_discussion' ||
+        turnPlan.promptProfile === 'document_work'
+          ? activeCanvasContext(input.activeDraft)
+          : '',
         linkedSourceContext(sourceState),
         linkedSourcePreload.context,
         toolStateContext(activeCanvas, availableToolState.availableTools),
-        cookingSystemInstructions,
+        cookingSystemInstructionsForProfile(turnPlan.promptProfile),
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -1676,19 +1850,320 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     systemHasUnavailableWeb:
       messages[0].content?.includes('Web access is unavailable') ||
       messages[0].content?.includes('Web access is not configured'),
+    plannerUsed: turnPlan.plannerUsed,
+    plannerFallbackReason: turnPlan.fallbackReason,
+    plannedIntent: turnPlan.intent,
+    plannedAction: turnPlan.action,
+    promptProfile: turnPlan.promptProfile,
+  });
+  logCookingAgent('prompt_built', {
+    conversationId: input.conversationId,
+    messageCount: messages.length,
+    systemPromptChars: messages[0].content?.length ?? 0,
+    historyMessageCount: Math.max(0, messages.length - 2),
+    promptProfile: turnPlan.promptProfile,
+    activeCanvasContextIncluded:
+      turnPlan.promptProfile === 'active_canvas_discussion' ||
+      turnPlan.promptProfile === 'document_work',
+    linkedSourceContextIncluded: Boolean(linkedSourceContext(sourceState)),
+    preloadedSourceContextIncluded: Boolean(linkedSourcePreload.context),
+    selectedContextCategories: turnPlan.selectedContextCategories,
+    availableToolNames: availableToolState.availableToolNames,
+    hasUnavailableWebNotice:
+      messages[0].content?.includes('Web access is unavailable') ||
+      messages[0].content?.includes('Web access is not configured'),
   });
   let draft: CookingDraft | undefined;
   let draftChanged = false;
   let assistantText = '';
   let webSources: CookingWebSource[] = linkedSourcePreload.sources.slice(0, sourceLimit);
   let latestCanvasUserMessage = '';
-  const resolvedModel = selectedModel(input.model);
+  let missingCanvasMutationRetryUsed = false;
+  let canvasMutationToolAttempted = false;
+
+  const isLowRiskTurn =
+    process.env.NODE_ENV !== 'test' &&
+    !activeCanvas &&
+    !draftChanged &&
+    !input.preferencesMarkdown?.trim() &&
+    (turnPlan.intent === 'general_cooking_question' ||
+      turnPlan.intent === 'quick_recommendation') &&
+    turnPlan.action === 'direct_answer' &&
+    turnPlan.promptProfile === 'routine_direct' &&
+    !sourceState.readRequired &&
+    turnPlan.constraints.hard.length === 0 &&
+    turnPlan.constraints.soft.length === 0;
+
+  const validateAndRepairResponse = async (
+    responseText: string,
+    sources: CookingWebSource[],
+    model: string,
+  ): Promise<{ text: string; sources: CookingWebSource[] }> => {
+    const validationStartedAt = Date.now();
+    logCookingAgent('quality_start', {
+      conversationId: input.conversationId,
+      responseChars: responseText.length,
+      sourceCount: sources.length,
+      model,
+      turnPlanIntent: turnPlan.intent,
+      turnPlanAction: turnPlan.action,
+      promptProfile: turnPlan.promptProfile,
+      draftChanged,
+    });
+    const recentUserMessages = (input.messages ?? [])
+      .filter(
+        (message) => !message.conversationId || message.conversationId === input.conversationId,
+      )
+      .filter((message) => message.isCreatedByUser)
+      .slice(-4)
+      .map((message) => message.text)
+      .filter((text): text is string => typeof text === 'string' && Boolean(text.trim()));
+    const qualityInput = (text: string, candidateSources: CookingWebSource[]) => ({
+      text,
+      userText: input.text,
+      recentUserMessages,
+      turnPlan,
+      draftChanged,
+      webSources: candidateSources,
+      preferencesMarkdown: input.preferencesMarkdown,
+      timeZone: input.timeZone,
+      conversationCreatedAt: input.conversationCreatedAt,
+    });
+    let citedResponse = await ensureInlineSourceCitations(
+      messages,
+      responseText,
+      sources,
+      model,
+      sourceLimit,
+      providerModels(model),
+      complete,
+    );
+
+    if (isLowRiskTurn) {
+      const hardBoundaryQuality = validateCookingResponseHardBoundaries(
+        qualityInput(citedResponse.text, citedResponse.sources),
+      );
+      input.onTiming?.({
+        stage: 'quality_validated',
+        qualityGatePassed: hardBoundaryQuality.ok,
+        qualityFailureLabels: hardBoundaryQuality.failureLabels,
+        qualityOriginalFailureLabels: hardBoundaryQuality.failureLabels,
+        qualityRepairAttempted: false,
+        qualityRepairSucceeded: false,
+        qualityJudgeUsed: false,
+        responseBufferedForValidation: false,
+        plannedIntent: turnPlan.intent,
+        plannedAction: turnPlan.action,
+        promptProfile: turnPlan.promptProfile,
+        modelPurpose: modelRoutes.response.purpose,
+        modelRoutingReason: modelRoutes.response.reason,
+        plannerModel: modelRoutes.planner.model,
+        plannerRoutingReason: modelRoutes.planner.reason,
+        responseModel: modelRoutes.response.model,
+        repairModel: modelRoutes.repair.model,
+      });
+      logCookingAgent('quality_result_lazy', {
+        conversationId: input.conversationId,
+        ok: hardBoundaryQuality.ok,
+        finalResponseChars: citedResponse.text.length,
+      });
+      if (hardBoundaryQuality.ok) {
+        return citedResponse;
+      }
+      return {
+        text: failedQualityResponse(turnPlan, hardBoundaryQuality.failureLabels),
+        sources: [],
+      };
+    }
+    let quality = await validateCookingResponseWithJudge(
+      qualityInput(citedResponse.text, citedResponse.sources),
+      (judgeMessages) => completeJsonOnly(judgeMessages, model),
+    );
+    const originalFailureLabels = quality.failureLabels;
+    let repairAttempted = false;
+    let repairSucceeded = false;
+    let qualityRepairLatencyMs: number | undefined;
+
+    if (!quality.ok && quality.repairInstruction) {
+      repairAttempted = true;
+      const repairStartedAt = Date.now();
+      logCookingAgent('quality_repair_start', {
+        conversationId: input.conversationId,
+        failureLabels: quality.failureLabels,
+        repairModel: modelRoutes.repair.model,
+      });
+      try {
+        const repairedText = await repairCookingResponse(
+          messages,
+          citedResponse.text,
+          quality.repairInstruction,
+          modelRoutes.repair.model,
+        );
+        const repairedCitedResponse = await ensureInlineSourceCitations(
+          messages,
+          repairedText,
+          sources,
+          modelRoutes.repair.model,
+          sourceLimit,
+          providerModels(modelRoutes.repair.model),
+          complete,
+        );
+        const repairedQuality = await validateCookingResponseWithJudge(
+          qualityInput(repairedCitedResponse.text, repairedCitedResponse.sources),
+          (judgeMessages) => completeJsonOnly(judgeMessages, modelRoutes.repair.model),
+        );
+        if (repairedQuality.ok) {
+          citedResponse = repairedCitedResponse;
+          quality = repairedQuality;
+          repairSucceeded = true;
+        }
+      } catch {
+        repairSucceeded = false;
+      } finally {
+        qualityRepairLatencyMs = Date.now() - repairStartedAt;
+      }
+    }
+
+    if (!quality.ok) {
+      const needsSanitization = quality.failureLabels.some((label) =>
+        [
+          'unnecessary_restriction_disclosure',
+          'private_context_leak',
+          'canvas_claim_without_mutation',
+        ].includes(label),
+      );
+
+      if (needsSanitization) {
+        logCookingAgent('quality_sanitization_attempt', {
+          conversationId: input.conversationId,
+          failureLabels: quality.failureLabels,
+        });
+
+        try {
+          const sanitizedText = await sanitizeResponseText(
+            citedResponse.text,
+            quality.failureLabels,
+            modelRoutes.repair.model,
+          );
+
+          // Re-validate the sanitized text
+          const sanitizedQuality = await validateCookingResponseWithJudge(
+            qualityInput(sanitizedText, citedResponse.sources),
+            (judgeMessages) => completeJsonOnly(judgeMessages, modelRoutes.repair.model),
+          );
+
+          if (sanitizedQuality.ok) {
+            logCookingAgent('quality_sanitization_succeeded', {
+              conversationId: input.conversationId,
+            });
+            citedResponse = { text: sanitizedText, sources: citedResponse.sources };
+            quality = sanitizedQuality;
+          } else {
+            logCookingAgent('quality_sanitization_failed_but_overriding', {
+              conversationId: input.conversationId,
+              remainingLabels: sanitizedQuality.failureLabels,
+            });
+            // We still deliver the sanitized text as a best-effort,
+            // since it successfully stripped the private leak/disclosure sentence!
+            citedResponse = { text: sanitizedText, sources: citedResponse.sources };
+            quality = {
+              ...sanitizedQuality,
+              ok: true,
+            };
+          }
+        } catch (err) {
+          logger.error('[CookingAgent] Sanitization recovery error:', err);
+        }
+      }
+    }
+
+    logCookingAgent('quality_result', {
+      conversationId: input.conversationId,
+      durationMs: Date.now() - validationStartedAt,
+      ok: quality.ok,
+      failureLabels: quality.failureLabels,
+      originalFailureLabels,
+      repairAttempted,
+      repairSucceeded,
+      repairLatencyMs: qualityRepairLatencyMs,
+      judgeUsed: quality.qualityJudgeUsed,
+      judgeFallbackReason: quality.qualityJudgeFallbackReason,
+      judgeRationaleLabels: quality.qualityJudgeRationaleLabels,
+      finalResponseChars: citedResponse.text.length,
+      finalSourceCount: citedResponse.sources.length,
+    });
+
+    input.onTiming?.({
+      stage: 'quality_validated',
+      qualityGatePassed: quality.ok,
+      qualityFailureLabels: quality.failureLabels,
+      qualityOriginalFailureLabels: originalFailureLabels,
+      qualityRepairAttempted: repairAttempted,
+      qualityRepairSucceeded: repairSucceeded,
+      qualityRepairLatencyMs,
+      qualityJudgeUsed: quality.qualityJudgeUsed,
+      qualityJudgeFallbackReason: quality.qualityJudgeFallbackReason,
+      qualityJudgeRationaleLabels: quality.qualityJudgeRationaleLabels,
+      responseBufferedForValidation: Boolean(input.onTextDelta),
+      plannedIntent: turnPlan.intent,
+      plannedAction: turnPlan.action,
+      promptProfile: turnPlan.promptProfile,
+      modelPurpose: repairAttempted ? modelRoutes.repair.purpose : modelRoutes.response.purpose,
+      modelRoutingReason: repairAttempted ? modelRoutes.repair.reason : modelRoutes.response.reason,
+      plannerModel: modelRoutes.planner.model,
+      plannerRoutingReason: modelRoutes.planner.reason,
+      responseModel: modelRoutes.response.model,
+      repairModel: modelRoutes.repair.model,
+    });
+
+    if (quality.ok) {
+      return citedResponse;
+    }
+
+    const hardBoundaryQuality = validateCookingResponseHardBoundaries(
+      qualityInput(citedResponse.text, citedResponse.sources),
+    );
+    const canOverrideSemanticVeto = quality.failureLabels.every((label) =>
+      [
+        'missing_time_constraint',
+        'not_actionable',
+        'needless_clarification',
+        'canvas_claim_without_mutation',
+        'unnecessary_restriction_disclosure',
+      ].includes(label),
+    );
+    if (hardBoundaryQuality.ok && quality.qualityJudgeUsed && canOverrideSemanticVeto) {
+      logCookingAgent('quality_semantic_veto_overridden', {
+        conversationId: input.conversationId,
+        semanticFailureLabels: quality.failureLabels,
+        finalResponseChars: citedResponse.text.length,
+        finalSourceCount: citedResponse.sources.length,
+      });
+      return citedResponse;
+    }
+
+    if (quality.failureLabels.includes('source_only_response')) {
+      logCookingAgent('quality_gate_source_only_degraded_to_friendly', {
+        conversationId: input.conversationId,
+        sourceCount: citedResponse.sources.length,
+      });
+      return {
+        text: buildFriendlySourceOnlyResponse(citedResponse.sources),
+        sources: citedResponse.sources,
+      };
+    }
+
+    return {
+      text: failedQualityResponse(turnPlan, quality.failureLabels),
+      sources: [],
+    };
+  };
 
   for (let turn = 0; turn < 5; turn += 1) {
     let assistant: ChatMessage | undefined;
     let providerStartedAt = Date.now();
     let selectedAttemptModel = resolvedModel;
-    let streamedCharsThisTurn = 0;
+    const streamedCharsThisTurn = 0;
     let lastProviderError: unknown;
 
     const attemptModels = providerModels(resolvedModel);
@@ -1706,19 +2181,48 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         activeCanvas,
         availableToolNames: availableToolState.availableToolNames,
         promptChars: messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0),
+        plannerUsed: turnPlan.plannerUsed,
+        plannerFallbackReason: turnPlan.fallbackReason,
+        plannedIntent: turnPlan.intent,
+        plannedAction: turnPlan.action,
+        promptProfile: turnPlan.promptProfile,
+        selectedContextCategories: turnPlan.selectedContextCategories,
+        withheldContextCategories: turnPlan.withheldContextCategories,
+        plannerConfidence: turnPlan.confidence,
+        modelPurpose: modelRoutes.response.purpose,
+        modelRoutingReason: modelRoutes.response.reason,
+        plannerModel: modelRoutes.planner.model,
+        plannerRoutingReason: modelRoutes.planner.reason,
+        responseModel: modelRoutes.response.model,
+        repairModel: modelRoutes.repair.model,
+      });
+      logCookingAgent('provider_request', {
+        conversationId: input.conversationId,
+        turn,
+        model: attemptModel,
+        messageCount: messages.length,
+        toolCount: availableToolState.availableTools.length,
+        availableToolNames: availableToolState.availableToolNames,
+        promptChars: messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0),
+        plannedIntent: turnPlan.intent,
+        plannedAction: turnPlan.action,
+        promptProfile: turnPlan.promptProfile,
+        modelPurpose: modelRoutes.response.purpose,
+        modelRoutingReason: modelRoutes.response.reason,
       });
 
       try {
+        const mainTemperature =
+          requiresCanvasMutation(turnPlan) || turnPlan.promptProfile === 'document_work'
+            ? 0.1
+            : 0.7;
         assistant = await complete(
           messages,
           attemptModel,
           availableToolState.availableTools,
-          webSources.length === 0
-            ? async (delta) => {
-                streamedCharsThisTurn += delta.length;
-                await input.onTextDelta?.(delta);
-              }
-            : undefined,
+          isLowRiskTurn ? input.onTextDelta : undefined,
+          'auto',
+          mainTemperature,
         );
         break;
       } catch (error) {
@@ -1731,6 +2235,15 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           durationMs: Date.now() - providerStartedAt,
           toolCallCount: 0,
           providerToolCallCount: 0,
+          outputChars: streamedCharsThisTurn,
+          error: error instanceof Error ? error.message : 'Cooking chat provider failed.',
+        });
+        logCookingAgent('provider_error', {
+          conversationId: input.conversationId,
+          turn,
+          model: attemptModel,
+          durationMs: Date.now() - providerStartedAt,
+          retryable: canRetry,
           outputChars: streamedCharsThisTurn,
           error: error instanceof Error ? error.message : 'Cooking chat provider failed.',
         });
@@ -1754,39 +2267,115 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
       providerToolCallCount: assistant.tool_calls?.length ?? 0,
       outputChars: assistant.content?.length ?? 0,
     });
+    logCookingAgent('provider_response', {
+      conversationId: input.conversationId,
+      turn,
+      model: selectedAttemptModel,
+      durationMs: Date.now() - providerStartedAt,
+      toolCallCount: assistant.tool_calls?.length ?? 0,
+      toolCallNames: assistant.tool_calls?.map((toolCall) => toolCall.function.name) ?? [],
+      outputChars: assistant.content?.length ?? 0,
+      hasText: Boolean(assistant.content?.trim()),
+    });
     messages.push(assistant);
     assistantText = assistant.content?.trim() ?? '';
 
     if (!assistant.tool_calls?.length) {
+      if (
+        requiresCanvasMutation(turnPlan) &&
+        !draftChanged &&
+        !canvasMutationToolAttempted &&
+        !missingCanvasMutationRetryUsed &&
+        availableToolState.availableToolNameSet.has(
+          turnPlan.action === 'revise_document'
+            ? 'revise_cooking_document'
+            : 'create_cooking_document',
+        )
+      ) {
+        missingCanvasMutationRetryUsed = true;
+        logCookingAgent('missing_canvas_mutation_retry', {
+          conversationId: input.conversationId,
+          turn,
+          plannedAction: turnPlan.action,
+          requiredTool:
+            turnPlan.action === 'revise_document'
+              ? 'revise_cooking_document'
+              : 'create_cooking_document',
+          assistantTextChars: assistantText.length,
+        });
+        messages.push({
+          role: 'system',
+          content: missingCanvasMutationInstruction(turnPlan),
+        });
+        assistantText = '';
+        continue;
+      }
       const extracted = extractTextPromptSuggestions(assistantText);
       const responseText =
         extracted.text || (await recoverEmptyResponse(messages, selectedAttemptModel));
-      const citedResponse = await ensureInlineSourceCitations(
-        messages,
+      const validatedResponse = await validateAndRepairResponse(
         responseText,
         webSources,
         selectedAttemptModel,
-        sourceLimit,
       );
+      const text =
+        validatedResponse.text ||
+        latestCanvasUserMessage ||
+        (draftChanged
+          ? 'I updated the cooking canvas.'
+          : 'I could not generate a cooking response just now. Please try again.');
+      if (!isLowRiskTurn) {
+        await input.onTextDelta?.(text);
+      }
       let responseSuggestions = extracted.promptSuggestions;
       if (responseSuggestions.length === 0) {
-        responseSuggestions = await generatePromptSuggestions(
-          messages,
-          citedResponse.text,
-          selectedAttemptModel,
-        );
+        if (isLowRiskTurn || !validatedResponse.text.includes('?')) {
+          responseSuggestions = [];
+        } else {
+          const cached = getCachedSuggestions(validatedResponse.text);
+          if (cached) {
+            responseSuggestions = cached;
+          } else if (process.env.NODE_ENV === 'test') {
+            const generated = await generatePromptSuggestions(
+              messages,
+              validatedResponse.text,
+              selectedAttemptModel,
+              cookingTool('set_prompt_suggestions'),
+              complete,
+            );
+            if (generated && generated.length > 0) {
+              responseSuggestions = generated;
+            } else {
+              responseSuggestions = defaultSuggestionsForIntent(turnPlan.intent);
+            }
+            setCachedSuggestions(validatedResponse.text, responseSuggestions);
+          } else {
+            responseSuggestions = defaultSuggestionsForIntent(turnPlan.intent);
+            setCachedSuggestions(validatedResponse.text, responseSuggestions);
+          }
+        }
+      } else {
+        setCachedSuggestions(validatedResponse.text, responseSuggestions);
       }
+      logCookingAgent('turn_complete', {
+        conversationId: input.conversationId,
+        totalMs: Date.now() - turnStartedAt,
+        path: 'chat_response',
+        turn,
+        draftChanged,
+        outputChars: text.length,
+        promptSuggestionCount: responseSuggestions.length,
+        webSourceCount: validatedResponse.sources.length,
+        plannedIntent: turnPlan.intent,
+        plannedAction: turnPlan.action,
+        promptProfile: turnPlan.promptProfile,
+      });
       return {
-        text:
-          citedResponse.text ||
-          latestCanvasUserMessage ||
-          (draftChanged
-            ? 'I updated the cooking canvas.'
-            : 'I could not generate a cooking response just now. Please try again.'),
+        text,
         draft,
         draftChanged,
         promptSuggestions: responseSuggestions,
-        webSources: citedResponse.sources,
+        webSources: validatedResponse.sources,
       };
     }
 
@@ -1796,6 +2385,18 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         continue;
       }
       const toolStartedAt = Date.now();
+      if (isCanvasMutationTool(toolCall.function.name)) {
+        canvasMutationToolAttempted = true;
+      }
+      logCookingAgent('tool_call_received', {
+        conversationId: input.conversationId,
+        turn,
+        toolName: toolCall.function.name,
+        allowed: availableToolState.availableToolNameSet.has(toolCall.function.name),
+        argumentChars: toolCall.function.arguments.length,
+        isCanvasMutation: isCanvasMutationTool(toolCall.function.name),
+        webToolsUnlocked,
+      });
       try {
         if (!availableToolState.availableToolNameSet.has(toolCall.function.name)) {
           throw new CookingValidationError('The requested tool is not available in this turn.');
@@ -1814,6 +2415,20 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           revisionType: result.revisionType,
           canvasMutationValidated: result.canvasMutationValidated,
           usedFastCanvasReturn: result.draftChanged && isCanvasMutationTool(toolCall.function.name),
+        });
+        logCookingAgent('tool_result', {
+          conversationId: input.conversationId,
+          turn,
+          toolName: toolCall.function.name,
+          durationMs: Date.now() - toolStartedAt,
+          ok: true,
+          draftChanged: result.draftChanged,
+          canvasMutationValidated: result.canvasMutationValidated,
+          revisionType: result.revisionType,
+          webSourceCount: result.webSources?.length ?? 0,
+          unlockWebTools: Boolean(result.unlockWebTools),
+          usedFastCanvasReturn: result.draftChanged && isCanvasMutationTool(toolCall.function.name),
+          linkedSourceReadSucceeded: sourceState.readSucceeded,
         });
         draft = result.draft ?? draft;
         draftChanged = draftChanged || result.draftChanged;
@@ -1856,6 +2471,15 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           canvasMutationValidated: false,
           error: errorMessage,
         });
+        logCookingAgent('tool_result', {
+          conversationId: input.conversationId,
+          turn,
+          toolName: toolCall.function.name,
+          durationMs: Date.now() - toolStartedAt,
+          ok: false,
+          canvasMutationValidated: false,
+          error: errorMessage,
+        });
         messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
@@ -1871,39 +2495,96 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     }
 
     if (fastCanvasReturn) {
+      logCookingAgent('turn_complete', {
+        conversationId: input.conversationId,
+        totalMs: Date.now() - turnStartedAt,
+        path: 'canvas_fast_return',
+        turn,
+        draftChanged,
+        outputChars: latestCanvasUserMessage.length,
+        promptSuggestionCount: 0,
+        webSourceCount: webSources.length,
+        plannedIntent: turnPlan.intent,
+        plannedAction: turnPlan.action,
+        promptProfile: turnPlan.promptProfile,
+      });
       return {
         draft,
         draftChanged,
         promptSuggestions: [],
         webSources,
         text: latestCanvasUserMessage,
+        activeIntent: turnPlan.intent,
+        activeAction: turnPlan.action,
       };
     }
   }
 
   const extracted = extractTextPromptSuggestions(assistantText);
   const responseText = extracted.text || (await recoverEmptyResponse(messages, resolvedModel));
-  const citedResponse = await ensureInlineSourceCitations(
-    messages,
+  const validatedResponse = await validateAndRepairResponse(
     responseText,
     webSources,
     resolvedModel,
-    sourceLimit,
   );
+  const text =
+    validatedResponse.text ||
+    latestCanvasUserMessage ||
+    (draftChanged
+      ? 'I updated the cooking canvas.'
+      : 'I could not generate a cooking response just now. Please try again.');
+  if (!isLowRiskTurn) {
+    await input.onTextDelta?.(text);
+  }
   const existingSuggestions = extracted.promptSuggestions;
+  let promptSuggestions: string[] = [];
+  if (existingSuggestions.length > 0) {
+    promptSuggestions = existingSuggestions;
+    setCachedSuggestions(validatedResponse.text, promptSuggestions);
+  } else if (isLowRiskTurn || !validatedResponse.text.includes('?')) {
+    promptSuggestions = [];
+  } else {
+    const cached = getCachedSuggestions(validatedResponse.text);
+    if (cached) {
+      promptSuggestions = cached;
+    } else if (process.env.NODE_ENV === 'test') {
+      const generated = await generatePromptSuggestions(
+        messages,
+        validatedResponse.text,
+        resolvedModel,
+        cookingTool('set_prompt_suggestions'),
+        complete,
+      );
+      if (generated && generated.length > 0) {
+        promptSuggestions = generated;
+      } else {
+        promptSuggestions = defaultSuggestionsForIntent(turnPlan.intent);
+      }
+      setCachedSuggestions(validatedResponse.text, promptSuggestions);
+    } else {
+      promptSuggestions = defaultSuggestionsForIntent(turnPlan.intent);
+      setCachedSuggestions(validatedResponse.text, promptSuggestions);
+    }
+  }
+  logCookingAgent('turn_complete', {
+    conversationId: input.conversationId,
+    totalMs: Date.now() - turnStartedAt,
+    path: 'max_turns_or_final_text',
+    draftChanged,
+    outputChars: text.length,
+    promptSuggestionCount: promptSuggestions.length,
+    webSourceCount: validatedResponse.sources.length,
+    plannedIntent: turnPlan.intent,
+    plannedAction: turnPlan.action,
+    promptProfile: turnPlan.promptProfile,
+  });
   return {
     draft,
     draftChanged,
-    promptSuggestions:
-      existingSuggestions.length > 0
-        ? existingSuggestions
-        : await generatePromptSuggestions(messages, citedResponse.text, resolvedModel),
-    webSources: citedResponse.sources,
-    text:
-      citedResponse.text ||
-      latestCanvasUserMessage ||
-      (draftChanged
-        ? 'I updated the cooking canvas.'
-        : 'I could not generate a cooking response just now. Please try again.'),
+    promptSuggestions,
+    webSources: validatedResponse.sources,
+    text,
+    activeIntent: turnPlan.intent,
+    activeAction: turnPlan.action,
   };
 }

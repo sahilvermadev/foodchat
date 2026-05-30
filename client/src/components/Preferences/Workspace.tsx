@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Spinner } from '@librechat/client';
+import { Spinner, useMediaQuery } from '@librechat/client';
 import type {
   DeviceLocationContext,
   PreferencesChatHistoryMessage,
@@ -42,6 +42,7 @@ import type { TranslationKeys } from '~/hooks';
 import { cn } from '~/utils';
 import { ProtectedImage } from '~/components/ui';
 import {
+  PREFERENCE_HEADINGS,
   SPECIALTY_INGREDIENT_CATEGORIES,
   cleanPreferenceLine,
   inferSpecialtyIngredientCategory,
@@ -49,6 +50,13 @@ import {
   replacePreferenceSection,
 } from './artifact';
 import type { PreferenceHeading, PreferenceSection } from './artifact';
+import {
+  ALLERGEN_PRESETS,
+  AUTOCOMPLETE_SUGGESTIONS,
+  COOKING_LEVELS,
+  DIET_PRESETS,
+  KITCHEN_PRESETS,
+} from './presets';
 
 type ThreadMessage = PreferencesChatHistoryMessage & {
   id: string;
@@ -367,61 +375,674 @@ function profileDraftsFromSections(sections: PreferenceSection[]): ProfileDrafts
   );
 }
 
-function sectionInputLabel(localize: Localize, heading: PreferenceHeading, index: number): string {
-  return localize('com_preferences_detail_label')
-    .replace('{section}', heading)
-    .replace('{number}', String(index + 1));
-}
-
-function PreferenceSectionEditor({
+function DietSafetyEditor({
   heading,
   lines,
-  isSaving,
-  localize,
   onChange,
-  onAdd,
-  onRemove,
 }: {
-  heading: PreferenceHeading;
+  heading: 'Diet' | 'Safety';
   lines: string[];
-  isSaving: boolean;
-  localize: Localize;
-  onChange: (index: number, value: string) => void;
-  onAdd: () => void;
-  onRemove: (index: number) => void;
+  onChange: (nextLines: string[]) => void;
 }) {
+  const isSafety = heading === 'Safety';
+  const presets = isSafety ? ALLERGEN_PRESETS : DIET_PRESETS;
+
+  const activeNames = useMemo(() => {
+    const cleaned = lines.map(cleanPreferenceLine).map((l) => l.toLowerCase());
+    return new Set(
+      presets
+        .filter((p) => cleaned.some((c) => c.includes(p.name.toLowerCase())))
+        .map((p) => p.name),
+    );
+  }, [lines, presets]);
+
+  const customTags = useMemo(() => {
+    const cleaned = lines.map(cleanPreferenceLine).filter(Boolean);
+    return cleaned.filter((line) => {
+      const lower = line.toLowerCase();
+      return !presets.some((p) => lower.includes(p.name.toLowerCase()));
+    });
+  }, [lines, presets]);
+
+  const [inputVal, setInputVal] = useState('');
+
+  const togglePreset = (name: string) => {
+    const nextActive = new Set(activeNames);
+    if (nextActive.has(name)) {
+      nextActive.delete(name);
+    } else {
+      nextActive.add(name);
+    }
+
+    const nextLines: string[] = [];
+    presets.forEach((p) => {
+      if (nextActive.has(p.name)) {
+        nextLines.push(p.name);
+      }
+    });
+    nextLines.push(...customTags);
+    onChange(nextLines.length > 0 ? nextLines : ['']);
+  };
+
+  const addCustomTag = () => {
+    const clean = inputVal.trim();
+    if (!clean) {
+      return;
+    }
+    if (lines.some((l) => cleanPreferenceLine(l).toLowerCase() === clean.toLowerCase())) {
+      setInputVal('');
+      return;
+    }
+    const nextLines = lines.map(cleanPreferenceLine).filter(Boolean);
+    nextLines.push(clean);
+    onChange(nextLines);
+    setInputVal('');
+  };
+
+  const removeCustomTag = (tagToRemove: string) => {
+    const nextLines = lines
+      .map(cleanPreferenceLine)
+      .filter((l) => l.toLowerCase() !== tagToRemove.toLowerCase());
+    onChange(nextLines.length > 0 ? nextLines : ['']);
+  };
+
   return (
-    <div className="mt-3 space-y-2">
-      {lines.map((line, index) => (
-        <div key={`${heading}:${index}`} className="flex items-center gap-1.5">
+    <div className="mt-4 space-y-4">
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+          {isSafety ? 'Select Allergies' : 'Select Diet Profiles'}
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {presets.map((p) => {
+            const active = activeNames.has(p.name);
+            return (
+              <button
+                key={p.name}
+                type="button"
+                className={cn(
+                  'rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 border',
+                  active
+                    ? isSafety
+                      ? 'bg-red-500/10 border-red-500 text-red-700 dark:text-red-400 shadow-[0_0_8px_rgba(239,68,68,0.2)]'
+                      : 'bg-green-500/10 border-green-500 text-green-700 dark:text-green-400 shadow-[0_0_8px_rgba(34,197,94,0.2)]'
+                    : 'bg-surface-primary border-border-light text-text-secondary hover:border-border-medium hover:text-text-primary',
+                )}
+                onClick={() => togglePreset(p.name)}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="border-t border-border-light pt-3">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+          Custom Restrictions
+        </h3>
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {customTags.map((tag) => (
+            <span
+              key={tag}
+              className="flex items-center gap-1 rounded-full border border-border-light bg-surface-secondary px-2.5 py-1 text-xs text-text-primary"
+            >
+              {tag}
+              <button
+                type="button"
+                className="text-text-secondary hover:text-text-primary"
+                onClick={() => removeCustomTag(tag)}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
           <input
-            value={line}
-            disabled={isSaving}
-            aria-label={sectionInputLabel(localize, heading, index)}
-            className="min-w-0 flex-1 rounded-md border border-border-light bg-surface-secondary px-2.5 py-2 text-sm text-text-primary outline-none placeholder:text-text-secondary focus-visible:ring-2 focus-visible:ring-ring-primary disabled:opacity-60"
-            placeholder={localize('com_preferences_detail_placeholder')}
-            onChange={(event) => onChange(index, event.target.value)}
+            value={inputVal}
+            className="min-w-0 flex-1 rounded-md border border-border-light bg-surface-secondary px-2.5 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+            placeholder={isSafety ? 'e.g., Pine nuts, Cilantro...' : 'e.g., Low-sodium, Sugar-free...'}
+            onChange={(e) => setInputVal(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addCustomTag();
+              }
+            }}
           />
           <button
             type="button"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-50"
-            aria-label={localize('com_preferences_remove_detail')}
-            disabled={isSaving}
-            onClick={() => onRemove(index)}
+            className="rounded-md border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+            onClick={addCustomTag}
           >
-            <Trash2 className="icon-xs" aria-hidden="true" />
+            Add
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function KitchenCheckboxEditor({
+  lines,
+  onChange,
+}: {
+  lines: string[];
+  onChange: (nextLines: string[]) => void;
+}) {
+  const activeItems = useMemo(() => {
+    const items = new Set<string>();
+    lines.map(cleanPreferenceLine).forEach((line) => {
+      const lower = line.toLowerCase();
+      if (lower.startsWith('appliances:')) {
+        splitKitchenItems(line.replace(/^appliances:\s*/i, '')).forEach((item) => {
+          items.add(item.toLowerCase());
+        });
+      } else if (lower.startsWith('no ')) {
+        items.add(lower);
+      } else {
+        items.add(line.replace(/^owner of\s+/i, '').toLowerCase());
+      }
+    });
+    return items;
+  }, [lines]);
+
+  const toggleItem = (name: string, category: string) => {
+    const key = name.toLowerCase();
+    const nextActive = new Set(activeItems);
+    if (nextActive.has(key)) {
+      nextActive.delete(key);
+    } else {
+      nextActive.add(key);
+    }
+
+    const appliances: string[] = [];
+    const cooktops: string[] = [];
+    const tools: string[] = [];
+
+    KITCHEN_PRESETS.appliances.forEach((p) => {
+      if (nextActive.has(p.name.toLowerCase())) {
+        appliances.push(p.name);
+      }
+    });
+    KITCHEN_PRESETS.cooktops.forEach((p) => {
+      if (nextActive.has(p.name.toLowerCase())) {
+        cooktops.push(p.name);
+      }
+    });
+    KITCHEN_PRESETS.tools.forEach((p) => {
+      if (nextActive.has(p.name.toLowerCase())) {
+        tools.push(p.name);
+      }
+    });
+
+    const customLines = Array.from(nextActive).filter((item) => {
+      const isPreset =
+        KITCHEN_PRESETS.appliances.some((p) => p.name.toLowerCase() === item) ||
+        KITCHEN_PRESETS.cooktops.some((p) => p.name.toLowerCase() === item) ||
+        KITCHEN_PRESETS.tools.some((p) => p.name.toLowerCase() === item);
+      return !isPreset;
+    });
+
+    const nextLines: string[] = [];
+    if (appliances.length > 0) {
+      nextLines.push(`Appliances: ${appliances.join(', ')}`);
+    }
+    cooktops.forEach((c) => nextLines.push(c));
+    tools.forEach((t) => nextLines.push(t));
+    customLines.forEach((c) => {
+      nextLines.push(sentenceCase(c));
+    });
+
+    onChange(nextLines.length > 0 ? nextLines : ['']);
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      {Object.entries(KITCHEN_PRESETS).map(([category, items]) => (
+        <div key={category} className="border-b border-border-light last:border-b-0 pb-3 last:pb-0">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary capitalize">
+            {category}
+          </h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {items.map((item) => {
+              const active = activeItems.has(item.name.toLowerCase());
+              return (
+                <button
+                  key={item.name}
+                  type="button"
+                  className={cn(
+                    'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-all',
+                    active
+                      ? 'border-amber-500 bg-amber-500/10 text-amber-800 dark:text-amber-300'
+                      : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:text-text-primary',
+                  )}
+                  onClick={() => toggleItem(item.name, category)}
+                >
+                  <span
+                    className={cn(
+                      'flex size-4 items-center justify-center rounded border',
+                      active ? 'border-amber-500 bg-amber-500 text-white' : 'border-border-medium',
+                    )}
+                  >
+                    {active && <CheckCircle2 className="size-3" />}
+                  </span>
+                  <span className="truncate">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       ))}
-      <button
-        type="button"
-        className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-50"
-        disabled={isSaving}
-        onClick={onAdd}
-      >
-        <Plus className="icon-xs" aria-hidden="true" />
-        {localize('com_preferences_add_detail')}
-      </button>
+    </div>
+  );
+}
+
+function CookingLevelSlider({
+  lines,
+  onChange,
+}: {
+  lines: string[];
+  onChange: (nextLines: string[]) => void;
+}) {
+  const currentLevel = useMemo(() => {
+    const raw = lines[0]?.toLowerCase() ?? '';
+    const found = COOKING_LEVELS.find((cl) => raw.includes(cl.level.toLowerCase()));
+    return found?.level ?? 'Home Cook';
+  }, [lines]);
+
+  const selectLevel = (level: string) => {
+    onChange([level]);
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+        Select Cooking Level
+      </h3>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {COOKING_LEVELS.map((cl) => {
+          const active = currentLevel === cl.level;
+          return (
+            <button
+              key={cl.level}
+              type="button"
+              className={cn(
+                'flex flex-col items-start rounded-lg border p-3 text-left transition-all duration-200',
+                active
+                  ? 'border-amber-500 bg-amber-500/10 text-text-primary shadow-[0_0_8px_rgba(245,158,11,0.2)] scale-[1.01]'
+                  : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:text-text-primary',
+              )}
+              onClick={() => selectLevel(cl.level)}
+            >
+              <div className="flex items-center gap-2 font-serif text-lg font-normal">
+                <span>{cl.label}</span>
+              </div>
+              <p className="mt-1 text-xs text-text-secondary">{cl.desc}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function HouseholdCounterEditor({
+  lines,
+  onChange,
+}: {
+  lines: string[];
+  onChange: (nextLines: string[]) => void;
+}) {
+  const counts = useMemo(() => {
+    let adults = 1;
+    let kids = 0;
+    let teens = 0;
+
+    lines.map(cleanPreferenceLine).forEach((line) => {
+      const lower = line.toLowerCase();
+      const match = lower.match(/(\d+)\s*(adult|child|kid|teen)/);
+      if (match) {
+        const count = parseInt(match[1], 10);
+        const type = match[2];
+        if (type.startsWith('adult')) {
+          adults = count;
+        } else if (type.startsWith('child') || type.startsWith('kid')) {
+          kids = count;
+        } else if (type.startsWith('teen')) {
+          teens = count;
+        }
+      }
+    });
+
+    return { adults, kids, teens };
+  }, [lines]);
+
+  const updateCount = (type: 'adults' | 'kids' | 'teens', delta: number) => {
+    const nextCounts = { ...counts };
+    nextCounts[type] = Math.max(0, nextCounts[type] + delta);
+
+    if (
+      type === 'adults' &&
+      nextCounts.adults === 0 &&
+      nextCounts.kids === 0 &&
+      nextCounts.teens === 0
+    ) {
+      nextCounts.adults = 1;
+    }
+
+    const nextLines: string[] = [];
+    if (nextCounts.adults > 0) {
+      nextLines.push(`${nextCounts.adults} adult${nextCounts.adults > 1 ? 's' : ''}`);
+    }
+    if (nextCounts.kids > 0) {
+      nextLines.push(`${nextCounts.kids} child${nextCounts.kids > 1 ? 'ren' : ''}`);
+    }
+    if (nextCounts.teens > 0) {
+      nextLines.push(`${nextCounts.teens} teenager${nextCounts.teens > 1 ? 's' : ''}`);
+    }
+    onChange(nextLines.length > 0 ? nextLines : ['1 adult']);
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+        Household Size
+      </h3>
+      <div className="divide-y divide-border-light rounded-lg border border-border-light bg-surface-primary">
+        {[
+          { key: 'adults', label: 'Adults', count: counts.adults },
+          { key: 'kids', label: 'Children', count: counts.kids },
+          { key: 'teens', label: 'Teenagers', count: counts.teens },
+        ].map((item) => (
+          <div key={item.key} className="flex items-center justify-between p-3">
+            <span className="text-sm font-medium text-text-primary">{item.label}</span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="flex size-8 items-center justify-center rounded-md border border-border-light bg-surface-secondary text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-30"
+                disabled={item.count === 0}
+                onClick={() => updateCount(item.key as 'adults' | 'kids' | 'teens', -1)}
+              >
+                -
+              </button>
+              <span className="w-8 text-center text-sm font-semibold">{item.count}</span>
+              <button
+                type="button"
+                className="flex size-8 items-center justify-center rounded-md border border-border-light bg-surface-secondary text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                onClick={() => updateCount(item.key as 'adults' | 'kids' | 'teens', 1)}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LocationEditor({
+  lines,
+  onChange,
+}: {
+  lines: string[];
+  onChange: (nextLines: string[]) => void;
+}) {
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const data = useMemo(() => {
+    let location = '';
+    let timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    let system: 'metric' | 'imperial' = 'metric';
+
+    lines.map(cleanPreferenceLine).forEach((line) => {
+      const lower = line.toLowerCase();
+      if (lower.startsWith('location:')) {
+        location = line.replace(/^location:\s*/i, '');
+      } else if (lower.startsWith('timezone:')) {
+        timezone = line.replace(/^timezone:\s*/i, '');
+      } else if (lower.includes('system: imperial') || lower.includes('measurement: imperial')) {
+        system = 'imperial';
+      } else if (lower.includes('system: metric') || lower.includes('measurement: metric')) {
+        system = 'metric';
+      } else if (!lower.includes(':') && line) {
+        location = line;
+      }
+    });
+
+    return { location, timezone, system };
+  }, [lines]);
+
+  const updateField = (key: 'location' | 'timezone' | 'system', value: string) => {
+    const nextData = { ...data };
+    if (key === 'system') {
+      nextData.system = value as 'metric' | 'imperial';
+    } else {
+      nextData[key] = value;
+    }
+
+    const nextLines: string[] = [];
+    if (nextData.location) {
+      nextLines.push(`Location: ${nextData.location}`);
+    }
+    if (nextData.timezone) {
+      nextLines.push(`Timezone: ${nextData.timezone}`);
+    }
+    nextLines.push(`System: ${nextData.system}`);
+    onChange(nextLines);
+  };
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) {
+      return;
+    }
+    setIsDetecting(true);
+    setSuccess(false);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsDetecting(false);
+        setSuccess(true);
+        const coords = `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
+        updateField('location', coords);
+        setTimeout(() => setSuccess(false), 3000);
+      },
+      () => {
+        setIsDetecting(false);
+      },
+      { timeout: 5000 },
+    );
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <button
+          type="button"
+          disabled={isDetecting}
+          className={cn(
+            'flex flex-1 items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-all duration-200',
+            success
+              ? 'border-green-500 bg-green-500/10 text-green-700'
+              : 'border-border-light bg-surface-primary text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+          )}
+          onClick={detectLocation}
+        >
+          {isDetecting ? (
+            <Spinner className="size-4 animate-spin" />
+          ) : (
+            <MapPin className="size-4" />
+          )}
+          {isDetecting ? 'Detecting Location...' : success ? 'Location Detected! ✓' : '📍 Detect My Location'}
+        </button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-secondary">
+            Measurement System
+          </label>
+          <div className="flex rounded-lg border border-border-light bg-surface-primary p-0.5">
+            {['metric', 'imperial'].map((sys) => {
+              const active = data.system === sys;
+              return (
+                <button
+                  key={sys}
+                  type="button"
+                  className={cn(
+                    'flex-1 rounded-md py-1.5 text-xs font-semibold capitalize transition-all',
+                    active ? 'bg-amber-500 text-white shadow-sm' : 'text-text-secondary hover:text-text-primary',
+                  )}
+                  onClick={() => updateField('system', sys)}
+                >
+                  {sys}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="location-timezone-select" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-secondary">
+            Timezone
+          </label>
+          <input
+            id="location-timezone-select"
+            value={data.timezone}
+            className="w-full rounded-lg border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+            onChange={(e) => updateField('timezone', e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="location-city-input" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-secondary">
+          Location Coords or City
+        </label>
+        <input
+          id="location-city-input"
+          value={data.location}
+          className="w-full rounded-lg border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+          placeholder="e.g. London, UK or Coordinates"
+          onChange={(e) => updateField('location', e.target.value)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AutocompleteTagEditor({
+  heading,
+  lines,
+  onChange,
+}: {
+  heading: PreferenceHeading;
+  lines: string[];
+  onChange: (nextLines: string[]) => void;
+}) {
+  const [inputVal, setInputVal] = useState('');
+
+  const tags = useMemo(() => {
+    return lines.map(cleanPreferenceLine).filter(Boolean);
+  }, [lines]);
+
+  const suggestions = useMemo(() => {
+    const list = AUTOCOMPLETE_SUGGESTIONS[heading] ?? [];
+    if (!inputVal.trim()) {
+      return list.filter((item) => !tags.includes(item));
+    }
+    const filterLower = inputVal.toLowerCase();
+    return list.filter((item) => item.toLowerCase().includes(filterLower) && !tags.includes(item));
+  }, [heading, inputVal, tags]);
+
+  const addTag = (text: string) => {
+    const clean = text.trim();
+    if (!clean) {
+      return;
+    }
+    if (tags.some((t) => t.toLowerCase() === clean.toLowerCase())) {
+      setInputVal('');
+      return;
+    }
+    const nextLines = [...tags, clean];
+    onChange(nextLines);
+    setInputVal('');
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    const nextLines = tags.filter((t) => t !== tagToRemove);
+    onChange(nextLines.length > 0 ? nextLines : ['']);
+  };
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+          Active Toggles
+        </h3>
+        <div className="flex flex-wrap gap-1.5">
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="flex items-center gap-1 rounded-full border border-border-light bg-surface-secondary px-2.5 py-1 text-xs text-text-primary"
+            >
+              {tag}
+              <button
+                type="button"
+                className="text-text-secondary hover:text-text-primary"
+                onClick={() => removeTag(tag)}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+          {tags.length === 0 && <p className="text-xs italic text-text-secondary">No tags added yet</p>}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <input
+          value={inputVal}
+          className="min-w-0 flex-1 rounded-md border border-border-light bg-surface-secondary px-2.5 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+          placeholder={`Type to search or add custom ${heading.toLowerCase()}...`}
+          onChange={(e) => setInputVal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addTag(inputVal);
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="rounded-md border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+          onClick={() => addTag(inputVal)}
+        >
+          Add
+        </button>
+      </div>
+
+      {suggestions.length > 0 && (
+        <div>
+          <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+            Suggestions
+          </h4>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestions.slice(0, 8).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="rounded-full border border-border-light bg-surface-primary px-2.5 py-1 text-xs text-text-secondary hover:border-border-medium hover:text-text-primary transition-all"
+                onClick={() => addTag(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -429,44 +1050,20 @@ function PreferenceSectionEditor({
 function PreferenceCard({
   config,
   sections,
-  draftLines,
-  isEditing,
-  isSaving,
   localize,
   onEdit,
-  onLineChange,
-  onAddLine,
-  onRemoveLine,
 }: {
   config: HeadingConfig;
   sections: PreferenceSection[];
-  draftLines: string[];
-  isEditing: boolean;
-  isSaving: boolean;
   localize: Localize;
   onEdit: (heading: PreferenceHeading) => void;
-  onLineChange: (heading: PreferenceHeading, index: number, value: string) => void;
-  onAddLine: (heading: PreferenceHeading) => void;
-  onRemoveLine: (heading: PreferenceHeading, index: number) => void;
 }) {
   const Icon = config.icon;
   const section = sectionByHeading(sections, config.heading);
-  const hasDraft = draftLines.some((line) => cleanPreferenceLine(line).length > 0);
-  const isComplete = isEditing ? hasDraft : section.lines.length > 0;
+  const isComplete = section.lines.length > 0;
+
   let content: ReactNode;
-  if (isEditing) {
-    content = (
-      <PreferenceSectionEditor
-        heading={config.heading}
-        lines={draftLines}
-        isSaving={isSaving}
-        localize={localize}
-        onChange={(index, value) => onLineChange(config.heading, index, value)}
-        onAdd={() => onAddLine(config.heading)}
-        onRemove={(index) => onRemoveLine(config.heading, index)}
-      />
-    );
-  } else if (isComplete && config.heading === 'Kitchen') {
+  if (isComplete && config.heading === 'Kitchen') {
     content = <KitchenPreferenceSummary lines={section.lines} localize={localize} />;
   } else if (isComplete) {
     content = (
@@ -488,12 +1085,9 @@ function PreferenceCard({
 
   return (
     <article
-      className={cn(
-        'mb-3 inline-block w-full min-w-0 break-inside-avoid rounded-lg border border-border-light bg-surface-primary p-4 shadow-sm',
-        'transition-colors hover:border-border-medium',
-      )}
+      className="w-full min-w-0 rounded-lg border border-border-light bg-surface-primary p-4 shadow-sm hover:border-border-medium hover:scale-[1.005] transition-all duration-200"
     >
-      <div className="mb-3 flex items-start gap-3">
+      <div className="flex items-start gap-3">
         <Icon className="icon-md mt-0.5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
@@ -519,64 +1113,211 @@ function PreferenceCard({
             </span>
           </div>
           {content}
-          {!isEditing && (
+          
+          <div className="mt-4 border-t border-border-light pt-2 flex justify-end">
             <button
               type="button"
-              className="mt-3 rounded-md border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+              className="rounded-md border border-border-light bg-surface-primary px-3 py-1 text-xs text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-all"
               onClick={() => onEdit(config.heading)}
             >
               {localize('com_ui_edit')}
             </button>
-          )}
+          </div>
         </div>
       </div>
     </article>
   );
 }
 
+function PreferenceCardModal({
+  heading,
+  sections,
+  draftLines,
+  isSaving,
+  localize,
+  onDraftsChange,
+  onSaveCard,
+  onCancelCard,
+}: {
+  heading: PreferenceHeading;
+  sections: PreferenceSection[];
+  draftLines: string[];
+  isSaving: boolean;
+  localize: Localize;
+  onDraftsChange: (heading: PreferenceHeading, nextLines: string[]) => void;
+  onSaveCard: (heading: PreferenceHeading) => void;
+  onCancelCard: () => void;
+}) {
+  const config = atAGlanceHeadings.find((h) => h.heading === heading);
+  if (!config) {
+    return null;
+  }
+  const Icon = config.icon;
+  const section = sectionByHeading(sections, heading);
+
+  let content: ReactNode;
+  if (heading === 'Diet' || heading === 'Safety') {
+    content = (
+      <DietSafetyEditor
+        heading={heading}
+        lines={draftLines}
+        onChange={(nextLines) => onDraftsChange(heading, nextLines)}
+      />
+    );
+  } else if (heading === 'Kitchen') {
+    content = (
+      <KitchenCheckboxEditor
+        lines={draftLines}
+        onChange={(nextLines) => onDraftsChange(heading, nextLines)}
+      />
+    );
+  } else if (heading === 'Cooking Level') {
+    content = (
+      <CookingLevelSlider
+        lines={draftLines}
+        onChange={(nextLines) => onDraftsChange(heading, nextLines)}
+      />
+    );
+  } else if (heading === 'Household') {
+    content = (
+      <HouseholdCounterEditor
+        lines={draftLines}
+        onChange={(nextLines) => onDraftsChange(heading, nextLines)}
+      />
+    );
+  } else if (heading === 'Location') {
+    content = (
+      <LocationEditor
+        lines={draftLines}
+        onChange={(nextLines) => onDraftsChange(heading, nextLines)}
+      />
+    );
+  } else {
+    content = (
+      <AutocompleteTagEditor
+        heading={heading}
+        lines={draftLines}
+        onChange={(nextLines) => onDraftsChange(heading, nextLines)}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4 py-6"
+      onClick={onCancelCard}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 15 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 15 }}
+        transition={{ type: 'spring', duration: 0.3 }}
+        className="w-full max-w-2xl rounded-xl border border-border-light bg-surface-primary p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <Icon className="icon-lg mt-1 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3 border-b border-border-light pb-2">
+              <div>
+                <h2 className="font-serif text-2xl font-normal leading-tight tracking-normal text-text-primary">
+                  Edit {heading}
+                </h2>
+                <p className="text-xs text-text-secondary mt-0.5">Customize your culinary profile settings</p>
+              </div>
+              <button
+                type="button"
+                className="flex size-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                onClick={onCancelCard}
+                aria-label="Close"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 max-h-[60vh] overflow-y-auto pr-1">
+              {content}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3 border-t border-border-light pt-4">
+              <button
+                type="button"
+                className="rounded-md border border-border-light bg-surface-primary px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                onClick={onCancelCard}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 rounded-md bg-surface-submit px-4 py-2 text-sm font-medium text-white hover:bg-surface-submit-hover disabled:opacity-50 shadow-sm"
+                disabled={isSaving}
+                onClick={() => onSaveCard(heading)}
+              >
+                <CheckCircle2 className="size-4 animate-pulse" />
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function AtAGlanceGrid({
   sections,
   drafts,
-  isEditing,
+  activeEditingCard,
   isSaving,
   localize,
   onEdit,
-  onLineChange,
-  onAddLine,
-  onRemoveLine,
+  onDraftsChange,
+  onSaveCard,
+  onCancelCard,
 }: {
   sections: PreferenceSection[];
   drafts: ProfileDrafts;
-  isEditing: boolean;
+  activeEditingCard: PreferenceHeading | null;
   isSaving: boolean;
   localize: Localize;
   onEdit: (heading: PreferenceHeading) => void;
-  onLineChange: (heading: PreferenceHeading, index: number, value: string) => void;
-  onAddLine: (heading: PreferenceHeading) => void;
-  onRemoveLine: (heading: PreferenceHeading, index: number) => void;
+  onDraftsChange: (heading: PreferenceHeading, nextLines: string[]) => void;
+  onSaveCard: (heading: PreferenceHeading) => void;
+  onCancelCard: () => void;
 }) {
   return (
     <section>
-      <div className="columns-1 gap-3 md:columns-2 xl:columns-3 2xl:columns-4">
+      <div className="columns-1 md:columns-2 xl:columns-3 2xl:columns-4 gap-4 [column-fill:balance] w-full">
         {atAGlanceHeadings.map((config) => (
-          <PreferenceCard
-            key={config.heading}
-            config={config}
-            sections={sections}
-            draftLines={drafts.get(config.heading) ?? ['']}
-            isEditing={isEditing}
-            isSaving={isSaving}
-            localize={localize}
-            onEdit={onEdit}
-            onLineChange={onLineChange}
-            onAddLine={onAddLine}
-            onRemoveLine={onRemoveLine}
-          />
+          <div key={config.heading} className="break-inside-avoid mb-4 w-full">
+            <PreferenceCard
+              config={config}
+              sections={sections}
+              localize={localize}
+              onEdit={onEdit}
+            />
+          </div>
         ))}
       </div>
+
+      <AnimatePresence>
+        {activeEditingCard && (
+          <PreferenceCardModal
+            heading={activeEditingCard}
+            sections={sections}
+            draftLines={drafts.get(activeEditingCard) ?? ['']}
+            isSaving={isSaving}
+            localize={localize}
+            onDraftsChange={onDraftsChange}
+            onSaveCard={onSaveCard}
+            onCancelCard={onCancelCard}
+          />
+        )}
+      </AnimatePresence>
     </section>
   );
 }
+
 
 function IngredientThumb({
   ingredient,
@@ -769,7 +1510,7 @@ function SpecialtyIngredientsPanel({
             id="specialty-ingredient-input"
             ref={inputRef}
             value={draft}
-            className="w-full min-w-0 rounded-md border border-border-light bg-surface-primary py-2 pl-10 pr-10 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+            className="w-full min-w-0 rounded-md border border-border-light bg-surface-primary py-2 pl-10 pr-10 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
             placeholder={localize('com_preferences_specialty_search_placeholder')}
             disabled={isSaving || isResolving}
             onFocus={() => setAreSuggestionsOpen(true)}
@@ -854,7 +1595,7 @@ function SpecialtyIngredientsPanel({
               </p>
               <select
                 value={draftCategory}
-                className="min-w-40 rounded-md border border-border-light bg-surface-secondary px-3 py-2 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+                className="min-w-40 rounded-md border border-border-light bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
                 disabled={isSaving || isResolving}
                 aria-label={localize('com_preferences_specialty_category_label')}
                 onChange={(event) =>
@@ -956,13 +1697,13 @@ function SpecialtyIngredientsPanel({
           <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_12rem_auto_auto]">
             <input
               value={editingName}
-              className="min-w-0 rounded-lg border border-border-light bg-surface-primary px-3 py-2 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+              className="min-w-0 rounded-lg border border-border-light bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
               aria-label={localize('com_preferences_specialty_edit_label')}
               onChange={(event) => onEditingNameChange(event.target.value)}
             />
             <select
               value={editingCategory}
-              className="rounded-lg border border-border-light bg-surface-primary px-3 py-2 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+              className="rounded-lg border border-border-light bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
               aria-label={localize('com_preferences_specialty_category_label')}
               onChange={(event) =>
                 onEditingCategoryChange(event.target.value as SpecialtyIngredientCategory)
@@ -1003,8 +1744,11 @@ function PreferencesAgentDialog({
   isLoading,
   localize,
   endRef,
+  suggestions,
+  complete,
   onDraftChange,
   onSubmit,
+  onSendSuggestion,
   onClose,
 }: {
   open: boolean;
@@ -1013,58 +1757,74 @@ function PreferencesAgentDialog({
   isLoading: boolean;
   localize: Localize;
   endRef: RefObject<HTMLDivElement>;
+  suggestions: Array<{ text: string; display: string }>;
+  complete: boolean;
   onDraftChange: (value: string) => void;
   onSubmit: () => void;
+  onSendSuggestion: (value: string) => void;
   onClose: () => void;
 }) {
+  const showCompletedState = complete;
+
   if (!open) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-0 py-0 sm:items-center sm:px-3 sm:py-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-md px-0 py-0 sm:items-center sm:px-3 sm:py-4">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="preferences-agent-title"
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-t-lg border border-border-light bg-surface-primary shadow-2xl sm:rounded-lg"
+        className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-t-2xl border border-border-light/10 bg-surface-primary shadow-2xl sm:rounded-2xl overflow-hidden"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-border-light px-4 py-3">
+        <div className="flex items-start justify-between gap-3 px-6 pt-6 pb-2">
           <div>
-            <h2 id="preferences-agent-title" className="text-base font-semibold">
-              {localize('com_preferences_review_action')}
+            <h2 id="preferences-agent-title" className="flex items-center gap-2 text-base font-semibold text-text-primary">
+              {showCompletedState && (
+                <CheckCircle2 className="size-5 text-green-500 flex-shrink-0" aria-hidden="true" />
+              )}
+              {showCompletedState ? 'Your cooking profile is refined' : localize('com_preferences_review_action')}
             </h2>
-            <p className="text-sm text-text-secondary">{localize('com_preferences_agent_hint')}</p>
-            <p className="mt-1 text-xs text-text-secondary">
-              {localize('com_preferences_device_location_hint')}
+            <p className="mt-1 text-sm text-text-secondary leading-relaxed">
+              {showCompletedState
+                ? 'Mise has built a comprehensive profile to customize your recipes. You can review it or ask to change anything.'
+                : localize('com_preferences_agent_hint')}
             </p>
+            {!showCompletedState && (
+              <p className="mt-1 text-xs text-text-secondary/70">
+                {localize('com_preferences_device_location_hint')}
+              </p>
+            )}
           </div>
           <button
             type="button"
-            className="flex size-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+            className="flex size-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
             aria-label={localize('com_ui_close')}
             onClick={onClose}
           >
             <X className="icon-sm" aria-hidden="true" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-          <div className="flex flex-col gap-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-2">
+          <div className="flex flex-col gap-4">
             {thread.map((message) => (
-              <div
-                key={message.id}
-                className={cn(
-                  'max-w-[85%] rounded-xl px-4 py-3 text-sm leading-6',
-                  message.role === 'user'
-                    ? 'ml-auto bg-surface-active-alt text-text-primary'
-                    : 'mr-auto bg-surface-secondary text-text-primary',
-                )}
-              >
-                {message.content}
-              </div>
+              message.content ? (
+                <div
+                  key={message.id}
+                  className={cn(
+                    'max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
+                    message.role === 'user'
+                      ? 'ml-auto bg-surface-active-alt text-text-primary'
+                      : 'mr-auto bg-surface-secondary/45 text-text-primary',
+                  )}
+                >
+                  {message.content}
+                </div>
+              ) : null
             ))}
             {isLoading && (
-              <div className="mr-auto flex items-center gap-2 rounded-xl bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
+              <div className="mr-auto flex items-center gap-2 rounded-2xl bg-surface-secondary/45 px-4 py-3 text-sm text-text-secondary">
                 <Spinner className="icon-sm" />
                 {localize('com_preferences_agent_thinking')}
               </div>
@@ -1072,17 +1832,37 @@ function PreferencesAgentDialog({
             <div ref={endRef} />
           </div>
         </div>
-        <div className="border-t border-border-light px-4 py-3">
-          <div className="flex items-end gap-2 rounded-xl border border-border-light bg-surface-secondary p-2">
+        
+        {suggestions.length > 0 && !isLoading && (
+          <div className="flex flex-wrap gap-2 px-6 py-2 bg-surface-primary">
+            {suggestions.map((suggestion, index) => (
+              <button
+                key={index}
+                type="button"
+                className="rounded-full bg-surface-secondary/50 px-3.5 py-1.5 text-xs text-text-secondary shadow-none hover:bg-surface-hover hover:text-text-primary transition-all duration-150 border-0"
+                onClick={() => onSendSuggestion(suggestion.text)}
+              >
+                {suggestion.display}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="px-6 pb-6 pt-3 bg-surface-primary">
+          <div className="flex items-center gap-2 rounded-xl bg-surface-secondary/60 p-1.5 focus-within:bg-surface-secondary/80 transition-all duration-150 border-0">
             <label htmlFor="preferences-agent-message" className="sr-only">
               {localize('com_preferences_message_label')}
             </label>
             <textarea
               id="preferences-agent-message"
               value={draft}
-              rows={2}
-              className="max-h-36 min-h-12 flex-1 resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
-              placeholder={localize('com_preferences_message_placeholder')}
+              rows={1}
+              className="max-h-24 min-h-[38px] flex-1 resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+              placeholder={
+                showCompletedState
+                  ? 'Ask Mise to adjust or add anything to your profile...'
+                  : localize('com_preferences_message_placeholder')
+              }
               onChange={(event) => onDraftChange(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey) {
@@ -1094,7 +1874,7 @@ function PreferencesAgentDialog({
             <button
               type="button"
               aria-label={localize('com_ui_submit')}
-              className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-surface-submit text-white hover:bg-surface-submit-hover disabled:opacity-50"
+              className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-surface-submit text-white hover:bg-surface-submit-hover disabled:opacity-50 transition-colors"
               disabled={!draft.trim() || isLoading}
               onClick={onSubmit}
             >
@@ -1116,9 +1896,27 @@ export default function PreferencesWorkspace() {
   const autoResolveIngredientMutation = useResolvePreferenceIngredientMutation();
   const markdown = preferencesQuery.data?.markdown ?? '';
   const sections = useMemo(() => preferenceSections(markdown), [markdown]);
+  const isProfileComplete = useMemo(() => {
+    const required = [
+      'Safety',
+      'Diet',
+      'Religious & Cultural Rules',
+      'Cooking Level',
+      'Household',
+      'Kitchen',
+      'Goals',
+      'Location',
+    ];
+    return required.every((heading) => {
+      const sec = sections.find((s) => s.heading === heading);
+      return sec && sec.lines.length > 0;
+    });
+  }, [sections]);
   const [draft, setDraft] = useState('');
   const [thread, setThread] = useState<ThreadMessage[]>([]);
-  const [isProfileEditing, setIsProfileEditing] = useState(false);
+  const [suggestions, setSuggestions] = useState<Array<{ text: string; display: string }>>([]);
+  const [complete, setComplete] = useState(false);
+  const [activeEditingCard, setActiveEditingCard] = useState<PreferenceHeading | null>(null);
   const [profileDrafts, setProfileDrafts] = useState<ProfileDrafts>(() =>
     profileDraftsFromSections(sections),
   );
@@ -1177,13 +1975,20 @@ export default function PreferencesWorkspace() {
   const sendToAgent = useCallback(
     (message: string) => {
       const clean = message.trim();
-      setThread([...thread, { id: messageId(), role: 'user' as const, content: clean }]);
+      if (clean) {
+        setThread((current) => [
+          ...current,
+          { id: messageId(), role: 'user' as const, content: clean },
+        ]);
+      }
       setDraft('');
 
       chatMutation.mutate(
         {
           message: clean,
-          history: thread.map(({ role, content }) => ({ role, content })),
+          history: thread
+            .filter(({ content }) => content.trim())
+            .map(({ role, content }) => ({ role, content })),
           deviceContext: deviceLocationContext.context,
         },
         {
@@ -1192,6 +1997,8 @@ export default function PreferencesWorkspace() {
               ...current,
               { id: messageId(), role: 'assistant', content: response.text },
             ]);
+            setSuggestions(response.suggestions ?? []);
+            setComplete(response.complete ?? false);
           },
           onError: () => {
             setThread((current) => [
@@ -1209,6 +2016,8 @@ export default function PreferencesWorkspace() {
     [chatMutation, deviceLocationContext.context, localize, thread],
   );
 
+  const isProfileEditing = activeEditingCard !== null;
+
   useEffect(() => {
     if (!isProfileEditing) {
       setProfileDrafts(profileDraftsFromSections(sections));
@@ -1216,8 +2025,16 @@ export default function PreferencesWorkspace() {
   }, [isProfileEditing, sections]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' });
+    if (typeof endRef.current?.scrollIntoView === 'function') {
+      endRef.current.scrollIntoView({ block: 'end' });
+    }
   }, [thread, chatMutation.isLoading]);
+
+  useEffect(() => {
+    if (isAgentOpen && thread.length === 0 && !chatMutation.isLoading) {
+      sendToAgent('');
+    }
+  }, [isAgentOpen, thread.length, chatMutation.isLoading, sendToAgent]);
 
   useEffect(() => {
     const inferred = inferSpecialtyIngredientCategory(specialtyDraft);
@@ -1264,54 +2081,35 @@ export default function PreferencesWorkspace() {
     sendToAgent(draft);
   };
 
-  const startProfileEditing = () => {
+  const startProfileEditing = (heading?: PreferenceHeading) => {
     setProfileDrafts(profileDraftsFromSections(sections));
     setEditError('');
-    setIsProfileEditing(true);
+    setActiveEditingCard(heading ?? 'Diet');
   };
 
   const cancelProfileEditing = () => {
     setProfileDrafts(profileDraftsFromSections(sections));
     setEditError('');
-    setIsProfileEditing(false);
+    setActiveEditingCard(null);
   };
 
-  const setProfileLine = (heading: PreferenceHeading, index: number, value: string) => {
+  const handleDraftsChange = (heading: PreferenceHeading, nextLines: string[]) => {
     setProfileDrafts((current) => {
       const next = new Map(current);
-      const lines = [...(next.get(heading) ?? [''])];
-      lines[index] = value;
-      next.set(heading, lines);
+      next.set(heading, nextLines);
       return next;
     });
   };
 
-  const addProfileLine = (heading: PreferenceHeading) => {
-    setProfileDrafts((current) => {
-      const next = new Map(current);
-      next.set(heading, [...(next.get(heading) ?? []), '']);
-      return next;
-    });
-  };
-
-  const removeProfileLine = (heading: PreferenceHeading, index: number) => {
-    setProfileDrafts((current) => {
-      const next = new Map(current);
-      const lines = (next.get(heading) ?? []).filter((_, lineIndex) => lineIndex !== index);
-      next.set(heading, lines.length > 0 ? lines : ['']);
-      return next;
-    });
-  };
-
-  const saveProfileEditing = () => {
-    if (updatePreferencesMutation.isLoading) {
+  const saveProfileEditing = (heading = activeEditingCard) => {
+    if (!heading || updatePreferencesMutation.isLoading) {
       return;
     }
 
-    const nextMarkdown = atAGlanceHeadings.reduce(
-      (current, { heading }) =>
-        replacePreferenceSection(current, heading, profileDrafts.get(heading) ?? []),
+    const nextMarkdown = replacePreferenceSection(
       markdown,
+      heading,
+      profileDrafts.get(heading) ?? [],
     );
 
     setEditError('');
@@ -1319,7 +2117,7 @@ export default function PreferencesWorkspace() {
       { markdown: nextMarkdown },
       {
         onSuccess: () => {
-          setIsProfileEditing(false);
+          setActiveEditingCard(null);
         },
         onError: () => {
           setEditError(localize('com_ui_error_updating_preferences'));
@@ -1412,13 +2210,6 @@ export default function PreferencesWorkspace() {
       nextOverrides,
     );
   };
-  let profileActionIcon = <Plus className="icon-sm" aria-hidden="true" />;
-  if (isProfileEditing) {
-    profileActionIcon = <Save className="icon-sm" aria-hidden="true" />;
-  }
-  if (updatePreferencesMutation.isLoading) {
-    profileActionIcon = <Spinner className="icon-sm" />;
-  }
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-[#faf7f1] text-text-primary dark:bg-background">
@@ -1439,29 +2230,6 @@ export default function PreferencesWorkspace() {
                     <Eye className="icon-sm" aria-hidden="true" />
                     {localize('com_preferences_preview_profile')}
                   </button>
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 rounded-lg bg-surface-submit px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-surface-submit-hover disabled:opacity-50"
-                    disabled={preferencesQuery.isLoading || updatePreferencesMutation.isLoading}
-                    onClick={() =>
-                      isProfileEditing ? saveProfileEditing() : startProfileEditing()
-                    }
-                  >
-                    {profileActionIcon}
-                    {isProfileEditing
-                      ? localize('com_preferences_save_changes')
-                      : localize('com_preferences_add_edit')}
-                  </button>
-                  {isProfileEditing && (
-                    <button
-                      type="button"
-                      className="rounded-lg border border-border-light bg-surface-primary px-3 py-2 text-sm font-medium text-text-secondary shadow-sm hover:bg-surface-hover hover:text-text-primary disabled:opacity-50"
-                      disabled={updatePreferencesMutation.isLoading}
-                      onClick={cancelProfileEditing}
-                    >
-                      {localize('com_ui_cancel')}
-                    </button>
-                  )}
                 </div>
               </div>
             </header>
@@ -1479,13 +2247,13 @@ export default function PreferencesWorkspace() {
                 <AtAGlanceGrid
                   sections={sections}
                   drafts={profileDrafts}
-                  isEditing={isProfileEditing}
+                  activeEditingCard={activeEditingCard}
                   isSaving={updatePreferencesMutation.isLoading}
                   localize={localize}
                   onEdit={startProfileEditing}
-                  onLineChange={setProfileLine}
-                  onAddLine={addProfileLine}
-                  onRemoveLine={removeProfileLine}
+                  onDraftsChange={handleDraftsChange}
+                  onSaveCard={saveProfileEditing}
+                  onCancelCard={cancelProfileEditing}
                 />
                 <SpecialtyIngredientsPanel
                   ingredients={specialtyIngredients}
@@ -1524,8 +2292,11 @@ export default function PreferencesWorkspace() {
         isLoading={chatMutation.isLoading}
         localize={localize}
         endRef={endRef}
+        suggestions={suggestions}
+        complete={isProfileComplete || complete}
         onDraftChange={setDraft}
         onSubmit={submit}
+        onSendSuggestion={sendToAgent}
         onClose={() => setIsAgentOpen(false)}
       />
     </main>

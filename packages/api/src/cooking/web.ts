@@ -502,7 +502,21 @@ async function executeRead(
   content: string;
   sources: CookingWebSource[];
 }> {
-  const safeUrl = await assertSafeUrl(args.url);
+  let safeUrl: URL;
+  try {
+    safeUrl = await assertSafeUrl(args.url);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'URL check failed';
+    return {
+      sources: [],
+      content: JSON.stringify({
+        ok: false,
+        error: 'private_url_blocked',
+        message: `I cannot access that website: ${message}`,
+      }),
+    };
+  }
+
   const page = await extractUrl(authResult, safeUrl);
   const kind = sourceType(args.sourceType, 'page');
   const source = {
@@ -521,7 +535,21 @@ async function executeRecipeSource(
   authResult: Partial<TWebSearchConfig>,
   args: Record<string, unknown>,
 ): Promise<{ content: string; sources: CookingWebSource[] }> {
-  const safeUrl = await assertSafeUrl(args.url);
+  let safeUrl: URL;
+  try {
+    safeUrl = await assertSafeUrl(args.url);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'URL check failed';
+    return {
+      sources: [],
+      content: JSON.stringify({
+        ok: false,
+        error: 'private_url_blocked',
+        message: `I cannot access that website: ${message}`,
+      }),
+    };
+  }
+
   const page = await extractUrl(authResult, safeUrl);
   const facts = recipeFacts(page.text);
   logCookingSource('recipe_source_result', {

@@ -11,6 +11,7 @@ import MultiMessage from './MultiMessage';
 import MessageNav from './MessageNav';
 import { cn } from '~/utils';
 import store from '~/store';
+import { useCookingChat } from '~/components/Cooking/CookingChatContext';
 
 function MessagesViewContent({
   messagesTree: _messagesTree,
@@ -18,6 +19,7 @@ function MessagesViewContent({
   messagesTree?: TMessage[] | null;
 }) {
   const localize = useLocalize();
+  const { isCookingChat } = useCookingChat();
   const fontSize = useAtomValue(fontSizeAtom);
   const { screenshotTargetRef } = useScreenshot();
   const scrollButtonPreference = useRecoilValue(store.showScrollButton);
@@ -51,14 +53,16 @@ function MessagesViewContent({
           >
             <div className="flex flex-col pb-9 pt-14 dark:bg-transparent">
               {(_messagesTree && _messagesTree.length == 0) || _messagesTree === null ? (
-                <div
-                  className={cn(
-                    'flex w-full items-center justify-center p-3 text-text-secondary',
-                    fontSize,
-                  )}
-                >
-                  {localize('com_ui_nothing_found')}
-                </div>
+                isCookingChat ? null : (
+                  <div
+                    className={cn(
+                      'flex w-full items-center justify-center p-3 text-text-secondary',
+                      fontSize,
+                    )}
+                  >
+                    {localize('com_ui_nothing_found')}
+                  </div>
+                )
               ) : (
                 <>
                   <div ref={screenshotTargetRef}>

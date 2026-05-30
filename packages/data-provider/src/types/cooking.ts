@@ -193,6 +193,7 @@ export type GenerateCookingDraftRequest = {
   conversationId?: string;
   documentType?: CookingDocumentType;
   documentMarkdown?: string;
+  recipe?: StructuredRecipe;
 };
 
 export type UpdateCookingDraftRequest = {

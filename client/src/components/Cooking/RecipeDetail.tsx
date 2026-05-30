@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Edit3 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Edit3, MessageSquare } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Input, TextareaAutosize } from '@librechat/client';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
-import { useRecipeQuery, useUpdateSavedRecipeMutation } from '~/data-provider';
+import {
+  useRecipeQuery,
+  useUpdateSavedRecipeMutation,
+  useCreateCookingDocumentMutation,
+} from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import RecipeMetrics from './Metrics';
 import { recipeBodyMarkdown, recipeDisplayTitle, recipeMarkdownDisplay } from './recipe';
@@ -72,6 +76,8 @@ export default function RecipeDetail() {
   const localize = useLocalize();
   const { recipeId } = useParams();
   const updateRecipe = useUpdateSavedRecipeMutation();
+  const createCookingDocument = useCreateCookingDocumentMutation();
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftMarkdown, setDraftMarkdown] = useState('');
@@ -151,6 +157,28 @@ export default function RecipeDetail() {
     );
   };
 
+  const discussWithAI = () => {
+    if (!recipe) {
+      return;
+    }
+
+    const newConvoId = window.crypto.randomUUID();
+    createCookingDocument.mutate(
+      {
+        prompt: `Discuss ${recipeDisplayTitle(recipe)}`,
+        conversationId: newConvoId,
+        documentMarkdown: recipe.documentMarkdown,
+        documentType: recipe.documentType,
+        recipe: recipe.recipe,
+      },
+      {
+        onSuccess: () => {
+          navigate(`/cook/${newConvoId}`);
+        },
+      },
+    );
+  };
+
   return (
     <main className="h-full overflow-y-auto bg-surface-primary-alt px-4 py-7 text-text-primary sm:px-7 lg:px-10">
       <div className="mx-auto max-w-[56rem]">
@@ -170,16 +198,29 @@ export default function RecipeDetail() {
                   </span>
                 ) : null}
                 {!isEditing ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                    onClick={startEditing}
-                  >
-                    <Edit3 className="h-4 w-4" aria-hidden="true" />
-                    <span>{localize('com_ui_edit')}</span>
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      disabled={createCookingDocument.isLoading}
+                      onClick={discussWithAI}
+                    >
+                      <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                      <span>{localize('com_recipes_discuss_ai')}</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={startEditing}
+                    >
+                      <Edit3 className="h-4 w-4" aria-hidden="true" />
+                      <span>{localize('com_recipes_edit_markdown_btn')}</span>
+                    </Button>
+                  </>
                 ) : null}
               </div>
             </div>

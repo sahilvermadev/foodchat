@@ -207,10 +207,14 @@ The loop terminates when:
 This follows established agent guidance: flexibility where the path cannot be fully
 predicted, with stopping conditions and environmental feedback to retain control.
 
-### 2. Introduce A Turn Understanding Module
+### 2. Introduce A Hybrid Turn Understanding Planner
 
-Create a deep module responsible for transforming the current user message, relevant
-recent history, and deterministic runtime context into a compact turn plan.
+Create a backend-only planner that transforms the current user message, relevant
+recent history, trusted runtime context, active canvas state, linked source state,
+selected preference section metadata, and available capability facts into a compact
+structured turn plan. The planner is agentic: the LLM proposes semantic judgment as
+JSON, while runtime policy validates structure, redacts private data, and enforces
+hard boundaries.
 
 Its interface should yield:
 
@@ -223,15 +227,23 @@ Its interface should yield:
 - whether a durable document is already requested;
 - whether external evidence is materially necessary.
 
+The LLM is responsible for semantic intent, soft preference relevance,
+ordinary-versus-specialty judgment, clarification need, source/research need, and
+action proposal. Runtime policy is responsible for trusted context facts, hard
+constraints, URL/source facts, active canvas availability, privacy redaction, tool
+capability limits, schema validation, and a non-semantic safe fallback when planner
+output is malformed or unavailable.
+
 This module must carry refinements forward across turns. A user correction such as
 “normal recipe” must become an active constraint, not merely an isolated sentence in
 chat history.
 
 ### 3. Introduce A Relevant Context Module
 
-Create a deep module that selects and describes only context relevant to the turn
-plan. It must prevent the model from treating every stored detail as an instruction
-to personalize visibly.
+Create a deep module that selects and describes only context relevant to the
+validated turn plan. The planner may propose context categories, but runtime privacy
+policy decides what can actually be exposed and must prevent the response model from
+treating every stored detail as an instruction to personalize visibly.
 
 Context priority is:
 
@@ -246,8 +258,12 @@ Context priority is:
    makes them useful.
 
 The module should output a compact context brief rather than entire unfiltered
-preference markdown. It must also record context categories used for evaluation and
-debugging without exposing raw sensitive content in telemetry.
+preference markdown. Hard safety, diet, allergy, and religious constraints are
+always exposed when present, even if the planner omits them. Exact timestamps,
+timezone identifiers, granular saved locations, complete preference bodies, and raw
+private memories must not be exposed to the response prompt or behavioral telemetry.
+The module must record selected and withheld context categories for evaluation and
+debugging without logging raw sensitive content.
 
 ### 4. Model Availability And Preference Separately
 
@@ -268,7 +284,43 @@ content and imagery may remain useful for presentation and availability, but the
 recommendation planner must receive semantic usage information rather than only a
 catalog classification.
 
-### 5. Provide Deterministic Situational Context
+### 5. Add A Preference Exposure Policy
+
+The agent must not receive the full user preference artifact as a flat prompt blob.
+The Relevant Context Module should convert preferences into a task-specific
+Preference Brief that states what is mandatory, what is useful, and what should be
+suppressed for the current turn.
+
+Preference handling rules:
+
+| Preference category | Exposure rule | Effect on answer |
+| --- | --- | --- |
+| Safety, allergy, medical, diet, and religious rules | Always exposed when known | Hard filter; unsafe outputs are invalid |
+| Current user request and corrections | Always exposed for the active task | Highest-priority task constraints |
+| Situational context such as time, locale, urgency, and meal occasion | Exposed as soft priors with confidence | Ranks options silently; should rarely be mentioned |
+| Stable taste, cuisine, and goal preferences | Exposed only when relevant to the task | Ranks and styles suggestions |
+| Kitchen equipment and technique level | Exposed when it affects feasibility | Filters impossible methods or asks one focused question |
+| Household and serving defaults | Exposed when scaling or planning matters | Adjusts quantities, time, and practicality |
+| Ordinary staples and reliable basics | Exposed for everyday suggestions or pantry tasks | Supports accessible default choices |
+| Specialty ingredients and occasional items | Suppressed unless requested, naturally relevant, or useful for novelty | Optional enhancer; never the default anchor for ordinary requests |
+| Personal context and past anecdotes | Suppressed unless clearly useful | Avoids conspicuous or creepy personalization |
+
+Precedence is:
+
+1. Hard constraints.
+2. Explicit current request.
+3. Active corrections from the current conversation.
+4. Situational priors.
+5. Stable preferences.
+6. Availability and specialty opportunities.
+
+For example, if a user in India with saved fish sauce, bacon, chili oil, and
+mozzarella asks for food under 15 minutes, the brief should prefer ordinary,
+accessible quick options and suppress those specialty ingredients. Those ingredients
+should become relevant only if the user asks for fusion food, novelty, or a way to
+use them.
+
+### 6. Provide Deterministic Situational Context
 
 The cooking turn should receive local date/time and timezone from trusted runtime
 context where available. It may derive a likely meal occasion with a confidence
@@ -282,10 +334,11 @@ These signals are soft priors:
 - they should not ordinarily be exposed in prose;
 - explicit user taste or requests override them.
 
-### 6. Add An Action Planning Module
+### 7. Add A Hybrid Action Planning Module
 
-Based on turn understanding and selected context, determine the next user-serving
-action:
+Based on turn understanding and selected context, use the LLM planner to propose the
+next user-serving action, then apply runtime validation before configuring the
+response turn:
 
 | Action | When appropriate |
 | --- | --- |
@@ -299,23 +352,31 @@ action:
 
 The plan is not a user-facing chain of thought. It is a concise machine-readable
 decision that can be logged, tested, and used to configure the generation turn.
+Planner output must include privacy-safe rationale labels rather than raw user
+memory or freeform private reasoning.
 
-### 7. Gate Tools And Instructions From The Plan
+### 8. Gate Tools And Instructions From The Plan
 
 Only provide tools and instructions appropriate to the intended action.
 
 - Routine recommendation turns must not be biased toward canvas creation.
 - Explicit durable recipe requests may expose document creation.
-- Existing document edits may expose read and revision operations.
+- Existing document edits may expose read and revision operations only when an
+  active selected draft exists and the current user intent matches document work.
 - Source-driven work must require source reading before exact adaptation.
-- External research remains unavailable unless needed by deterministic evidence rules
-  or requested through a validated research decision.
+- External research remains unavailable unless the planner proposes source/research
+  work, a pasted URL creates a source-reading requirement, or the model requests
+  research through a validated tool call.
+- Ordinary recipe inspiration must not unlock web tools merely because browsing is
+  available.
 
-Likewise, detailed document formatting requirements should be included only on
-document-generation or document-revision turns, not on simple conversational
-recommendations.
+Likewise, prompt profiles should be selected from the validated plan. Routine direct
+turns receive only short persona, context brief, and tool state. Document work
+receives the document contract and canvas markdown requirements. Source or research
+turns receive source and web rules. Active canvas discussion receives selected
+document context without implying mutation.
 
-### 8. Preserve Model Discretion Inside The Right Frame
+### 9. Preserve Model Discretion Inside The Right Frame
 
 The planner must not hardcode that every Indian user wants a particular dish, or that
 every dinner is traditional food. It should provide relevant facts and ranked priors,
@@ -323,14 +384,15 @@ then allow the response model to produce appropriate, varied suggestions.
 
 This is the intended balance:
 
-- deterministic systems define available facts, constraints, permissions, and
-  validation;
-- the model supplies culinary judgment, creative options, phrasing, and sensitive
-  conversational adaptation;
-- tools supply environmental facts and durable actions when the model determines they
-  are necessary inside the permitted plan.
+- runtime systems define trusted facts, constraints, permissions, and validation;
+- the planner model supplies semantic intent, soft relevance judgment, clarification
+  need, and action proposals;
+- the response model supplies culinary judgment, creative options, phrasing, and
+  sensitive conversational adaptation inside the validated prompt profile;
+- tools supply environmental facts and durable actions only when the validated plan
+  and runtime tool gate permit them.
 
-### 9. Add A Response Quality Gate
+### 10. Add A Response Quality Gate
 
 Before a response is surfaced, validate high-impact dimensions:
 
@@ -345,7 +407,7 @@ For routine low-risk answers, validation should be lightweight. For externally
 researched, document-mutating, safety-sensitive, or highly personalized turns, a
 targeted model-based evaluation may repair one failed answer before returning it.
 
-### 10. Refine Memory Curation
+### 11. Refine Memory Curation
 
 Durable memory updates should remain separate from immediate response generation.
 The curator should record only stable reusable information supported by the user's
@@ -356,7 +418,7 @@ User corrections should influence the active conversation immediately. They shou
 become durable memories only when the user expresses an enduring preference or
 requests that it be remembered.
 
-### 11. Use Model Routing Deliberately
+### 12. Use Model Routing Deliberately
 
 Routine replies should use a fast, cost-effective model after the turn is properly
 framed. Higher-reasoning models should be considered for:
@@ -369,7 +431,7 @@ framed. Higher-reasoning models should be considered for:
 
 Model selection must be governed by evaluation results rather than by cost alone.
 
-### 12. Maintain Privacy-Aware Observability
+### 13. Maintain Privacy-Aware Observability
 
 Capture structured events needed to diagnose behavior:
 
@@ -387,11 +449,11 @@ behavioral telemetry.
 
 | Module | Responsibility | Interface leverage |
 | --- | --- | --- |
-| Turn Context Builder | Gather deterministic runtime, conversation, document, and capability state | Gives all downstream reasoning one reliable view of the current turn |
-| Turn Understanding | Accumulate intent, constraints, corrections, and uncertainty | Converts conversational ambiguity into a small decision object |
-| Relevant Context Selector | Retrieve and rank profile/context facts needed now | Prevents raw memory from dominating responses |
-| Action Planner | Choose answer, clarification, document operation, or research | Centralizes tool and output decisions |
-| Tool Gate | Construct the smallest permitted tool set and prompt segments | Keeps irrelevant tools and instructions out of routine turns |
+| Turn Context Builder | Gather trusted runtime, conversation, document, and capability state | Gives all downstream reasoning one reliable view of the current turn |
+| Turn Understanding Planner | LLM proposes intent, action, clarification need, and context categories as JSON; non-semantic runtime fallback preserves safe behavior when the planner is unavailable | Converts conversational ambiguity into a validated decision object |
+| Relevant Context Selector | Expose only profile/context facts allowed by the plan and hard policy | Prevents raw memory from dominating responses |
+| Action Planner | Validate answer, clarification, document operation, source, or research proposals | Centralizes tool and output decisions |
+| Tool Gate | Construct the smallest permitted tool set and prompt profile from the validated plan | Keeps irrelevant tools and instructions out of routine turns |
 | Execution Loop | Run bounded model/tool/observation iterations | Supports flexible multi-step tasks while preserving control |
 | Response Quality Gate | Validate usability, constraint compliance, and memory discretion | Converts known failures into enforceable quality behavior |
 | Memory Curator | Store only confirmed durable preferences after interaction | Improves future support without polluting current reasoning |
@@ -459,7 +521,7 @@ document state, or exposed source state.
 
 ### Conversation Evaluations
 
-Create a deterministic evaluation suite containing complete multi-turn interactions.
+Create an evaluation suite containing complete multi-turn interactions.
 It should include at least:
 
 1. An Indian user with specialty condiments requests a meal under 15 minutes; the
@@ -538,6 +600,16 @@ still use tools correctly.
 
 Exit condition: quality improves without unacceptable routine latency or uncontrolled
 cost.
+
+Implemented slice:
+
+- Buffer response text until LLM quality validation and any single repair
+  pass have completed, so rejected drafts are never emitted to the user stream.
+- Provide multi-turn evaluation scenarios with action, tool, privacy,
+  document, source, repair, and latency-baseline scoring.
+- Route preflight-classified safety, source/research, and document mutation work to
+  an optional complex model; route validator repairs to an optional repair model;
+  record privacy-safe routing reasons and selected model roles in timing events.
 
 ## Out of Scope
 

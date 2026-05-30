@@ -348,6 +348,28 @@ function cleanShortDescription(
   );
 }
 
+export function parseServingsFromMarkdown(markdown?: string): number | undefined {
+  if (!markdown) {
+    return undefined;
+  }
+  const lines = markdown.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^(?:[-*]\s*)?(?:\*\*|__)?(?:servings|yield)(?:\*\*|__)?\s*:\s*(.+)$/i);
+    if (match) {
+      const valuePart = match[1].trim();
+      const numMatch = valuePart.match(/(\d+)/);
+      if (numMatch) {
+        const servings = parseInt(numMatch[1], 10);
+        if (servings > 0) {
+          return servings;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 function serializeRecipe(recipe?: StructuredRecipe): StructuredRecipe | undefined {
   return recipe ? normalizeRecipe(recipe) : undefined;
 }
@@ -362,7 +384,14 @@ function canonicalRecipe(
   }
 
   const markdownTitle = headingTitleFromMarkdown(documentMarkdown);
-  return markdownTitle ? { ...structuredRecipe, title: markdownTitle } : structuredRecipe;
+  const updatedRecipe = markdownTitle ? { ...structuredRecipe, title: markdownTitle } : { ...structuredRecipe };
+
+  const parsedServings = parseServingsFromMarkdown(documentMarkdown);
+  if (parsedServings !== undefined) {
+    updatedRecipe.servings = parsedServings;
+  }
+
+  return updatedRecipe;
 }
 
 function stringArray(value: unknown): string[] {
@@ -511,6 +540,10 @@ function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
     recipe.illustrationStatus === 'complete' || hasIllustration(recipe)
       ? illustrationMediaUrl(recipe, true)
       : undefined;
+
+  const parsedServings = parseServingsFromMarkdown(recipe.documentMarkdown);
+  const servings = parsedServings !== undefined ? parsedServings : recipe.recipe?.servings;
+
   return {
     _id: idOf(recipe),
     user: recipe.user,
@@ -527,7 +560,7 @@ function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
     ...(categorization ? { categorization } : {}),
     categorizationStatus: recipe.categorizationStatus,
     categorizationVersion: recipe.categorizationVersion,
-    ...(recipe.recipe?.servings ? { servings: recipe.recipe.servings } : {}),
+    ...(servings ? { servings } : {}),
     createdAt: iso(recipe.createdAt),
     updatedAt: iso(recipe.updatedAt),
   };
@@ -828,6 +861,7 @@ export async function listRecipes(
         'categorizationVersion',
         'recipe.title',
         'recipe.servings',
+        'documentMarkdown',
         'createdAt',
         'updatedAt',
       ].join(' '),
@@ -853,6 +887,7 @@ export async function updateSavedRecipe(
     return null;
   }
 
+  const oldTitle = existing.title;
   const documentMarkdown =
     typeof payload.documentMarkdown === 'string'
       ? cleanMarkdown(payload.documentMarkdown)
@@ -862,6 +897,9 @@ export async function updateSavedRecipe(
     headingTitleFromMarkdown(documentMarkdown) ?? payload.title ?? recipe?.title ?? existing.title,
     documentMarkdown,
   );
+  const titleChanged = oldTitle.trim().toLowerCase() !== existing.title.trim().toLowerCase();
+  const shouldRegenerateIllustration = !hasIllustration(existing) || titleChanged;
+
   existing.documentType = payload.documentType ?? existing.documentType ?? 'recipe';
   existing.shortDescription = cleanShortDescription(
     payload.shortDescription,
@@ -876,18 +914,22 @@ export async function updateSavedRecipe(
   existing.categorization = undefined;
   const enrichRecipe = existing.documentType === 'recipe';
   existing.categorizationStatus = enrichRecipe ? 'pending' : 'complete';
-  existing.illustrationUrl = '';
-  existing.illustrationData = undefined;
-  existing.illustrationContentType = undefined;
-  existing.illustrationThumbnail = undefined;
-  existing.illustrationStatus = 'pending';
-  existing.illustrationModel = undefined;
+  if (shouldRegenerateIllustration) {
+    existing.illustrationUrl = '';
+    existing.illustrationData = undefined;
+    existing.illustrationContentType = undefined;
+    existing.illustrationThumbnail = undefined;
+    existing.illustrationStatus = 'pending';
+    existing.illustrationModel = undefined;
+  }
   existing.categorizationVersion += 1;
   await existing.save();
   if (enrichRecipe) {
     scheduleCategorization(idOf(existing), existing.categorizationVersion);
   }
-  scheduleIllustration(idOf(existing), existing.categorizationVersion);
+  if (shouldRegenerateIllustration) {
+    scheduleIllustration(idOf(existing), existing.categorizationVersion);
+  }
   return serializeSavedRecipe(existing);
 }
 

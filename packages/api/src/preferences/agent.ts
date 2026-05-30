@@ -61,6 +61,8 @@ export type PreferencesChatResult = {
   preferences: PreferencesDocument;
   preferencesChanged: boolean;
   changedHeadings: PreferenceHeading[];
+  suggestions?: Array<{ text: string; display: string }>;
+  complete?: boolean;
 };
 
 const defaultBaseUrl = 'https://openrouter.ai/api/v1';
@@ -104,7 +106,19 @@ Conversation rules:
 - Keep saved bullets short. Split multi-topic answers into multiple section-specific bullets.
 - Do not expose raw markdown, JSON, or tool arguments unless the user explicitly asks for the markdown.
 - Keep responses short: one sentence about what changed, then at most one useful question if profile status is incomplete.
-- When the user asks "anything else?" or similar and the profile is complete, answer that you have enough.`;
+- When the user asks "anything else?" or similar and the profile is complete, answer that you have enough.
+
+At the very end of your response, you MUST always append a JSON block containing a "complete" boolean flag (which MUST be true if the user's profile is complete and no more questions are needed, otherwise false) and 3-5 dynamic, highly context-aware quick-reply suggestions for the user's next response. These suggestions must be tailored to the active question or topic being discussed. Ensure they use natural, first-person phrasing (e.g. "I have no allergies", "I am a vegetarian", "I own an air fryer").
+Format the block exactly like this:
+\`\`\`json-suggestions
+{
+  "complete": false,
+  "suggestions": [
+    { "display": "Short Label", "text": "Full natural sentence reply" }
+  ]
+}
+\`\`\`
+`;
 
 const tools = [
   {
@@ -557,6 +571,69 @@ async function complete(messages: ChatMessage[], model: string): Promise<ChatMes
   return message;
 }
 
+function parseAssistantResponse(content: string | null): {
+  text: string;
+  suggestions?: Array<{ text: string; display: string }>;
+  complete?: boolean;
+} {
+  const raw = content?.trim() || '';
+  if (!raw) {
+    return { text: 'What should I know about how you cook?' };
+  }
+
+  const match = raw.match(/```json-suggestions\s*([\s\S]+?)\s*```/);
+  let parsedSuggestions: Array<{ text: string; display: string }> | undefined;
+  let parsedComplete: boolean | undefined;
+  let text = raw;
+
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      text = raw.replace(match[0], '').trim();
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        parsedSuggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions : undefined;
+        parsedComplete = typeof parsed.complete === 'boolean' ? parsed.complete : undefined;
+      } else if (Array.isArray(parsed)) {
+        parsedSuggestions = parsed;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Semantic fallback scan: if the LLM message converses about profile completion/ready state, mark complete
+  if (parsedComplete === undefined) {
+    const lowerText = text.toLowerCase();
+    if (
+      lowerText.includes('profile is complete') ||
+      lowerText.includes('profile is ready') ||
+      lowerText.includes('preferences are saved') ||
+      lowerText.includes('ready to cook') ||
+      lowerText.includes('good to go') ||
+      lowerText.includes('finished refining') ||
+      lowerText.includes('all set to cook') ||
+      lowerText.includes('ready to help you with your next cooking')
+    ) {
+      parsedComplete = true;
+    }
+  }
+
+  return { text, suggestions: parsedSuggestions, complete: parsedComplete };
+}
+
+function getDefaultSuggestions(complete: boolean): Array<{ text: string; display: string }> {
+  return complete
+    ? [
+        { text: 'Can you summarize my current cooking profile?', display: 'Summarize my profile' },
+        { text: 'How do these preferences personalize my recipes?', display: 'How personalization works' },
+        { text: 'I am all done refining my preferences. Let\'s go back to cooking!', display: 'Done, let\'s cook!' }
+      ]
+    : [
+        { text: 'I have no food allergies or safety restrictions.', display: 'No allergies' },
+        { text: 'I follow a vegetarian diet.', display: 'Vegetarian' }
+      ];
+}
+
 export async function runPreferencesChat(
   input: PreferencesChatInput,
 ): Promise<PreferencesChatResult> {
@@ -618,11 +695,16 @@ export async function runPreferencesChat(
     messages.push(assistant);
 
     if (!assistant.tool_calls?.length) {
+      const parsed = parseAssistantResponse(assistant.content);
+      const isCompleteStructurally = preferenceProfileStatus(preferences.markdown).complete;
+      const complete = parsed.complete ?? isCompleteStructurally;
       return {
         preferences,
         preferencesChanged,
         changedHeadings: normalizeChangedHeadings(changedHeadings),
-        text: assistant.content?.trim() || 'What should I know about how you cook?',
+        text: parsed.text,
+        suggestions: parsed.suggestions || getDefaultSuggestions(complete),
+        complete,
       };
     }
 
@@ -639,12 +721,18 @@ export async function runPreferencesChat(
     }
   }
 
+  const isCompleteStructurally = preferenceProfileStatus(preferences.markdown).complete;
+  const defaultText = isCompleteStructurally
+    ? 'Your cooking profile is complete enough to personalize recipes now.'
+    : 'I updated what I could. What else should I know about how you cook?';
+  const parsed = parseAssistantResponse(defaultText);
+  const complete = parsed.complete ?? isCompleteStructurally;
   return {
     preferences,
     preferencesChanged,
     changedHeadings: normalizeChangedHeadings(changedHeadings),
-    text: preferenceProfileStatus(preferences.markdown).complete
-      ? 'Your cooking profile is complete enough to personalize recipes now.'
-      : 'I updated what I could. What else should I know about how you cook?',
+    text: parsed.text,
+    suggestions: parsed.suggestions || getDefaultSuggestions(complete),
+    complete,
   };
 }

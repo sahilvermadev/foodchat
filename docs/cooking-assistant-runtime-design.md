@@ -10,29 +10,31 @@ describes the current code rather than an idealized product design.
 
 The cooking chat is a dedicated agent pipeline, separate from ordinary LibreChat
 conversation handling. The visible assistant is named **Samwise**, while its system
-instructions tell the model that its persona is **Mise**. The normal model is
-`google/gemini-3.1-flash-lite` through OpenRouter, with
-`deepseek/deepseek-v4-pro` as a fallback.
+instructions tell the model that its persona is **Mise**. Routine response turns use
+`google/gemini-3.1-flash-lite` through OpenRouter by default, with
+`deepseek/deepseek-v4-pro` as a failure fallback. Configured complex and repair
+models can be selected for risk-classified turns.
 
 For each user turn, the server sends the model:
 
-1. Saved cooking preferences, when present.
-2. A list of cooking documents in this conversation and the selected canvas document.
-3. Linked recipe material fetched from the web in advance, when the user pasted URLs.
+1. A JSON-only planning call with privacy-safe context facts and capability state.
+2. A task-specific preference brief, never the raw full saved profile.
+3. Relevant document/source context selected by the validated plan.
 4. A dynamically selected set of document and web-research tools.
-5. A long instruction block defining personality, canvas behavior, sourcing policy,
-   and detailed recipe-document format.
+5. A prompt profile whose detail depends on routine, document, source/research, or
+   active-canvas discussion work.
 6. Prior chat history and the new user message.
 
 The model is intended to converse naturally for ordinary questions and only create or
 modify a canvas when the user wants a durable recipe, guide, or prep plan. Web sources
-are intended to support an answer, never replace it. There is now a repair step that
-rejects a response made only of source attribution and asks the model to answer again.
+are intended to support an answer, never replace it. Completed response text is
+buffered until a quality gate accepts it or a single repair pass succeeds; rejected
+first drafts are not streamed to the user.
 
 The system can be slow because a single user action may invoke multiple model calls,
 web extraction calls, and a same-provider fallback retry. It can be over-directed
-because every turn receives extensive document-writing and sourcing policy even when
-the user asks a simple cooking question.
+because planning, quality repair, or optional follow-up suggestions can add provider
+calls even when response prompts are now slimmer for routine turns.
 
 ## Product Identities
 
@@ -54,9 +56,11 @@ User types in /cook
   -> client builds a normal chat submission marked with cookingBridge
   -> POST /api/cooking/chat (SSE)
   -> route loads saved preferences and active conversation documents
-  -> runCookingChat builds prompt, available tools, and provider requests
+  -> runCookingChat builds runtime facts and obtains a validated cooking turn plan
+  -> runCookingChat selects prompt profile, tools, and response/repair model route
   -> OpenRouter model may answer or call tools
   -> document/web tools execute, then the model may run again
+  -> response text is validated/repaired before it is emitted to SSE
   -> route stores user and assistant messages plus source/suggestion metadata
   -> UI shows chat text, optional source cards, optional prompt chips, and canvas
 ```
@@ -75,14 +79,14 @@ The first model message is a system message assembled in this order:
 | Prompt segment | Source | Purpose |
 | --- | --- | --- |
 | `promptPrefix` | client/request payload, when supplied | Additional caller instruction |
-| Saved preferences markdown | preferences store | Safety, dietary, household, taste, equipment, and context |
+| Task-specific preference brief | preferences store plus validated plan | Exposes hard rules and selected relevant context only |
 | Web availability note | web context | Tells model when web credentials/tools are unavailable |
 | Conversation document list | cooking drafts | Identifies all recipe/guide/prep documents and the selected one |
-| Selected document markdown | selected draft, up to 18,000 chars | Lets model reason about or revise the open canvas |
+| Selected document markdown | selected draft, up to 18,000 chars when permitted by profile | Lets model discuss or revise the open canvas |
 | Linked-source requirement | latest message URL scan | Requires source reading before source-driven mutations |
 | Preloaded linked-source extraction | Tavily result, when a URL was pasted | Gives source content before the first provider turn |
 | Current product/tool state | dynamic tool selector | Explains which actions are possible now |
-| Main cooking instructions | static system prompt | Defines voice, policy, canvas format, and research behavior |
+| Main cooking instructions | prompt profile | Defines only the voice, document, and sourcing rules needed for this turn |
 
 The server then appends earlier non-error, finished messages for the current
 conversation and finally the latest user message.
@@ -120,17 +124,17 @@ into the cooking system prompt.
 ## Tools The Model Can Use
 
 The agent does not receive every tool on every turn. Tool exposure changes according
-to canvas state, user wording, linked URLs, and web configuration.
+to the validated planner output, canvas state, linked URLs, and web configuration.
 
 ### Document Tools
 
 | Tool | When exposed | Effect | User-visible consequence |
 | --- | --- | --- | --- |
-| `create_cooking_document` | Every cooking chat turn | Creates and selects a new `recipe`, `guide`, or `prep_plan` document from complete markdown | Canvas opens or gains a new tab; chat shows the tool's short `user_message` |
+| `create_cooking_document` | When the planner selects document work, or when runtime fallback keeps document capability available for model judgment | Creates and selects a new `recipe`, `guide`, or `prep_plan` document from complete markdown | Canvas opens or gains a new tab; chat shows the tool's short `user_message` |
 | `read_cooking_document` | Only when a selected canvas already exists | Returns exact selected document markdown to the model | No direct UI change; may require another model turn |
 | `revise_cooking_document` | Only when a selected canvas already exists | Replaces the selected document with complete revised markdown | Canvas updates; chat shows a short change message |
 
-Canvas mutation is validated by deterministic code. A created or revised document
+Canvas mutation is validated by runtime policy. A created or revised document
 must contain one top-level title, an Ingredients or Shopping List section, and an
 Instructions, Method, Steps, or equivalent actionable section. A revision must differ
 from the existing markdown.
@@ -144,7 +148,7 @@ response. The durable content is expected to be read in the canvas.
 
 | Tool | When exposed | Effect |
 | --- | --- | --- |
-| `request_external_research` | When Tavily web tools are configured but the runtime has not already classified this turn as needing evidence | Allows the model to explain why research is needed and unlock web tools for the remainder of the turn |
+| `request_external_research` | When Tavily web tools are configured but the planner has not already selected source/research work | Allows the model to explain why research is needed and unlock web tools for the remainder of the turn |
 
 The unlock call must contain a recognized research type and a specific reason of at
 least 20 characters. This is intended to preserve agent discretion without making web
@@ -152,9 +156,9 @@ search the default for recipe inspiration.
 
 ### Web Tools
 
-Web tools are backed by Tavily and are exposed immediately when the latest user
-request matches a code-level evidence trigger, or later when the model successfully
-calls `request_external_research`.
+Web tools are backed by Tavily and are exposed immediately when the validated planner
+selects source/research work, when a pasted URL creates a source-reading requirement,
+or later when the model successfully calls `request_external_research`.
 
 | Tool | Purpose | Typical output returned to the model |
 | --- | --- | --- |
@@ -176,24 +180,22 @@ blocked until the source read requirement has been satisfied.
 The runtime also removes text-emitted `set_prompt_suggestions(...)` syntax if a model
 incorrectly writes it into normal prose.
 
-## When Web Research Is Automatically Enabled
+## When Web Research Is Enabled
 
-Tool availability is not solely an agent judgment. Before asking the model, the
-runtime applies text heuristics. It immediately unlocks web tools if the message:
+Tool availability is now planner-led. The planner receives the current user text,
+recent user messages, linked-source state, capability facts, and preference section
+titles, then proposes whether the turn is source/research work. Runtime policy
+validates that proposal against available credentials, source-reading requirements,
+and tool capability limits.
 
-- Contains an HTTP(S) URL.
-- Requests research, comparison, sources, evidence, verification, browsing, citations,
-  or references.
-- Mentions safety-sensitive concepts such as canning, preservation, food poisoning,
-  internal temperature, spoilage, or raw animal products.
-- Mentions current availability, price, buying, stores, groceries, brands, products,
-  equipment, or manufacturers.
-- Mentions restaurants, menus, copycats, recreation, authenticity, tradition, origins,
-  regionality, or history.
+Pasted HTTP(S) URLs remain a hard runtime fact: the backend attempts source reading
+before the first response-model call and blocks source-faithful canvas mutation until
+the source has been read or the user is asked to paste unavailable recipe text.
 
-This means the agent has discretion in some cases, but not all cases. Words such as
-`traditional`, `authentic`, `history`, or `equipment` can cause web tools to be
-available before the model decides whether they are useful.
+If the planner does not expose web tools but the response model realizes external
+evidence is needed, it can call `request_external_research` with a specific reason.
+That unlocks web tools for the remainder of the turn without making ordinary recipe
+inspiration browse by default.
 
 For an ordinary request such as `blueberry cheese cake`, current tests assert that web
 tools are not exposed and no source cards should be generated.
@@ -230,6 +232,9 @@ detector. It is no longer the stated intended behavior.
 | --- | --- |
 | Main cooking reply | OpenRouter, `google/gemini-3.1-flash-lite` |
 | Main reply fallback | OpenRouter, `deepseek/deepseek-v4-pro` |
+| Complex planning/response | `COOKING_AGENT_COMPLEX_MODEL`, when configured, for safety, source/research, and document mutation risk classes |
+| Planner override | `COOKING_AGENT_PLANNER_MODEL`, when configured for non-elevated planner turns |
+| Quality repair override | `COOKING_AGENT_REPAIR_MODEL`, when configured; otherwise the complex or response model |
 | Web search/page extraction | Tavily |
 | Saved document illustration | OpenRouter, `google/gemini-2.5-flash-image` |
 | Batched preference curation | OpenRouter, normally the cooking model unless configured separately |
@@ -242,13 +247,14 @@ personalization but should not block the initial answer.
 
 | Scenario | Main-provider calls, excluding fallback retries | Additional external work |
 | --- | --- | --- |
-| Direct ordinary answer with no follow-up question | 1 | None |
-| Direct answer ending in a meaningful question | 2 | Second call generates suggestion chips |
+| Direct ordinary answer with no follow-up question | 2 | Planner call plus response call |
+| Direct answer ending in a meaningful question | 3 | Planner and response calls, then suggestion chips |
 | Empty model answer | 2 or more | Second call recovers visible answer; suggestions may add another call |
 | Document creation or revision succeeds immediately | 1 | Database mutation; runtime returns the short tool message without another prose call |
 | Model inspects document before answering | At least 2 | Database read tool between calls |
 | Web research requested or pre-enabled | At least 2 if a web tool is called | One or more Tavily requests |
 | Researched answer needs citation repair | One extra correction call, potentially attempted with fallback too | None beyond research |
+| Answer fails response quality validation | One extra repair call | Rejected first draft is not emitted |
 | Tool loop continues | Up to 5 model turns | Tool work between turns |
 
 Each provider call defaults to a 45-second timeout. A retryable failure before any
@@ -258,11 +264,11 @@ about 90 seconds without increasing the chance of success.
 
 ### Streaming Behavior
 
-Normal responses stream model text directly to the chat while it is being generated,
-provided no web sources are already present. Once sources exist, streaming is withheld
-until citation processing is complete, because the visible answer may need a rewrite.
-This can make researched responses feel significantly slower even when the final
-answer is correct.
+Provider responses may arrive as streams internally, but user-visible cooking text is
+buffered until citation and response-quality validation complete. Once validated, the
+route emits the accepted answer through SSE. This prevents privacy or workflow-policy
+failures from appearing briefly before repair, at the cost of increased
+time-to-first-visible-text.
 
 ## Persistence And UI Responsibilities
 
@@ -281,13 +287,13 @@ canvas to create a library item.
 
 ## Factors That Can Degrade Answer Quality
 
-### 1. A Large Instruction Surface Applies To Simple Questions
+### 1. Planner And Validation Failures Can Still Shape Simple Answers
 
-The assistant always receives extensive personality, tool-choice, sourcing, and
-full recipe-document formatting rules. These are valuable for document creation but
-may distract a fast model on a simple conversational prompt such as a dish name or a
-short substitution question. The prompt also grows when a selected canvas and saved
-preferences are included.
+Routine turns now use a slim prompt profile and suppress unrelated document context.
+They still depend on a planner proposal and an LLM semantic quality check. Malformed
+planning falls back to non-semantic runtime context. If semantic repair fails but
+hard boundaries still pass, the runtime can keep the model answer rather than
+substituting a canned recipe template.
 
 ### 2. Canvas Mutations Intentionally Produce Very Short Chat Replies
 
@@ -327,14 +333,17 @@ model-generated prose.
 | Same-host fallback retry after provider timeout or DNS failure | A failed answer can take roughly 90 seconds instead of 45 seconds |
 | Suggestion generation after replies containing questions | Adds a model call to otherwise successful conversational turns |
 | Citation repair for researched answers | Adds a model call and delays visible text |
+| Mandatory planning call | Adds one provider call before response generation |
+| Buffered validation and possible repair | Delays first visible text; prevents rejected text from being displayed |
 | Preloading pasted recipe URLs | Adds Tavily extraction time before the model starts responding |
 | Full selected canvas inserted into system context | Increases request size, particularly for long recipes/guides |
 | Up to five agent/tool cycles | Correct for agentic workflows, but potentially expensive if the model chooses unnecessary tool work |
 
 ### Observability Gap
 
-The API route collects rich timing events for web setup, provider attempts, tool
-execution, and response output. The active runtime log output has been observed to
+The API route collects timing events for planning metadata, routed response models,
+quality outcomes and repairs, web setup, provider attempts, tool execution, and
+response output. The active runtime log output has been observed to
 print the `[CookingPerf] /api/cooking/chat` event without rendering the structured
 timing payload. That makes it difficult to tell whether slowness came from:
 
@@ -356,7 +365,7 @@ answer, inspect a document, create a durable document, revise it, or request web
 research. It is not hardcoded to create a recipe for every cooking phrase, and web
 research is no longer intended to run for ordinary inspiration.
 
-The runtime also applies deterministic guardrails where agent discretion alone is not
+The runtime also applies hard guardrails where agent discretion alone is not
 enough: canvas validity, source-driven recipe integrity, research-unlock validation,
 source-only response repair, and user-controlled library saving.
 

@@ -97,6 +97,7 @@ export default function CookingWorkspace({
   const selectDocument = useSelectCookingDocumentMutation(conversationId);
   const deleteDocument = useDeleteCookingDocumentMutation(conversationId);
   const [documentToDelete, setDocumentToDelete] = useState<CookingDraft>();
+  const [mobileTab, setMobileTab] = useState<'recipe' | 'chat'>('recipe');
   const retainedDocumentStateRef = useRef<RetainedDocumentState>({ documents: [] });
 
   useEffect(() => {
@@ -140,10 +141,38 @@ export default function CookingWorkspace({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-presentation lg:flex-row">
+      {hasRecipeCanvas && (
+        <div className="flex shrink-0 border-b border-border-light bg-surface-primary-alt lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileTab('recipe')}
+            className={`flex-1 py-3 text-center text-sm font-semibold border-b-2 ${
+              mobileTab === 'recipe'
+                ? 'border-surface-submit text-text-primary bg-surface-primary'
+                : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+            }`}
+          >
+            {localize('com_cooking_document_type_recipe')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab('chat')}
+            className={`flex-1 py-3 text-center text-sm font-semibold border-b-2 ${
+              mobileTab === 'chat'
+                ? 'border-surface-submit text-text-primary bg-surface-primary'
+                : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+            }`}
+          >
+            {localize('com_ui_chat') || 'Assistant'}
+          </button>
+        </div>
+      )}
       <aside
         className={
           hasRecipeCanvas
-            ? 'order-2 flex min-h-[24rem] shrink-0 flex-col overflow-hidden border-t border-border-light bg-surface-primary-alt lg:h-full lg:min-h-0 lg:w-[30rem] lg:border-l lg:border-t-0 xl:w-[32rem]'
+            ? `order-2 ${
+                mobileTab === 'chat' ? 'flex' : 'hidden lg:flex'
+              } min-h-0 flex-1 lg:flex-none flex-col overflow-hidden bg-surface-primary-alt lg:h-full lg:min-h-0 lg:w-[30rem] lg:border-l lg:border-border-light lg:border-t-0 xl:w-[32rem]`
             : 'order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-primary-alt'
         }
       >
@@ -156,7 +185,11 @@ export default function CookingWorkspace({
         </div>
       </aside>
       {hasRecipeCanvas && (
-        <div className="order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={`order-1 ${
+            mobileTab === 'recipe' ? 'flex' : 'hidden lg:flex'
+          } min-h-0 min-w-0 flex-1 flex-col overflow-hidden`}
+        >
           {visibleDocuments.length > 0 ? (
             <nav
               aria-label={localize('com_cooking_documents')}

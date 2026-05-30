@@ -98,6 +98,57 @@ describe('cooking service', () => {
     });
   });
 
+  test('generate document accepts and persists a structured recipe when provided', async () => {
+    const customRecipe: StructuredRecipe = {
+      title: 'Custom tea',
+      description: 'A special custom tea',
+      servings: 4,
+      timing: { prepMinutes: 2, cookMinutes: 3, totalMinutes: 5 },
+      ingredients: [
+        {
+          id: 'custom-ingredient',
+          originalText: '1 custom tea bag',
+          item: 'custom tea bag',
+          quantityType: 'measured',
+          quantity: 1,
+        },
+      ],
+      steps: [
+        {
+          id: 'custom-step',
+          order: 1,
+          text: 'Brew the custom tea.',
+          ingredientIds: ['custom-ingredient'],
+          timers: [],
+          warnings: [],
+          tips: [],
+        },
+      ],
+      notes: ['Serve chilled'],
+      tags: ['beverage'],
+    };
+
+    const draft = await generateCookingDraft(
+      userA,
+      'custom tea prompt',
+      undefined,
+      undefined,
+      'recipe',
+      customRecipe,
+    );
+
+    expect(draft.recipe.title).toBe('Custom tea');
+    expect(draft.recipe.servings).toBe(4);
+    expect(draft.recipe.ingredients[0].item).toBe('custom tea bag');
+    expect(draft.recipe.steps[0].text).toBe('Brew the custom tea.');
+    expect(draft.recipe.notes).toEqual(['Serve chilled']);
+    expect(draft.recipe.tags).toEqual(['beverage']);
+
+    const persisted = await mongoose.models.CookingDraft.findById(draft._id).lean();
+    expect(persisted?.recipe.title).toBe('Custom tea');
+    expect(persisted?.recipe.servings).toBe(4);
+  });
+
   test('creates multiple documents and revisions target only one document', async () => {
     const guide = await generateCookingDraft(
       userA,

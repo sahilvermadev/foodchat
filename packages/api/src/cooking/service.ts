@@ -137,11 +137,14 @@ export async function generateCookingDraft(
   conversationId?: string,
   documentMarkdown?: string,
   documentType?: CookingDocumentType,
+  recipe?: StructuredRecipe,
 ): Promise<CookingDraft> {
   const { Draft } = models();
   const cleanPrompt = assertPrompt(prompt);
   const cleanDocumentMarkdown = documentMarkdown?.trim();
-  const recipe = normalizeRecipe(blankRecipe(markdownTitle(cleanDocumentMarkdown) ?? cleanPrompt));
+  const finalRecipe = recipe
+    ? normalizeRecipe(recipe)
+    : normalizeRecipe(blankRecipe(markdownTitle(cleanDocumentMarkdown) ?? cleanPrompt));
   const selectedDocumentType = assertDocumentType(documentType);
   const payload = {
     user,
@@ -151,7 +154,7 @@ export async function generateCookingDraft(
     documentType: selectedDocumentType,
     selected: true,
     ...(cleanDocumentMarkdown ? { documentMarkdown: cleanDocumentMarkdown } : {}),
-    recipe,
+    recipe: finalRecipe,
   };
   if (conversationId) {
     await Draft.updateMany(

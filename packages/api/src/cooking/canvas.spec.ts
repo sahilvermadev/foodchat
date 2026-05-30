@@ -1,7 +1,4 @@
-import {
-  applyRecipeCanvasOperations,
-  isRecipeDocumentMarkdown,
-} from './canvas';
+import { applyRecipeCanvasOperations, isRecipeDocumentMarkdown } from './canvas';
 
 const recipeMarkdown = `# Tomato Soup
 

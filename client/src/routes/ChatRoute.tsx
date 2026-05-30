@@ -198,6 +198,8 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
         preset: initialConvoQuery.data as TPreset,
         modelsData: modelsQuery.data,
         keepLatestMessage: true,
+        buildDefault: isCookingMode ? false : true,
+        routeBase: isCookingMode ? '/cook' : undefined,
       });
       hasSetConversation.current = true;
     } else if (

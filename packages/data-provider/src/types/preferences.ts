@@ -41,6 +41,8 @@ export type PreferencesChatResponse = {
   preferences: PreferencesDocument;
   preferencesChanged: boolean;
   changedHeadings: string[];
+  suggestions?: Array<{ text: string; display: string }>;
+  complete?: boolean;
 };
 
 export type SpecialtyIngredientCategory =

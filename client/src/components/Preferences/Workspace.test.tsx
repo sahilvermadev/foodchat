@@ -16,6 +16,7 @@ jest.mock('@librechat/client', () => ({
   Spinner: ({ className }: { className?: string }) => (
     <span data-testid="spinner" className={className} />
   ),
+  useMediaQuery: jest.fn().mockReturnValue(false),
 }));
 
 jest.mock('~/hooks', () => ({
@@ -27,7 +28,7 @@ jest.mock('~/hooks', () => ({
       com_preferences_detail_label: '{section} detail {number}',
       com_preferences_detail_placeholder: 'Add a detail',
       com_preferences_edit: 'Edit preferences',
-      com_preferences_preview_profile: 'Preview my profile',
+      com_preferences_preview_profile: 'Ask Mise to refine',
       com_preferences_section_complete: 'Complete',
       com_preferences_section_missing: 'Add more',
       com_preferences_kitchen_group_appliances: 'Appliances',
@@ -111,7 +112,7 @@ describe('PreferencesWorkspace', () => {
       }),
     );
     mockChatMutate.mockImplementation((_variables, options) =>
-      options?.onSuccess?.({ text: 'Profile reviewed.', changedHeadings: [] }),
+      options?.onSuccess?.({ text: 'Profile reviewed.', changedHeadings: [], suggestions: [], complete: false }),
     );
   });
 
@@ -314,27 +315,30 @@ describe('PreferencesWorkspace', () => {
     expect(safetyCard).not.toBeNull();
     fireEvent.click(within(safetyCard as HTMLElement).getByText('Edit'));
 
-    expect(screen.getByLabelText('Safety detail 1')).toHaveValue('No peanuts');
-    expect(screen.queryByLabelText('Edit preferences')).not.toBeInTheDocument();
+    expect(screen.getByText('Peanuts')).toBeInTheDocument();
+    expect(screen.getByText('Save Changes')).toBeInTheDocument();
   });
 
   it('edits profile details in place while persisting markdown', () => {
     render(<PreferencesWorkspace />);
 
-    fireEvent.click(screen.getByText('Add / Edit'));
-    expect(screen.queryByLabelText('Edit preferences')).not.toBeInTheDocument();
+    const dietCard = screen.getByText('Diet').closest('article');
+    expect(dietCard).not.toBeNull();
+    fireEvent.click(within(dietCard as HTMLElement).getByText('Edit'));
 
-    fireEvent.change(screen.getByLabelText('Goals detail 1'), {
-      target: { value: 'Cook faster' },
-    });
-    fireEvent.change(screen.getByLabelText('Safety detail 1'), {
-      target: { value: '' },
-    });
-    fireEvent.click(screen.getByText('Save changes'));
+    // Toggle Vegan preset
+    fireEvent.click(screen.getByText('Vegan'));
+    fireEvent.click(screen.getByText('Save Changes'));
 
     expect(mockUpdateMutate).toHaveBeenLastCalledWith(
       {
         markdown: [
+          '## Safety',
+          '- No peanuts',
+          '',
+          '## Diet',
+          '- Vegan',
+          '',
           '## Kitchen',
           '- Appliances: Siemens oven, electric grill, portable blender',
           '- Owner of kitchen scale and mandoline.',
@@ -343,9 +347,6 @@ describe('PreferencesWorkspace', () => {
           '',
           '## Specialty Ingredients',
           '- fish sauce',
-          '',
-          '## Goals',
-          '- Cook faster',
         ].join('\n'),
       },
       expect.any(Object),
@@ -355,7 +356,7 @@ describe('PreferencesWorkspace', () => {
   it('opens the agent dialog from the profile preview action', () => {
     render(<PreferencesWorkspace />);
 
-    fireEvent.click(screen.getByText('Preview my profile'));
+    fireEvent.click(screen.getByText('Ask Mise to refine'));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
