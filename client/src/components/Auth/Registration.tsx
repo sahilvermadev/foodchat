@@ -7,12 +7,13 @@ import { useRegisterUserMutation } from 'librechat-data-provider/react-query';
 import { loginPage } from 'librechat-data-provider';
 import type { TRegisterUser, TError } from 'librechat-data-provider';
 import type { TLoginLayoutContext } from '~/common';
-import { useLocalize, TranslationKeys } from '~/hooks';
+import { useLocalize, useAuthContext, TranslationKeys } from '~/hooks';
 import { ErrorMessage } from './ErrorMessage';
 
 const Registration: React.FC = () => {
   const navigate = useNavigate();
   const localize = useLocalize();
+  const { login } = useAuthContext();
   const { theme } = useContext(ThemeContext);
   const { startupConfig, startupConfigError, isFetching } = useOutletContext<TLoginLayoutContext>();
 
@@ -41,20 +42,24 @@ const Registration: React.FC = () => {
     onMutate: () => {
       setIsSubmitting(true);
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       setIsSubmitting(false);
-      setCountdown(3);
-      const timer = setInterval(() => {
-        setCountdown((prevCountdown) => {
-          if (prevCountdown <= 1) {
-            clearInterval(timer);
-            navigate('/cook', { replace: true });
-            return 0;
-          } else {
-            return prevCountdown - 1;
-          }
-        });
-      }, 1000);
+      if (startupConfig?.emailEnabled) {
+        setCountdown(3);
+        const timer = setInterval(() => {
+          setCountdown((prevCountdown) => {
+            if (prevCountdown <= 1) {
+              clearInterval(timer);
+              navigate('/cook', { replace: true });
+              return 0;
+            } else {
+              return prevCountdown - 1;
+            }
+          });
+        }, 1000);
+      } else {
+        login({ email: variables.email, password: variables.password });
+      }
     },
     onError: (error: unknown) => {
       setIsSubmitting(false);

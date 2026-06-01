@@ -9,6 +9,7 @@
     "packages/*"
   ],
   "scripts": {
+    "start": "npm run build:packages && npm run backend",
     "update": "node config/update.js",
     "add-balance": "node config/add-balance.js",
     "set-balance": "node config/set-balance.js",

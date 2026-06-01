@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "installCommand": "node config/prepare-vercel.js && npm install",
+  "buildCommand": "npx turbo run build --filter=@librechat/frontend...",
+  "outputDirectory": "client/dist",
+  "framework": "vite",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://foodchat-backend-production.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/oauth/:path*",
+      "destination": "https://foodchat-backend-production.up.railway.app/oauth/:path*"
+    },
+    {
+      "source": "/images/:path*",
+      "destination": "https://foodchat-backend-production.up.railway.app/images/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://foodchat-backend-production.up.railway.app/health"
+    },
+    {
+      "source": "/((?!api|oauth|images|health).*)",
+      "destination": "/"
+    }
+  ]
+}

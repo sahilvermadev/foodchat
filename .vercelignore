@@ -1,0 +1,22 @@
+# Ignore backend workspaces and unrelated directories
+api/
+packages/api/
+packages/data-schemas/
+redis-config/
+helm/
+logs/
+docs/
+e2e/
+.git/
+.github/
+.vscode/
+.husky/
+data/
+data-node/
+node_modules/
+client/node_modules/
+packages/client/node_modules/
+packages/data-provider/node_modules/
+.env
+.env.*
+*.log

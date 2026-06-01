@@ -1,0 +1,34 @@
+version: 1.3.11
+
+cache: true
+
+endpoints:
+  custom:
+    - name: 'OpenRouter'
+      apiKey: '${OPENROUTER_KEY}'
+      baseURL: 'https://openrouter.ai/api/v1'
+      models:
+        default:
+          - 'google/gemini-3.1-flash-lite'
+          - 'meta-llama/llama-3.1-70b-instruct'
+          - 'anthropic/claude-sonnet-4.5'
+          - 'openai/gpt-4o-mini'
+        fetch: true
+      titleConvo: true
+      titleModel: 'google/gemini-3.1-flash-lite'
+      dropParams:
+        - 'stop'
+      modelDisplayLabel: 'OpenRouter'
+
+webSearch:
+  searchProvider: tavily
+  scraperProvider: tavily
+  rerankerType: none
+  tavilyApiKey: '${TAVILY_API_KEY}'
+  tavilySearchOptions:
+    searchDepth: advanced
+    maxResults: 5
+    includeRawContent: markdown
+  tavilyScraperOptions:
+    extractDepth: advanced
+    format: markdown

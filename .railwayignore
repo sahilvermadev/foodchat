@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+**/node_modules
+client/dist
+.vercel
+.turbo
+data-node
+data
+logs
+*.log

@@ -1,9 +1,13 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["package-lock.json"],
+  "globalDependencies": [
+    "package-lock.json"
+  ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build"
+      ],
       "inputs": [
         "src/**",
         "!src/**/__tests__/**",
@@ -21,16 +25,15 @@
         "tailwind.config.*",
         "package.json"
       ],
-      "outputs": ["dist/**"]
-    },
-    "@librechat/data-schemas#build": {
-      "dependsOn": ["^build", "librechat-data-provider#build"]
-    },
-    "@librechat/api#build": {
-      "dependsOn": ["^build", "librechat-data-provider#build", "@librechat/data-schemas#build"]
+      "outputs": [
+        "dist/**"
+      ]
     },
     "@librechat/client#build": {
-      "dependsOn": ["^build", "librechat-data-provider#build"]
+      "dependsOn": [
+        "^build",
+        "librechat-data-provider#build"
+      ]
     }
   }
 }
