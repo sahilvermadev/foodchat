@@ -6,9 +6,9 @@ This document serves as the permanent technical record and operational runbook f
 
 ## 🚀 Live Environment Links
 
-* **Production Frontend**: [https://foodchat-six.vercel.app](https://foodchat-six.vercel.app)
+* **Production Frontend**: [https://rekky.ai](https://rekky.ai)
 * **Production API Gateway**: [https://foodchat-backend-production.up.railway.app](https://foodchat-backend-production.up.railway.app)
-* **Unified Health Gateway**: [https://foodchat-six.vercel.app/health](https://foodchat-six.vercel.app/health) (Proxies seamlessly to Railway; returns `OK`)
+* **Unified Health Gateway**: [https://rekky.ai/health](https://rekky.ai/health) (Proxies seamlessly to Railway; returns `OK`)
 
 ---
 
@@ -18,14 +18,14 @@ To support secure sessions with `SameSite: strict` cookies (`refreshToken` and `
 
 ```mermaid
 graph TD
-    User([User Browser]) -->|Unified Domain: foodchat-six.vercel.app| Vercel[Vercel Global CDN Edge]
+    User([User Browser]) -->|Unified Domain: rekky.ai| Vercel[Vercel Global CDN Edge]
     Vercel -->|Serves Static Files| User
     Vercel -->|Proxies /api/*, /oauth/*, /health| Railway[Railway Production Runner]
     Railway -->|Express API Port 3080| Backend[foodchat-backend]
     Backend -->|Internal Read/Write| Mongo[(MongoDB Instance)]
 ```
 
-* **Unified Domain Resolution**: All client-side network calls are routed directly to the same host (`https://foodchat-six.vercel.app`).
+* **Unified Domain Resolution**: All client-side network calls are routed directly to the same host (`https://rekky.ai`).
 * **CDN Reverse Proxying**: Vercel acts as a reverse proxy at the edge. Requests to `/api/*`, `/oauth/*`, `/images/*`, and `/health` are transparently rewritten and forwarded over HTTP/2 to the live Railway container.
 * **Cookie Transmission**: Because requests appear same-origin to the browser, secure HTTP-only cookies are passed seamlessly without cross-site blocking.
 
@@ -93,8 +93,8 @@ The stateful Express API and MongoDB instance are hosted on **Railway** under th
 | `MONGO_URI` | `${{MongoDB.MONGO_URL}}` | Dynamic reference to the linked MongoDB service instance connection string |
 | `PORT` | `3080` | Production listener port |
 | `HOST` | `0.0.0.0` | Bound host enabling Railway ingress router matching |
-| `DOMAIN_CLIENT` | `https://foodchat-six.vercel.app` | Target client origin (used for email validation and app redirections) |
-| `DOMAIN_SERVER` | `https://foodchat-six.vercel.app` | Proxied server origin (passed as callback base in OAuth flows) |
+| `DOMAIN_CLIENT` | `https://rekky.ai` | Target client origin (used for email validation and app redirections) |
+| `DOMAIN_SERVER` | `https://rekky.ai` | Proxied server origin (passed as callback base in OAuth flows) |
 | `JWT_SECRET` | `16f8...09ef` | Cryptographic secret for signing JWT access tokens |
 | `JWT_REFRESH_SECRET` | `eaa5...8418` | Cryptographic secret for signing refresh tokens |
 | `CREDS_KEY` | `f34b...66f0` | Database credentials encryption key |
