@@ -66,7 +66,7 @@ describe('recipes routes', () => {
     app = createApp();
     jest.clearAllMocks();
     recipesApi.saveRecipe.mockResolvedValue({ _id: 'recipe-1' });
-    recipesApi.listRecipes.mockResolvedValue({ recipes: [] });
+    recipesApi.listRecipes.mockResolvedValue({ recipes: [], total: 0 });
     recipesApi.getRecipe.mockResolvedValue({ _id: 'recipe-1' });
     recipesApi.getRecipeByDraft.mockResolvedValue({ _id: 'recipe-1' });
     recipesApi.getRecipeIllustration.mockResolvedValue({
@@ -90,7 +90,10 @@ describe('recipes routes', () => {
       .post('/api/recipes')
       .send({ title: 'Body title', documentMarkdown: '# Soup', recipe: recipe() })
       .expect(201, { _id: 'recipe-1' });
-    await request(app).get('/api/recipes?q=soup&cuisine=indian').expect(200, { recipes: [] });
+    await request(app).get('/api/recipes?q=soup&cuisine=indian').expect(200, {
+      recipes: [],
+      total: 0,
+    });
     await request(app).get('/api/recipes/recipe-1').expect(200, { _id: 'recipe-1' });
     await request(app).get('/api/recipes/by-draft/draft-1').expect(200, { _id: 'recipe-1' });
     await request(app)

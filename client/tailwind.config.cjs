@@ -12,8 +12,10 @@ module.exports = {
   theme: {
     fontFamily: {
       sans: ['Inter', 'sans-serif'],
-      serif: ['Georgia', 'Cambria', 'Times New Roman', 'serif'],
-      mono: ['Roboto Mono', 'monospace'],
+      serif: ['Lora', 'Georgia', 'Cambria', 'Times New Roman', 'serif'],
+      mono: ['JetBrains Mono', 'Roboto Mono', 'monospace'],
+      recipeHeading: ['var(--font-recipe-heading)', 'Georgia', 'serif'],
+      recipeBody: ['var(--font-recipe-body)', 'Georgia', 'serif'],
     },
     // fontFamily: {
     //   sans: ['Söhne', 'sans-serif'],

@@ -87,7 +87,7 @@ Each generated recipe should include:
 
 ## Culinary Intuition And De-Recipe-ing
 
-The long-term goal is not to make users dependent on generated recipes. Mise should make users better, more intuitive cooks by teaching transferable ratios, techniques, and sensory judgment.
+The long-term goal is not to make users dependent on generated recipes. Rekky should make users better, more intuitive cooks by teaching transferable ratios, techniques, and sensory judgment.
 
 ### No-Recipe Mode
 
@@ -116,9 +116,9 @@ The mode should favor patterns like ratios, sequence, heat control, texture cues
 
 ### Palate Customization Engine
 
-Post-cook review should capture useful taste feedback, not just ratings. Mise should learn the user’s palate and adjust future recipes subtly.
+Post-cook review should capture useful taste feedback, not just ratings. Rekky should learn the user’s palate and adjust future recipes subtly.
 
-Instead of asking only for stars, Mise should ask targeted questions such as:
+Instead of asking only for stars, Rekky should ask targeted questions such as:
 
 - How was the acid balance?
 - Was it salty enough?
@@ -127,7 +127,7 @@ Instead of asking only for stars, Mise should ask targeted questions such as:
 - Was the sweetness distracting?
 - Did the texture land where you wanted?
 
-If the user says a dish was "a bit too sharp," Mise should remember that signal and slightly dial back citrus, vinegar, fermented ingredients, or other acid sources in future suggestions when appropriate.
+If the user says a dish was "a bit too sharp," Rekky should remember that signal and slightly dial back citrus, vinegar, fermented ingredients, or other acid sources in future suggestions when appropriate.
 
 ### Palate Customization Behavior
 
@@ -150,11 +150,11 @@ If the user says a dish was "a bit too sharp," Mise should remember that signal 
 
 ## Hyper-Local, Hyper-Seasonal Gastro-Intelligence
 
-Mise should eventually understand the user’s local food supply, not just their broad location. The goal is to connect recipes, inspiration, and substitutions to what is actually fresh, available, and distinctive nearby.
+Rekky should eventually understand the user’s local food supply, not just their broad location. The goal is to connect recipes, inspiration, and substitutions to what is actually fresh, available, and distinctive nearby.
 
 ### Micro-Seasonal Alerts
 
-Mise should notice short seasonal windows and help the user act on them.
+Rekky should notice short seasonal windows and help the user act on them.
 
 Example:
 
@@ -164,11 +164,11 @@ These alerts should be rare, timely, and useful. They should feel like a knowled
 
 ### Smart Ingredient Swaps Based On Terroir
 
-When a recipe calls for an ingredient that is unavailable, expensive, or not ideal locally, Mise should suggest a substitution grounded in local flavor and supply.
+When a recipe calls for an ingredient that is unavailable, expensive, or not ideal locally, Rekky should suggest a substitution grounded in local flavor and supply.
 
 Example:
 
-If a recipe calls for a specific Italian cheese that is not available nearby, Mise should not default to a generic substitute. It should suggest a local artisan cheese from a nearby dairy that matches the flavor profile, texture, age, salt level, melt behavior, and intended role in the recipe.
+If a recipe calls for a specific Italian cheese that is not available nearby, Rekky should not default to a generic substitute. It should suggest a local artisan cheese from a nearby dairy that matches the flavor profile, texture, age, salt level, melt behavior, and intended role in the recipe.
 
 ### Local Intelligence Inputs
 
@@ -209,7 +209,7 @@ If a recipe calls for a specific Italian cheese that is not available nearby, Mi
 
 ### Local Intelligence Acceptance Criteria
 
-- Mise can recommend dishes around ingredients currently in season near the user.
+- Rekky can recommend dishes around ingredients currently in season near the user.
 - Alerts are specific, timely, and sparse enough to remain valuable.
 - Ingredient swaps account for flavor, texture, technique, and recipe role.
 - Local substitutions are explained clearly.

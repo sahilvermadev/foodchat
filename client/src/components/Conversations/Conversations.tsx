@@ -1,6 +1,5 @@
 import { useMemo, memo, type FC, useCallback, useEffect, useRef } from 'react';
 import throttle from 'lodash/throttle';
-import { ChevronDown } from 'lucide-react';
 import { Spinner, useMediaQuery } from '@librechat/client';
 import { List, AutoSizer, CellMeasurer, CellMeasurerCache } from 'react-virtualized';
 import type { TConversation } from 'librechat-data-provider';
@@ -26,8 +25,6 @@ interface ConversationsProps {
   containerRef: React.RefObject<List>;
   loadMoreConversations: () => void;
   isLoading: boolean;
-  isChatsExpanded: boolean;
-  setIsChatsExpanded: (expanded: boolean) => void;
 }
 
 interface MeasuredRowProps {
@@ -67,30 +64,6 @@ const LoadingSpinner = memo(() => {
 
 LoadingSpinner.displayName = 'LoadingSpinner';
 
-interface ChatsHeaderProps {
-  isExpanded: boolean;
-  onToggle: () => void;
-}
-
-/** Collapsible header for the Chats section */
-const ChatsHeader: FC<ChatsHeaderProps> = memo(({ isExpanded, onToggle }) => {
-  const localize = useLocalize();
-  return (
-    <button
-      onClick={onToggle}
-      className="group flex w-full items-center justify-between rounded-lg px-1 py-2 text-xs font-bold text-text-secondary outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black dark:focus-visible:ring-white"
-      type="button"
-    >
-      <span className="select-none">{localize('com_ui_chats')}</span>
-      <ChevronDown
-        className={cn('h-3 w-3 transition-transform duration-200', isExpanded ? 'rotate-180' : '')}
-      />
-    </button>
-  );
-});
-
-ChatsHeader.displayName = 'ChatsHeader';
-
 const DateLabel: FC<{ groupName: string; isFirst?: boolean }> = memo(({ groupName, isFirst }) => {
   const localize = useLocalize();
   return (
@@ -109,7 +82,6 @@ const DateLabel: FC<{ groupName: string; isFirst?: boolean }> = memo(({ groupNam
 DateLabel.displayName = 'DateLabel';
 
 type FlattenedItem =
-  | { type: 'chats-header' }
   | { type: 'header'; groupName: string }
   | { type: 'convo'; convo: TConversation }
   | { type: 'loading' };
@@ -152,8 +124,6 @@ const Conversations: FC<ConversationsProps> = ({
   containerRef,
   loadMoreConversations,
   isLoading,
-  isChatsExpanded,
-  setIsChatsExpanded,
 }) => {
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const convoHeight = isSmallScreen ? 44 : 34;
@@ -177,20 +147,17 @@ const Conversations: FC<ConversationsProps> = ({
 
   const flattenedItems = useMemo(() => {
     const items: FlattenedItem[] = [];
-    items.push({ type: 'chats-header' });
 
-    if (isChatsExpanded) {
-      groupedConversations.forEach(([groupName, convos]) => {
-        items.push({ type: 'header', groupName });
-        items.push(...convos.map((convo) => ({ type: 'convo' as const, convo })));
-      });
+    groupedConversations.forEach(([groupName, convos]) => {
+      items.push({ type: 'header', groupName });
+      items.push(...convos.map((convo) => ({ type: 'convo' as const, convo })));
+    });
 
-      if (isLoading) {
-        items.push({ type: 'loading' });
-      }
+    if (isLoading) {
+      items.push({ type: 'loading' });
     }
     return items;
-  }, [groupedConversations, isLoading, isChatsExpanded]);
+  }, [groupedConversations, isLoading]);
 
   // Store flattenedItems in a ref for keyMapper to access without recreating cache
   const flattenedItemsRef = useRef(flattenedItems);
@@ -206,9 +173,6 @@ const Conversations: FC<ConversationsProps> = ({
           const item = flattenedItemsRef.current[index];
           if (!item) {
             return `unknown-${index}`;
-          }
-          if (item.type === 'chats-header') {
-            return 'chats-header';
           }
           if (item.type === 'header') {
             return `header-${item.groupName}`;
@@ -248,21 +212,10 @@ const Conversations: FC<ConversationsProps> = ({
         );
       }
 
-      if (item.type === 'chats-header') {
-        return (
-          <MeasuredRow key={key} {...rowProps}>
-            <ChatsHeader
-              isExpanded={isChatsExpanded}
-              onToggle={() => setIsChatsExpanded(!isChatsExpanded)}
-            />
-          </MeasuredRow>
-        );
-      }
-
       if (item.type === 'header') {
         return (
           <MeasuredRow key={key} {...rowProps}>
-            <DateLabel groupName={item.groupName} isFirst={index === 1} />
+            <DateLabel groupName={item.groupName} isFirst={index === 0} />
           </MeasuredRow>
         );
       }
@@ -288,8 +241,6 @@ const Conversations: FC<ConversationsProps> = ({
       flattenedItems,
       moveToTop,
       toggleNav,
-      isChatsExpanded,
-      setIsChatsExpanded,
       activeJobIds,
     ],
   );

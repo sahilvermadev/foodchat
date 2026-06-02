@@ -7,6 +7,12 @@ import RecipeLibrary from './RecipeLibrary';
 
 const mockDeleteRecipe = jest.fn();
 const mockShowToast = jest.fn();
+const mockFetchNextPage = jest.fn();
+let mockInfinitePages: Array<{
+  recipes: SavedRecipeSummary[];
+  total?: number;
+  nextCursor?: string;
+}>;
 
 const mockSavedRecipe: SavedRecipeSummary = {
   _id: 'recipe-1',
@@ -22,12 +28,25 @@ const mockSavedRecipe: SavedRecipeSummary = {
 
 jest.mock('~/data-provider', () => ({
   useDeleteSavedRecipeMutation: () => ({ isLoading: false, mutate: mockDeleteRecipe }),
-  useRecipesQuery: () => ({ data: { recipes: [mockSavedRecipe] }, isLoading: false }),
+  useRecipesInfiniteQuery: () => ({
+    data: { pages: mockInfinitePages },
+    fetchNextPage: mockFetchNextPage,
+    hasNextPage: true,
+    isFetchingNextPage: false,
+    isLoading: false,
+  }),
+  useRecipesQuery: () => ({ data: { recipes: [mockSavedRecipe], total: 1 }, isLoading: false }),
 }));
 
 jest.mock('~/hooks', () => ({
-  useLocalize: () => (key: string, values?: Record<string, string>) =>
-    values?.[0] ? `${key}:${values[0]}` : key,
+  useLocalize: () => (key: string, values?: Record<string, string | number>) => {
+    const value = values?.[0] ?? values?.count;
+    return value ? `${key}:${value}` : key;
+  },
+}));
+
+jest.mock('~/components/ui', () => ({
+  ProtectedImage: (props: React.ImgHTMLAttributes<HTMLImageElement>) => <img {...props} />,
 }));
 
 jest.mock('@librechat/client', () => ({
@@ -64,6 +83,7 @@ jest.mock('@librechat/client', () => ({
 describe('RecipeLibrary actions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockInfinitePages = [{ recipes: [mockSavedRecipe], total: 31, nextCursor: 'next-page' }];
   });
 
   test('confirms deletion from a recipe card action menu', () => {
@@ -79,5 +99,29 @@ describe('RecipeLibrary actions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'com_ui_delete' }));
 
     expect(mockDeleteRecipe).toHaveBeenCalledWith(mockSavedRecipe, expect.any(Object));
+  });
+
+  test('shows the backend total and loads the next cursor page on request', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <RecipeLibrary />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('com_recipes_count_short_other:31')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'com_recipes_load_more' }));
+    expect(mockFetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  test('falls back to the loaded recipe count when an older backend omits the total', () => {
+    mockInfinitePages = [{ recipes: [mockSavedRecipe] }];
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <RecipeLibrary />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('com_recipes_count_short_one')).toBeInTheDocument();
   });
 });

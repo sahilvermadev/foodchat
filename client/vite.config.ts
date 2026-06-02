@@ -88,34 +88,34 @@ export default defineConfig(({ command }) => ({
       },
       includeAssets: [],
       manifest: {
-        name: 'Mise',
-        short_name: 'Mise',
+        name: 'Rekky',
+        short_name: 'Rekky',
         display: 'standalone',
         background_color: '#000000',
         theme_color: '#171217',
         icons: [
           {
-            src: 'assets/favicon-mise-32x32.png',
+            src: 'assets/favicon-rekky-32x32.png',
             sizes: '32x32',
             type: 'image/png',
           },
           {
-            src: 'assets/favicon-mise-16x16.png',
+            src: 'assets/favicon-rekky-16x16.png',
             sizes: '16x16',
             type: 'image/png',
           },
           {
-            src: 'assets/apple-touch-icon-mise-180x180.png',
+            src: 'assets/apple-touch-icon-rekky-180x180.png',
             sizes: '180x180',
             type: 'image/png',
           },
           {
-            src: 'assets/icon-mise-192x192.png',
+            src: 'assets/icon-rekky-192x192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: 'assets/maskable-icon-mise.png',
+            src: 'assets/maskable-icon-rekky.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',

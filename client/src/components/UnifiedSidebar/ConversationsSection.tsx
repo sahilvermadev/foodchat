@@ -4,7 +4,7 @@ import { useMediaQuery } from '@librechat/client';
 import type { InfiniteQueryObserverResult } from '@tanstack/react-query';
 import type { ConversationListResponse } from 'librechat-data-provider';
 import type { List } from 'react-virtualized';
-import { useLocalize, useAuthContext, useLocalStorage, useNavScrolling } from '~/hooks';
+import { useLocalize, useAuthContext, useNavScrolling } from '~/hooks';
 import { useConversationsInfiniteQuery, useTitleGeneration } from '~/data-provider';
 import { Conversations } from '~/components/Conversations';
 import store from '~/store';
@@ -16,7 +16,6 @@ const ConversationsSection = memo(() => {
   const { isAuthenticated } = useAuthContext();
   useTitleGeneration(isAuthenticated);
 
-  const [isChatsExpanded, setIsChatsExpanded] = useLocalStorage('chatsExpanded', true);
   const [showLoading, setShowLoading] = useState(false);
 
   const { data, fetchNextPage, isFetchingNextPage, isLoading } = useConversationsInfiniteQuery(
@@ -80,8 +79,6 @@ const ConversationsSection = memo(() => {
           containerRef={conversationsRef}
           loadMoreConversations={loadMoreConversations}
           isLoading={isFetchingNextPage || showLoading || isLoading}
-          isChatsExpanded={isChatsExpanded}
-          setIsChatsExpanded={setIsChatsExpanded}
         />
       </div>
     </div>

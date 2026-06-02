@@ -1,5 +1,15 @@
 jest.mock('~/cache/getLogStores');
 
+const mockLogger = {
+  debug: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+};
+
+jest.mock('../../../../packages/data-schemas/dist/config/winston.cjs', () => mockLogger);
+jest.mock('../../../../packages/data-schemas/dist/config/meiliLogger.cjs', () => mockLogger);
+
 const mockGetAppConfig = jest.fn();
 jest.mock('~/server/services/Config/app', () => ({
   getAppConfig: (...args) => mockGetAppConfig(...args),

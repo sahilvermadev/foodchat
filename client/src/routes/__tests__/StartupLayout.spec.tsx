@@ -2,8 +2,10 @@
 import React from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import { RecoilRoot, useRecoilValue } from 'recoil';
 import StartupLayout from '~/routes/Layouts/Startup';
 import { SESSION_KEY } from '~/utils';
+import store from '~/store';
 
 if (typeof Request === 'undefined') {
   global.Request = class Request {
@@ -37,8 +39,8 @@ function ChildRoute() {
   return <div data-testid="child-route">Child</div>;
 }
 
-function NewConversation() {
-  return <div data-testid="new-conversation">New Conversation</div>;
+function CookingWorkspace() {
+  return <div data-testid="cooking-workspace">Cooking Workspace</div>;
 }
 
 const createTestRouter = (initialEntry: string, isAuthenticated: boolean) =>
@@ -50,12 +52,20 @@ const createTestRouter = (initialEntry: string, isAuthenticated: boolean) =>
         children: [{ index: true, element: <ChildRoute /> }],
       },
       {
-        path: '/c/new',
-        element: <NewConversation />,
+        path: '/cook',
+        element: <CookingWorkspace />,
       },
     ],
     { initialEntries: [initialEntry] },
   );
+
+function renderRouter(router: ReturnType<typeof createTestRouter>, queriesEnabled = true) {
+  return render(
+    <RecoilRoot initializeState={({ set }) => set(store.queriesEnabled, queriesEnabled)}>
+      <RouterProvider router={router} />
+    </RecoilRoot>,
+  );
+}
 
 describe('StartupLayout — redirect race condition', () => {
   beforeEach(() => {
@@ -67,14 +77,14 @@ describe('StartupLayout — redirect race condition', () => {
     jest.restoreAllMocks();
   });
 
-  it('navigates to /c/new when authenticated with no pending redirect', async () => {
+  it('navigates to /cook when authenticated with no pending redirect', async () => {
     window.history.replaceState({}, '', '/login');
 
     const router = createTestRouter('/login', true);
-    render(<RouterProvider router={router} />);
+    renderRouter(router);
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/c/new');
+      expect(router.state.location.pathname).toBe('/cook');
     });
   });
 
@@ -82,7 +92,7 @@ describe('StartupLayout — redirect race condition', () => {
     window.history.replaceState({}, '', '/login?redirect_to=%2Fc%2Fabc123');
 
     const router = createTestRouter('/login?redirect_to=%2Fc%2Fabc123', true);
-    render(<RouterProvider router={router} />);
+    renderRouter(router);
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -94,7 +104,7 @@ describe('StartupLayout — redirect race condition', () => {
     sessionStorage.setItem(SESSION_KEY, '/c/abc123');
 
     const router = createTestRouter('/login', true);
-    render(<RouterProvider router={router} />);
+    renderRouter(router);
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -105,10 +115,31 @@ describe('StartupLayout — redirect race condition', () => {
     window.history.replaceState({}, '', '/login');
 
     const router = createTestRouter('/login', false);
-    render(<RouterProvider router={router} />);
+    renderRouter(router);
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     expect(router.state.location.pathname).toBe('/login');
+  });
+
+  it('re-enables startup queries after logout disables authenticated queries', async () => {
+    const observed: boolean[] = [];
+    const router = createTestRouter('/login', false);
+
+    function QueriesObserver() {
+      observed.push(useRecoilValue(store.queriesEnabled));
+      return null;
+    }
+
+    render(
+      <RecoilRoot initializeState={({ set }) => set(store.queriesEnabled, false)}>
+        <QueriesObserver />
+        <RouterProvider router={router} />
+      </RecoilRoot>,
+    );
+
+    await waitFor(() => {
+      expect(observed).toContain(true);
+    });
   });
 });

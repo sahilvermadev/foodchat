@@ -27,7 +27,7 @@ export * from './downloadFile';
 export * from './scaleImage';
 export * from './timestamps';
 export * from './localStorage';
-export * from './miseDefaults';
+export * from './rekkyDefaults';
 export * from './previewCache';
 export * from './groupToolCalls';
 export * from './toolLabels';

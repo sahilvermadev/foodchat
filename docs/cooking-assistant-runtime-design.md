@@ -9,8 +9,8 @@ describes the current code rather than an idealized product design.
 ## Executive Summary
 
 The cooking chat is a dedicated agent pipeline, separate from ordinary LibreChat
-conversation handling. The visible assistant is named **Samwise**, while its system
-instructions tell the model that its persona is **Mise**. Routine response turns use
+conversation handling. The product is named **Rekky**, and the visible cooking
+assistant is named **Samwise**. Routine response turns use
 `google/gemini-3.1-flash-lite` through OpenRouter by default, with
 `deepseek/deepseek-v4-pro` as a failure fallback. Configured complex and repair
 models can be selected for risk-classified turns.
@@ -38,16 +38,23 @@ calls even when response prompts are now slimmer for routine turns.
 
 ## Product Identities
 
-| Concern | Current value | Where it is set |
-| --- | --- | --- |
-| Product/app identity | Mise | application configuration and UI strings |
-| Assistant sender shown in stored cooking messages | Samwise | `api/server/routes/cooking.js` |
-| Persona named in the cooking system prompt | Mise | `packages/api/src/cooking/agent.ts` |
-| Configured UI endpoint label | OpenRouter | `librechat.yaml`, `client/src/utils/miseDefaults.ts` |
+| Concern                                           | Current value | Where it is set                                       |
+| ------------------------------------------------- | ------------- | ----------------------------------------------------- |
+| Product/app identity                              | Rekky         | application configuration and UI strings              |
+| Assistant sender shown in stored cooking messages | Samwise       | `api/server/routes/cooking.js`                        |
+| Persona named in the cooking system prompt        | Samwise       | `packages/api/src/cooking/agent.ts`                   |
+| Configured UI endpoint label                      | OpenRouter    | `librechat.yaml`, `client/src/utils/rekkyDefaults.ts` |
 
-The Samwise/Mise split is not inherently wrong, but it is a design decision that
-should be explicit. At present the assistant may be displayed as Samwise while being
-instructed to write in "Mise's own voice."
+The Rekky/Samwise split is intentional product language: Rekky is the app, while
+Samwise is the cooking assistant persona.
+
+### Compatibility Identifiers
+
+Public branding does not rename persisted compatibility identifiers. The MongoDB
+database remains `Mise`, and specialty ingredient illustrations remain keyed by
+`mise-ingredient-v1`. These names are versioned storage identifiers required to
+keep deployed user data readable without an operator-run migration. New
+user-facing product copy should use Rekky.
 
 ## Request Path
 
@@ -76,17 +83,17 @@ post-response preference curation. Agent behavior lives primarily in
 
 The first model message is a system message assembled in this order:
 
-| Prompt segment | Source | Purpose |
-| --- | --- | --- |
-| `promptPrefix` | client/request payload, when supplied | Additional caller instruction |
-| Task-specific preference brief | preferences store plus validated plan | Exposes hard rules and selected relevant context only |
-| Web availability note | web context | Tells model when web credentials/tools are unavailable |
-| Conversation document list | cooking drafts | Identifies all recipe/guide/prep documents and the selected one |
-| Selected document markdown | selected draft, up to 18,000 chars when permitted by profile | Lets model discuss or revise the open canvas |
-| Linked-source requirement | latest message URL scan | Requires source reading before source-driven mutations |
-| Preloaded linked-source extraction | Tavily result, when a URL was pasted | Gives source content before the first provider turn |
-| Current product/tool state | dynamic tool selector | Explains which actions are possible now |
-| Main cooking instructions | prompt profile | Defines only the voice, document, and sourcing rules needed for this turn |
+| Prompt segment                     | Source                                                       | Purpose                                                                   |
+| ---------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `promptPrefix`                     | client/request payload, when supplied                        | Additional caller instruction                                             |
+| Task-specific preference brief     | preferences store plus validated plan                        | Exposes hard rules and selected relevant context only                     |
+| Web availability note              | web context                                                  | Tells model when web credentials/tools are unavailable                    |
+| Conversation document list         | cooking drafts                                               | Identifies all recipe/guide/prep documents and the selected one           |
+| Selected document markdown         | selected draft, up to 18,000 chars when permitted by profile | Lets model discuss or revise the open canvas                              |
+| Linked-source requirement          | latest message URL scan                                      | Requires source reading before source-driven mutations                    |
+| Preloaded linked-source extraction | Tavily result, when a URL was pasted                         | Gives source content before the first provider turn                       |
+| Current product/tool state         | dynamic tool selector                                        | Explains which actions are possible now                                   |
+| Main cooking instructions          | prompt profile                                               | Defines only the voice, document, and sourcing rules needed for this turn |
 
 The server then appends earlier non-error, finished messages for the current
 conversation and finally the latest user message.
@@ -95,19 +102,19 @@ conversation and finally the latest user message.
 
 The main instruction block currently asks the model to behave as follows:
 
-| Area | Instruction given to the model |
-| --- | --- |
-| Voice | Be vivid, candid, practical, curious, and personable; do not imitate a real chef or presenter. |
-| Chat versus canvas | Use chat for explanation, diagnosis, comparison, reassurance, and decision support. Use document mutation only for durable cooking work the user wants to keep. |
-| Existing canvas | Do not silently alter a selected document merely because an idea was discussed. Ask before preserving ambiguous variants. |
-| Document creation | Create a new document for a distinct recipe, guide, prep plan, imported source recipe, or explicitly preserved variant. |
-| Document revision | Revise the selected document for substitutions, scaling, timing, equipment alternatives, adaptations, notes, or restructuring. |
-| Saving | Never claim a recipe has been saved to the library; saving is user initiated. |
-| Preferences | Treat Safety, Diet, and Religious & Cultural Rules as hard constraints. Treat other preferences as soft context. |
-| Routine cooking | Do not browse for ordinary recipes, dish ideas, or technique guidance when culinary knowledge is sufficient. |
-| Research | Browse only when the request materially needs external evidence, such as supplied URLs, verification, current availability, products, food safety, authenticity comparison, or restaurant/menu recreation. |
-| Source use | Sources must be supporting evidence. The assistant must still answer substantively in its own voice and must not return only a bibliography or a thin source summary. |
-| Recipe document format | Produce structured, highly detailed markdown with orientation, ingredients, method, sensory cues, timers, troubleshooting, serving notes, and purposeful variations when applicable. |
+| Area                   | Instruction given to the model                                                                                                                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Voice                  | Be vivid, candid, practical, curious, and personable; do not imitate a real chef or presenter.                                                                                                             |
+| Chat versus canvas     | Use chat for explanation, diagnosis, comparison, reassurance, and decision support. Use document mutation only for durable cooking work the user wants to keep.                                            |
+| Existing canvas        | Do not silently alter a selected document merely because an idea was discussed. Ask before preserving ambiguous variants.                                                                                  |
+| Document creation      | Create a new document for a distinct recipe, guide, prep plan, imported source recipe, or explicitly preserved variant.                                                                                    |
+| Document revision      | Revise the selected document for substitutions, scaling, timing, equipment alternatives, adaptations, notes, or restructuring.                                                                             |
+| Saving                 | Never claim a recipe has been saved to the library; saving is user initiated.                                                                                                                              |
+| Preferences            | Treat Safety, Diet, and Religious & Cultural Rules as hard constraints. Treat other preferences as soft context.                                                                                           |
+| Routine cooking        | Do not browse for ordinary recipes, dish ideas, or technique guidance when culinary knowledge is sufficient.                                                                                               |
+| Research               | Browse only when the request materially needs external evidence, such as supplied URLs, verification, current availability, products, food safety, authenticity comparison, or restaurant/menu recreation. |
+| Source use             | Sources must be supporting evidence. The assistant must still answer substantively in its own voice and must not return only a bibliography or a thin source summary.                                      |
+| Recipe document format | Produce structured, highly detailed markdown with orientation, ingredients, method, sensory cues, timers, troubleshooting, serving notes, and purposeful variations when applicable.                       |
 
 These instructions are strong enough to shape normal answers even when no document is
 being created. A simple conversational turn still carries the full recipe-document
@@ -128,11 +135,11 @@ to the validated planner output, canvas state, linked URLs, and web configuratio
 
 ### Document Tools
 
-| Tool | When exposed | Effect | User-visible consequence |
-| --- | --- | --- | --- |
+| Tool                      | When exposed                                                                                                            | Effect                                                                                      | User-visible consequence                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `create_cooking_document` | When the planner selects document work, or when runtime fallback keeps document capability available for model judgment | Creates and selects a new `recipe`, `guide`, or `prep_plan` document from complete markdown | Canvas opens or gains a new tab; chat shows the tool's short `user_message` |
-| `read_cooking_document` | Only when a selected canvas already exists | Returns exact selected document markdown to the model | No direct UI change; may require another model turn |
-| `revise_cooking_document` | Only when a selected canvas already exists | Replaces the selected document with complete revised markdown | Canvas updates; chat shows a short change message |
+| `read_cooking_document`   | Only when a selected canvas already exists                                                                              | Returns exact selected document markdown to the model                                       | No direct UI change; may require another model turn                         |
+| `revise_cooking_document` | Only when a selected canvas already exists                                                                              | Replaces the selected document with complete revised markdown                               | Canvas updates; chat shows a short change message                           |
 
 Canvas mutation is validated by runtime policy. A created or revised document
 must contain one top-level title, an Ingredients or Shopping List section, and an
@@ -146,8 +153,8 @@ response. The durable content is expected to be read in the canvas.
 
 ### Research Permission Tool
 
-| Tool | When exposed | Effect |
-| --- | --- | --- |
+| Tool                        | When exposed                                                                                       | Effect                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `request_external_research` | When Tavily web tools are configured but the planner has not already selected source/research work | Allows the model to explain why research is needed and unlock web tools for the remainder of the turn |
 
 The unlock call must contain a recognized research type and a specific reason of at
@@ -160,11 +167,11 @@ Web tools are backed by Tavily and are exposed immediately when the validated pl
 selects source/research work, when a pasted URL creates a source-reading requirement,
 or later when the model successfully calls `request_external_research`.
 
-| Tool | Purpose | Typical output returned to the model |
-| --- | --- | --- |
-| `search_web` | Search public sources for external evidence | Up to 3 focused or 5 broad search results with snippets/raw content and source metadata |
-| `read_web_page` | Extract a non-recipe public page such as a menu or product page | Cleaned extracted page text plus source metadata |
-| `read_recipe_source` | Extract a user-supplied or selected recipe page | Page text plus inferred ingredients/instructions, confidence, and warnings |
+| Tool                 | Purpose                                                         | Typical output returned to the model                                                    |
+| -------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `search_web`         | Search public sources for external evidence                     | Up to 3 focused or 5 broad search results with snippets/raw content and source metadata |
+| `read_web_page`      | Extract a non-recipe public page such as a menu or product page | Cleaned extracted page text plus source metadata                                        |
+| `read_recipe_source` | Extract a user-supplied or selected recipe page                 | Page text plus inferred ingredients/instructions, confidence, and warnings              |
 
 URLs in the user's latest message have special behavior: the backend attempts to read
 each URL as a recipe source before the first model call. The extracted content is
@@ -173,8 +180,8 @@ blocked until the source read requirement has been satisfied.
 
 ### Presentation Tool
 
-| Tool | Exposure | Effect |
-| --- | --- | --- |
+| Tool                     | Exposure                                                                                                                                   | Effect                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | `set_prompt_suggestions` | Not offered during the initial answer loop; offered in a separate forced post-processing call when the completed reply includes a question | Produces up to three clickable suggested follow-up prompts |
 
 The runtime also removes text-emitted `set_prompt_suggestions(...)` syntax if a model
@@ -228,16 +235,16 @@ detector. It is no longer the stated intended behavior.
 
 ### Providers
 
-| Operation | Provider/model by default |
-| --- | --- |
-| Main cooking reply | OpenRouter, `google/gemini-3.1-flash-lite` |
-| Main reply fallback | OpenRouter, `deepseek/deepseek-v4-pro` |
-| Complex planning/response | `COOKING_AGENT_COMPLEX_MODEL`, when configured, for safety, source/research, and document mutation risk classes |
-| Planner override | `COOKING_AGENT_PLANNER_MODEL`, when configured for non-elevated planner turns |
-| Quality repair override | `COOKING_AGENT_REPAIR_MODEL`, when configured; otherwise the complex or response model |
-| Web search/page extraction | Tavily |
-| Saved document illustration | OpenRouter, `google/gemini-2.5-flash-image` |
-| Batched preference curation | OpenRouter, normally the cooking model unless configured separately |
+| Operation                   | Provider/model by default                                                                                       |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Main cooking reply          | OpenRouter, `google/gemini-3.1-flash-lite`                                                                      |
+| Main reply fallback         | OpenRouter, `deepseek/deepseek-v4-pro`                                                                          |
+| Complex planning/response   | `COOKING_AGENT_COMPLEX_MODEL`, when configured, for safety, source/research, and document mutation risk classes |
+| Planner override            | `COOKING_AGENT_PLANNER_MODEL`, when configured for non-elevated planner turns                                   |
+| Quality repair override     | `COOKING_AGENT_REPAIR_MODEL`, when configured; otherwise the complex or response model                          |
+| Web search/page extraction  | Tavily                                                                                                          |
+| Saved document illustration | OpenRouter, `google/gemini-2.5-flash-image`                                                                     |
+| Batched preference curation | OpenRouter, normally the cooking model unless configured separately                                             |
 
 Illustration generation and background preference curation are separate from producing
 the immediate cooking-chat reply. They can affect library images or later
@@ -245,17 +252,17 @@ personalization but should not block the initial answer.
 
 ### Provider Calls Per User Turn
 
-| Scenario | Main-provider calls, excluding fallback retries | Additional external work |
-| --- | --- | --- |
-| Direct ordinary answer with no follow-up question | 2 | Planner call plus response call |
-| Direct answer ending in a meaningful question | 3 | Planner and response calls, then suggestion chips |
-| Empty model answer | 2 or more | Second call recovers visible answer; suggestions may add another call |
-| Document creation or revision succeeds immediately | 1 | Database mutation; runtime returns the short tool message without another prose call |
-| Model inspects document before answering | At least 2 | Database read tool between calls |
-| Web research requested or pre-enabled | At least 2 if a web tool is called | One or more Tavily requests |
-| Researched answer needs citation repair | One extra correction call, potentially attempted with fallback too | None beyond research |
-| Answer fails response quality validation | One extra repair call | Rejected first draft is not emitted |
-| Tool loop continues | Up to 5 model turns | Tool work between turns |
+| Scenario                                           | Main-provider calls, excluding fallback retries                    | Additional external work                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Direct ordinary answer with no follow-up question  | 2                                                                  | Planner call plus response call                                                      |
+| Direct answer ending in a meaningful question      | 3                                                                  | Planner and response calls, then suggestion chips                                    |
+| Empty model answer                                 | 2 or more                                                          | Second call recovers visible answer; suggestions may add another call                |
+| Document creation or revision succeeds immediately | 1                                                                  | Database mutation; runtime returns the short tool message without another prose call |
+| Model inspects document before answering           | At least 2                                                         | Database read tool between calls                                                     |
+| Web research requested or pre-enabled              | At least 2 if a web tool is called                                 | One or more Tavily requests                                                          |
+| Researched answer needs citation repair            | One extra correction call, potentially attempted with fallback too | None beyond research                                                                 |
+| Answer fails response quality validation           | One extra repair call                                              | Rejected first draft is not emitted                                                  |
+| Tool loop continues                                | Up to 5 model turns                                                | Tool work between turns                                                              |
 
 Each provider call defaults to a 45-second timeout. A retryable failure before any
 visible text is streamed is retried with the fallback model. Because both defaults
@@ -272,14 +279,14 @@ time-to-first-visible-text.
 
 ## Persistence And UI Responsibilities
 
-| Layer | Responsibility |
-| --- | --- |
-| Chat route | Persists user message, Samwise response, conversation data, prompt suggestion metadata, and source metadata; queues preference curation |
-| Cooking document service | Stores conversation documents, selected document, and cooking-session snapshots |
-| Cooking workspace | Displays either full chat or chat alongside the selected canvas; supports multiple document tabs and deletion |
-| Recipe canvas | Displays and allows user-driven saving of document markdown into the library |
-| Recipe library | Displays saved recipes/guides/prep plans and asynchronously generated illustrations |
-| Message renderer | Shows prompt suggestion chips and source cards from message metadata |
+| Layer                    | Responsibility                                                                                                                          |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat route               | Persists user message, Samwise response, conversation data, prompt suggestion metadata, and source metadata; queues preference curation |
+| Cooking document service | Stores conversation documents, selected document, and cooking-session snapshots                                                         |
+| Cooking workspace        | Displays either full chat or chat alongside the selected canvas; supports multiple document tabs and deletion                           |
+| Recipe canvas            | Displays and allows user-driven saving of document markdown into the library                                                            |
+| Recipe library           | Displays saved recipes/guides/prep plans and asynchronously generated illustrations                                                     |
+| Message renderer         | Shows prompt suggestion chips and source cards from message metadata                                                                    |
 
 The assistant cannot save a recipe to the library through its current tool surface.
 It creates or revises conversation documents; the user presses **Save** in the
@@ -317,27 +324,25 @@ path when knowledgeable conversation would have been sufficient. Conversely, the
 model must explicitly ask to unlock research if the heuristic does not identify a
 genuine external-evidence need.
 
-### 5. Identity Is Split Between Mise And Samwise
+### 5. Identity Is Split Between Rekky And Samwise
 
-The displayed assistant name is Samwise, but the prompt repeatedly directs the model
-to speak as Mise. This should be resolved deliberately in product language, because
-identity ambiguity makes tone evaluation harder and can surface inconsistently in
-model-generated prose.
+The app is Rekky and the assistant is Samwise. Keep that distinction explicit in
+product copy and prompts so tone evaluation stays consistent.
 
 ## Factors That Can Degrade Performance
 
 ### High-Impact Paths
 
-| Issue | Effect |
-| --- | --- |
-| Same-host fallback retry after provider timeout or DNS failure | A failed answer can take roughly 90 seconds instead of 45 seconds |
-| Suggestion generation after replies containing questions | Adds a model call to otherwise successful conversational turns |
-| Citation repair for researched answers | Adds a model call and delays visible text |
-| Mandatory planning call | Adds one provider call before response generation |
-| Buffered validation and possible repair | Delays first visible text; prevents rejected text from being displayed |
-| Preloading pasted recipe URLs | Adds Tavily extraction time before the model starts responding |
-| Full selected canvas inserted into system context | Increases request size, particularly for long recipes/guides |
-| Up to five agent/tool cycles | Correct for agentic workflows, but potentially expensive if the model chooses unnecessary tool work |
+| Issue                                                          | Effect                                                                                              |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Same-host fallback retry after provider timeout or DNS failure | A failed answer can take roughly 90 seconds instead of 45 seconds                                   |
+| Suggestion generation after replies containing questions       | Adds a model call to otherwise successful conversational turns                                      |
+| Citation repair for researched answers                         | Adds a model call and delays visible text                                                           |
+| Mandatory planning call                                        | Adds one provider call before response generation                                                   |
+| Buffered validation and possible repair                        | Delays first visible text; prevents rejected text from being displayed                              |
+| Preloading pasted recipe URLs                                  | Adds Tavily extraction time before the model starts responding                                      |
+| Full selected canvas inserted into system context              | Increases request size, particularly for long recipes/guides                                        |
+| Up to five agent/tool cycles                                   | Correct for agentic workflows, but potentially expensive if the model chooses unnecessary tool work |
 
 ### Observability Gap
 
@@ -399,28 +404,28 @@ this document:
    fallback?
 5. Which terms should automatically enable research tools, and which should leave the
    decision to the agent?
-6. Should the assistant be consistently called Samwise in its own prompt, or should
-   the UI sender remain Mise?
+6. Should product copy continue to present Rekky as the app and Samwise as the
+   cooking assistant in every user-visible surface?
 7. Which performance events need to be exposed in development logs and production
    telemetry to measure answer quality and latency reliably?
 
 ## Implementation Map
 
-| Module | Role in this design |
-| --- | --- |
-| `packages/api/src/cooking/agent.ts` | System instructions, prompt construction, tool selection/execution, provider loop, source correction, suggestions, timing events |
-| `packages/api/src/cooking/web.ts` | Tavily-backed search and extraction tools, URL safety checks, recipe fact extraction |
-| `packages/api/src/cooking/service.ts` | Conversation document persistence and cooking-session persistence |
-| `packages/api/src/cooking/canvas.ts` | Validation/recognition of usable canvas markdown |
-| `packages/api/src/preferences/batch.ts` | Background curation of durable preferences learned from chat |
-| `packages/api/src/recipes/service.ts` | Saved library documents, categorization, and illustration scheduling |
-| `packages/api/src/recipes/illustrate.ts` | Library illustration generation prompt/provider |
-| `api/server/routes/cooking.js` | Authenticated SSE chat API, context loading, message persistence, response metadata, performance trace collection |
-| `packages/data-provider/src/createPayload.ts` | Client-to-server routing into the cooking chat bridge |
-| `client/src/routes/ChatRoute.tsx` | Cooking route setup, default model selection, document queries, workspace composition |
-| `client/src/components/Cooking/Workspace.tsx` | Chat/canvas layout and visible document selection |
-| `client/src/components/Cooking/WebSources.tsx` | Displays supporting source cards saved on assistant messages |
-| `client/src/components/Cooking/PromptSuggestions.tsx` | Displays suggested next-turn chips |
-| `client/src/components/Cooking/RecipeCanvas.tsx` | Displays active document and provides user-initiated save/update actions |
-| `client/src/utils/miseDefaults.ts` | Client default endpoint, model, and assistant display constants |
-| `librechat.yaml` | OpenRouter endpoint and Tavily web-search configuration |
+| Module                                                | Role in this design                                                                                                              |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/api/src/cooking/agent.ts`                   | System instructions, prompt construction, tool selection/execution, provider loop, source correction, suggestions, timing events |
+| `packages/api/src/cooking/web.ts`                     | Tavily-backed search and extraction tools, URL safety checks, recipe fact extraction                                             |
+| `packages/api/src/cooking/service.ts`                 | Conversation document persistence and cooking-session persistence                                                                |
+| `packages/api/src/cooking/canvas.ts`                  | Validation/recognition of usable canvas markdown                                                                                 |
+| `packages/api/src/preferences/batch.ts`               | Background curation of durable preferences learned from chat                                                                     |
+| `packages/api/src/recipes/service.ts`                 | Saved library documents, categorization, and illustration scheduling                                                             |
+| `packages/api/src/recipes/illustrate.ts`              | Library illustration generation prompt/provider                                                                                  |
+| `api/server/routes/cooking.js`                        | Authenticated SSE chat API, context loading, message persistence, response metadata, performance trace collection                |
+| `packages/data-provider/src/createPayload.ts`         | Client-to-server routing into the cooking chat bridge                                                                            |
+| `client/src/routes/ChatRoute.tsx`                     | Cooking route setup, default model selection, document queries, workspace composition                                            |
+| `client/src/components/Cooking/Workspace.tsx`         | Chat/canvas layout and visible document selection                                                                                |
+| `client/src/components/Cooking/WebSources.tsx`        | Displays supporting source cards saved on assistant messages                                                                     |
+| `client/src/components/Cooking/PromptSuggestions.tsx` | Displays suggested next-turn chips                                                                                               |
+| `client/src/components/Cooking/RecipeCanvas.tsx`      | Displays active document and provides user-initiated save/update actions                                                         |
+| `client/src/utils/rekkyDefaults.ts`                   | Client default endpoint, model, and assistant display constants                                                                  |
+| `librechat.yaml`                                      | OpenRouter endpoint and Tavily web-search configuration                                                                          |

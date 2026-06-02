@@ -10,16 +10,19 @@ export default function RecipeMetrics({ metrics }: RecipeMetricsProps) {
   }
 
   return (
-    <div data-testid="recipe-metrics" className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div
+      data-testid="recipe-metrics"
+      className="mb-8 grid gap-x-6 gap-y-4 border-y border-border-light py-4 sm:grid-cols-2 lg:grid-cols-4"
+    >
       {metrics.map((metric) => (
         <div
           key={`${metric.label}:${metric.value}`}
-          className="min-w-0 rounded-md border border-border-light bg-surface-primary-alt px-3 py-3 sm:px-4"
+          className="min-w-0 border-l border-border-light pl-4 first:border-l-0 first:pl-0 sm:odd:border-l-0 sm:odd:pl-0 lg:odd:border-l lg:odd:pl-4 lg:first:border-l-0 lg:first:pl-0"
         >
-          <div className="truncate text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+          <div className="rekky-meta truncate text-text-secondary">
             {metric.label}
           </div>
-          <div className="mt-1 break-words text-sm font-semibold leading-5 text-text-primary">
+          <div className="rekky-quantity mt-2 break-words text-sm font-bold leading-5 text-text-primary">
             {metric.value}
           </div>
         </div>

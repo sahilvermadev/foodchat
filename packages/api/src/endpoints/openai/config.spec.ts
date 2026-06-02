@@ -195,9 +195,9 @@ describe('getOpenAIConfig', () => {
 
     expect(result.configOptions?.baseURL).toBe(reverseProxyUrl);
     expect(result.configOptions?.defaultHeaders).toMatchObject({
-      'HTTP-Referer': 'https://librechat.ai',
-      'X-Title': 'Mise',
-      'X-OpenRouter-Title': 'Mise',
+      'HTTP-Referer': 'https://rekky.ai',
+      'X-Title': 'Rekky',
+      'X-OpenRouter-Title': 'Rekky',
       'X-OpenRouter-Categories': 'general-chat,personal-agent',
     });
     expect(result.llmConfig.include_reasoning).toBe(true);
@@ -934,9 +934,9 @@ describe('getOpenAIConfig', () => {
       });
 
       expect(result.configOptions?.defaultHeaders).toEqual({
-        'HTTP-Referer': 'https://librechat.ai',
-        'X-Title': 'Mise',
-        'X-OpenRouter-Title': 'Mise',
+        'HTTP-Referer': 'https://rekky.ai',
+        'X-Title': 'Rekky',
+        'X-OpenRouter-Title': 'Rekky',
         'X-OpenRouter-Categories': 'general-chat,personal-agent',
         'X-Custom-Header': 'custom-value',
         Authorization: 'Bearer custom-token',
@@ -1497,8 +1497,8 @@ describe('getOpenAIConfig', () => {
         const clientOptions = {
           reverseProxyUrl: baseURL,
           headers: {
-            'HTTP-Referer': 'https://librechat.ai',
-            'X-Title': 'Mise',
+            'HTTP-Referer': 'https://rekky.ai',
+            'X-Title': 'Rekky',
             Authorization: `Bearer ${apiKey}`,
           },
           addParams: {
@@ -1536,8 +1536,8 @@ describe('getOpenAIConfig', () => {
           repetition_penalty: 1.1,
         });
         expect(result.configOptions?.defaultHeaders).toMatchObject({
-          'HTTP-Referer': 'https://librechat.ai',
-          'X-Title': 'Mise',
+          'HTTP-Referer': 'https://rekky.ai',
+          'X-Title': 'Rekky',
           Authorization: `Bearer ${apiKey}`,
         });
         expect(result.provider).toBe('openrouter');
@@ -1579,7 +1579,7 @@ describe('getOpenAIConfig', () => {
         });
         expect(result.configOptions?.baseURL).toBe(baseURL);
         expect(result.configOptions?.defaultHeaders).toMatchObject({
-          'X-OpenRouter-Title': 'Mise',
+          'X-OpenRouter-Title': 'Rekky',
           Authorization: `Bearer ${apiKey}`,
         });
         expect(result.provider).toBe('openrouter');

@@ -4,7 +4,14 @@ import { createModels } from '@librechat/data-schemas';
 
 import type { StructuredRecipe } from 'librechat-data-provider';
 
-import { deleteSavedRecipe, getRecipe, listRecipes, saveRecipe, updateSavedRecipe, parseServingsFromMarkdown } from './service';
+import {
+  deleteSavedRecipe,
+  getRecipe,
+  listRecipes,
+  saveRecipe,
+  updateSavedRecipe,
+  parseServingsFromMarkdown,
+} from './service';
 import { categorizeRecipe } from './categorize';
 import { illustrateRecipe } from './illustrate';
 
@@ -154,6 +161,75 @@ describe('saved cooking document types', () => {
     expect(categorizeRecipe).not.toHaveBeenCalled();
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(illustrateRecipe).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('saved recipe pagination', () => {
+  test('returns a stable total while progressing through cursor pages', async () => {
+    const user = 'pagination-user';
+    const recipes = Array.from({ length: 35 }, (_, index) => ({
+      user,
+      title: `Recipe ${String(index).padStart(2, '0')}`,
+      documentMarkdown: `# Recipe ${index}`,
+      categorizationStatus: 'complete',
+      illustrationStatus: 'complete',
+      categorizationVersion: 1,
+      updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)),
+    }));
+    await mongoose.models.SavedRecipe.insertMany(recipes);
+
+    const first = await listRecipes(user, { limit: 30 });
+    const second = await listRecipes(user, { limit: 30, cursor: first.nextCursor });
+
+    expect(first.recipes).toHaveLength(30);
+    expect(first.total).toBe(35);
+    expect(first.nextCursor).toBeDefined();
+    expect(second.recipes).toHaveLength(5);
+    expect(second.total).toBe(35);
+    expect(second.nextCursor).toBeUndefined();
+    expect(new Set([...first.recipes, ...second.recipes].map((item) => item._id)).size).toBe(35);
+  });
+
+  test('counts only recipes matching search and filters', async () => {
+    const user = 'filtered-pagination-user';
+    await mongoose.models.SavedRecipe.insertMany([
+      {
+        user,
+        title: 'Fast Dal',
+        documentMarkdown: '# Fast Dal',
+        documentType: 'recipe',
+        categorization: { cuisine: ['indian'], source: 'llm', updatedAt: new Date() },
+        categorizationStatus: 'complete',
+        illustrationStatus: 'complete',
+        categorizationVersion: 1,
+      },
+      {
+        user,
+        title: 'Slow Dal',
+        documentMarkdown: '# Slow Dal',
+        documentType: 'recipe',
+        categorization: { cuisine: ['indian'], source: 'llm', updatedAt: new Date() },
+        categorizationStatus: 'complete',
+        illustrationStatus: 'complete',
+        categorizationVersion: 1,
+      },
+      {
+        user,
+        title: 'Fast Pasta',
+        documentMarkdown: '# Fast Pasta',
+        documentType: 'recipe',
+        categorization: { cuisine: ['italian'], source: 'llm', updatedAt: new Date() },
+        categorizationStatus: 'complete',
+        illustrationStatus: 'complete',
+        categorizationVersion: 1,
+      },
+    ]);
+
+    const result = await listRecipes(user, { q: 'dal', cuisine: 'indian', limit: 1 });
+
+    expect(result.recipes).toHaveLength(1);
+    expect(result.total).toBe(2);
+    expect(result.nextCursor).toBeDefined();
   });
 });
 
@@ -312,7 +388,11 @@ describe('saved recipe illustrations', () => {
     expect(updated?.illustrationStatus).toBe('pending');
 
     let persisted = await mongoose.models.SavedRecipe.findById(stored._id).lean();
-    for (let attempt = 0; attempt < 30 && persisted?.illustrationStatus !== 'complete'; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < 30 && persisted?.illustrationStatus !== 'complete';
+      attempt += 1
+    ) {
       await new Promise<void>((resolve) => setImmediate(resolve));
       persisted = await mongoose.models.SavedRecipe.findById(stored._id).lean();
     }
@@ -334,8 +414,9 @@ describe('servings parsing and serialization overrides', () => {
 
   test('listRecipes and saveRecipe overrides/includes correct servings count', async () => {
     const user = 'servings-test-user';
-    const testMarkdown = '# Test Recipe\n\n- **Servings:** 4\n\n## Ingredients\n- 1 cup oats\n\n## Instructions\n1. Cook oats';
-    
+    const testMarkdown =
+      '# Test Recipe\n\n- **Servings:** 4\n\n## Ingredients\n- 1 cup oats\n\n## Instructions\n1. Cook oats';
+
     // Save recipe with servings count in markdown
     const saved = await saveRecipe(user, {
       title: 'Test Recipe',
@@ -345,8 +426,20 @@ describe('servings parsing and serialization overrides', () => {
         description: '',
         servings: 2, // structured payload has 2
         timing: { prepMinutes: 5, cookMinutes: 10, totalMinutes: 15 },
-        ingredients: [{ id: 'i1', originalText: '1 cup oats', item: 'oats', quantityType: 'measured' }],
-        steps: [{ id: 's1', order: 1, text: 'Cook oats', ingredientIds: ['i1'], timers: [], warnings: [], tips: [] }],
+        ingredients: [
+          { id: 'i1', originalText: '1 cup oats', item: 'oats', quantityType: 'measured' },
+        ],
+        steps: [
+          {
+            id: 's1',
+            order: 1,
+            text: 'Cook oats',
+            ingredientIds: ['i1'],
+            timers: [],
+            warnings: [],
+            tips: [],
+          },
+        ],
         notes: [],
         tags: [],
       },

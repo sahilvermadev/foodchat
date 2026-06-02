@@ -28,7 +28,7 @@ import type { TAskFunction, ExtendedFile } from '~/common';
 import useSetFilesToDelete from '~/hooks/Files/useSetFilesToDelete';
 import useGetSender from '~/hooks/Conversations/useGetSender';
 import { logger, createDualMessageContent } from '~/utils';
-import { MISE_ASSISTANT_NAME } from '~/utils/miseDefaults';
+import { REKKY_ASSISTANT_NAME } from '~/utils/rekkyDefaults';
 import store, { useGetEphemeralAgent } from '~/store';
 import { startupConfigKey } from '~/data-provider';
 import { getCookingNewChatPath } from '~/components/Cooking/artifact';
@@ -258,7 +258,7 @@ export default function useChatFunctions({
       endpointOption.key = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     }
     const responseSender = location.pathname.startsWith('/cook')
-      ? MISE_ASSISTANT_NAME
+      ? REKKY_ASSISTANT_NAME
       : getSender({ model: conversation?.model, ...endpointOption });
 
     const currentMsg: TMessage = {

@@ -1,21 +1,21 @@
 import { EModelEndpoint, LocalStorageKeys } from 'librechat-data-provider';
 import type { TPreset } from 'librechat-data-provider';
 
-export const MISE_DEFAULT_ENDPOINT = 'OpenRouter';
-export const MISE_DEFAULT_MODEL = 'google/gemini-3.1-flash-lite';
-export const MISE_ASSISTANT_NAME = 'Samwise';
+export const REKKY_DEFAULT_ENDPOINT = 'OpenRouter';
+export const REKKY_DEFAULT_MODEL = 'google/gemini-3.1-flash-lite';
+export const REKKY_ASSISTANT_NAME = 'Samwise';
 
-const migrationKey = 'mise.defaultModelPreference.v1';
+const migrationKey = 'rekky.defaultModelPreference.v1';
 
-export function getMiseDefaultPreset(): TPreset {
+export function getRekkyDefaultPreset(): TPreset {
   return {
-    endpoint: MISE_DEFAULT_ENDPOINT,
+    endpoint: REKKY_DEFAULT_ENDPOINT,
     endpointType: EModelEndpoint.custom,
-    model: MISE_DEFAULT_MODEL,
+    model: REKKY_DEFAULT_MODEL,
   } as TPreset;
 }
 
-export function ensureMiseDefaultModelPreference() {
+export function ensureRekkyDefaultModelPreference() {
   if (typeof window === 'undefined' || localStorage.getItem(migrationKey) === 'true') {
     return false;
   }
@@ -25,8 +25,8 @@ export function ensureMiseDefaultModelPreference() {
   if (lastModelRaw) {
     try {
       const lastModels = JSON.parse(lastModelRaw) as Record<string, string | undefined>;
-      if (lastModels?.[MISE_DEFAULT_ENDPOINT] !== MISE_DEFAULT_MODEL) {
-        lastModels[MISE_DEFAULT_ENDPOINT] = MISE_DEFAULT_MODEL;
+      if (lastModels?.[REKKY_DEFAULT_ENDPOINT] !== REKKY_DEFAULT_MODEL) {
+        lastModels[REKKY_DEFAULT_ENDPOINT] = REKKY_DEFAULT_MODEL;
         localStorage.setItem(LocalStorageKeys.LAST_MODEL, JSON.stringify(lastModels));
         changed = true;
       }
@@ -41,8 +41,8 @@ export function ensureMiseDefaultModelPreference() {
   if (setupRaw) {
     try {
       const setup = JSON.parse(setupRaw) as { endpoint?: string; model?: string };
-      if (setup?.endpoint === MISE_DEFAULT_ENDPOINT && setup.model !== MISE_DEFAULT_MODEL) {
-        setup.model = MISE_DEFAULT_MODEL;
+      if (setup?.endpoint === REKKY_DEFAULT_ENDPOINT && setup.model !== REKKY_DEFAULT_MODEL) {
+        setup.model = REKKY_DEFAULT_MODEL;
         localStorage.setItem(setupKey, JSON.stringify(setup));
         changed = true;
       }

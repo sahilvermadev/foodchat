@@ -42,6 +42,15 @@ function isRecipeDataHeading(line: string): boolean {
   return Boolean(heading && cleanMetricText(heading[2]).toLowerCase() === 'recipe data');
 }
 
+function isIngredientsHeading(line: string): boolean {
+  const heading = line.match(/^(#{1,6})\s+(.+)$/);
+  if (!heading) {
+    return false;
+  }
+  const text = cleanMetricText(heading[2]).toLowerCase();
+  return text === 'ingredients' || text === 'ingredient list';
+}
+
 function headingDepth(line: string): number {
   const heading = line.match(/^(#{1,6})\s+/);
   return heading ? heading[1].length : 0;
@@ -208,4 +217,23 @@ export function recipeMarkdownDisplay(
     body,
     metrics,
   };
+}
+
+export function stripIngredientsSection(markdown: string): string {
+  const lines = markdown.split('\n');
+  const start = lines.findIndex(isIngredientsHeading);
+  if (start === -1) {
+    return markdown;
+  }
+
+  const depth = headingDepth(lines[start]);
+  const end = lines.findIndex(
+    (line, index) => index > start && headingDepth(line) > 0 && headingDepth(line) <= depth,
+  );
+  const sectionEnd = end === -1 ? lines.length : end;
+
+  return [...lines.slice(0, start), ...lines.slice(sectionEnd)]
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }

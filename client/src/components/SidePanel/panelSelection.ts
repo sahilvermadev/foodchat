@@ -1,5 +1,5 @@
 import type { NavLink } from '~/common';
-import { resolveActivePanel } from '~/Providers';
+import { resolveActivePanel } from '~/Providers/ActivePanelContext';
 
 export function getPanelLinks(links: NavLink[]): NavLink[] {
   return links.filter((link) => Boolean(link.Component));

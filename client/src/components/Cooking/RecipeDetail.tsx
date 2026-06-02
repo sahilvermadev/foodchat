@@ -10,7 +10,13 @@ import {
 } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import RecipeMetrics from './Metrics';
-import { recipeBodyMarkdown, recipeDisplayTitle, recipeMarkdownDisplay } from './recipe';
+import StructuredIngredients, { hasDisplayableIngredients } from './StructuredIngredients';
+import {
+  recipeBodyMarkdown,
+  recipeDisplayTitle,
+  recipeMarkdownDisplay,
+  stripIngredientsSection,
+} from './recipe';
 
 function arrayChips(value: unknown): string[] {
   return Array.isArray(value)
@@ -72,6 +78,23 @@ function documentTypeLabel(
   return localize('com_cooking_document_type_recipe');
 }
 
+function formatRecipeDate(value?: string): string {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
 export default function RecipeDetail() {
   const localize = useLocalize();
   const { recipeId } = useParams();
@@ -118,8 +141,15 @@ export default function RecipeDetail() {
   const metadata = metadataTags(recipe);
   const metadataSet = new Set(metadata);
   const secondaryChips = categoryChips(recipe).filter((chip) => !metadataSet.has(chip));
+  const updatedAt = formatRecipeDate(recipe.updatedAt);
   const markdown = recipeBodyMarkdown(recipe);
   const markdownDisplay = recipeMarkdownDisplay(markdown);
+  const hasStructuredIngredients = recipe.recipe
+    ? hasDisplayableIngredients(recipe.recipe.ingredients)
+    : false;
+  const recipeBody = hasStructuredIngredients
+    ? stripIngredientsSection(markdownDisplay.body)
+    : markdownDisplay.body;
   const saveDisabled =
     updateRecipe.isLoading || draftTitle.trim().length === 0 || draftMarkdown.trim().length === 0;
 
@@ -180,57 +210,62 @@ export default function RecipeDetail() {
   };
 
   return (
-    <main className="h-full overflow-y-auto bg-surface-primary-alt px-4 py-7 text-text-primary sm:px-7 lg:px-10">
-      <div className="mx-auto max-w-[56rem]">
-        <Link to="/recipes" className="text-sm text-text-secondary hover:text-text-primary">
-          {localize('com_recipes_back_to_library')}
-        </Link>
-        <article className="mt-4 rounded-lg border border-border-light bg-surface-primary px-5 py-6 shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)] sm:px-8 sm:py-8 lg:px-10">
-          <header className="mb-5 border-b border-border-light pb-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <h1 className="font-serif text-3xl font-normal leading-tight tracking-normal sm:text-4xl">
+    <main className="rekky-ui rekky-recipe-surface h-full overflow-y-auto bg-surface-primary-alt px-4 py-7 text-text-primary sm:px-7 lg:px-10">
+      <div className="mx-auto max-w-[68rem]">
+        <div className="flex min-h-10 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Link to="/recipes" className="text-sm text-text-secondary hover:text-text-primary">
+            {localize('com_recipes_back_to_library')}
+          </Link>
+          <div className="flex items-center gap-3 sm:justify-end">
+            {recipe.categorizationStatus === 'pending' ? (
+              <span className="text-xs text-text-secondary">
+                {localize('com_recipes_categorizing')}
+              </span>
+            ) : null}
+            {!isEditing ? (
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  disabled={createCookingDocument.isLoading}
+                  onClick={discussWithAI}
+                >
+                  <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                  <span>{localize('com_recipes_discuss_ai')}</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={startEditing}
+                >
+                  <Edit3 className="h-4 w-4" aria-hidden="true" />
+                  <span>{localize('com_recipes_edit_markdown_btn')}</span>
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <article className="mt-4 rounded-lg border border-border-light bg-surface-primary px-5 py-7 shadow-none sm:px-8 sm:py-9 lg:px-12 lg:py-10">
+          <header className="mb-8 border-b border-border-light pb-7">
+            <div className="flex flex-col gap-4">
+              <h1 className="rekky-title">
                 {isEditing ? localize('com_recipes_edit_recipe') : recipeDisplayTitle(recipe)}
               </h1>
-              <div className="flex shrink-0 items-center gap-2">
-                {recipe.categorizationStatus === 'pending' ? (
-                  <span className="text-xs text-text-secondary">
-                    {localize('com_recipes_categorizing')}
-                  </span>
-                ) : null}
-                {!isEditing ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      disabled={createCookingDocument.isLoading}
-                      onClick={discussWithAI}
-                    >
-                      <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                      <span>{localize('com_recipes_discuss_ai')}</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={startEditing}
-                    >
-                      <Edit3 className="h-4 w-4" aria-hidden="true" />
-                      <span>{localize('com_recipes_edit_markdown_btn')}</span>
-                    </Button>
-                  </>
-                ) : null}
-              </div>
             </div>
             {!isEditing ? (
-              <p className="mt-3 text-xs uppercase tracking-wide text-text-secondary">
-                {documentTypeLabel(localize, recipe.documentType)}
-              </p>
+              <div className="rekky-meta mt-3 flex flex-wrap gap-x-3 gap-y-1 text-text-secondary">
+                <span>{documentTypeLabel(localize, recipe.documentType)}</span>
+                {updatedAt ? (
+                  <span>{localize('com_recipes_updated_date', { date: updatedAt })}</span>
+                ) : null}
+              </div>
             ) : null}
             {!isEditing && metadata.length > 0 ? (
-              <p className="mt-4 text-sm capitalize text-text-secondary">
+              <p className="rekky-meta mt-4 capitalize text-text-secondary">
                 {metadata.map(displayTag).join(' · ')}
               </p>
             ) : null}
@@ -295,8 +330,11 @@ export default function RecipeDetail() {
           ) : (
             <>
               <RecipeMetrics metrics={markdownDisplay.metrics} />
+              {hasStructuredIngredients ? (
+                <StructuredIngredients ingredients={recipe.recipe?.ingredients ?? []} />
+              ) : null}
               <div className="cooking-recipe-markdown markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
-                <Markdown content={markdownDisplay.body} isLatestMessage={false} />
+                <Markdown content={recipeBody} isLatestMessage={false} />
               </div>
             </>
           )}

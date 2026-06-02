@@ -63,32 +63,32 @@ cache: true
 
 # Custom interface configuration
 interface:
-  customWelcome: 'Welcome to Mise! Enjoy your experience.'
+  customWelcome: 'Welcome to Rekky! Enjoy your experience.'
   # Enable/disable file search as a chatarea selection (default: true)
   # Note: This setting does not disable the Agents File Search Capability.
   # To disable the Agents Capability, see the Agents Endpoint configuration instead.
   fileSearch: true
   # Privacy policy settings
   privacyPolicy:
-    externalUrl: 'https://librechat.ai/privacy-policy'
+    externalUrl: 'https://rekky.ai/privacy-policy'
     openNewTab: true
 
   # Terms of service
   termsOfService:
-    externalUrl: 'https://librechat.ai/tos'
+    externalUrl: 'https://rekky.ai/tos'
     openNewTab: true
     modalAcceptance: true
-    modalTitle: 'Terms of Service for Mise'
+    modalTitle: 'Terms of Service for Rekky'
     modalContent: |
-      # Terms and Conditions for Mise
+      # Terms and Conditions for Rekky
 
       *Effective Date: February 18, 2024*
 
-      Welcome to Mise, the informational website for the open-source AI chat platform, available at https://librechat.ai. These Terms of Service ("Terms") govern your use of our website and the services we offer. By accessing or using the Website, you agree to be bound by these Terms and our Privacy Policy, accessible at https://librechat.ai//privacy.
+      Welcome to Rekky, the informational website for the open-source AI chat platform, available at https://rekky.ai. These Terms of Service ("Terms") govern your use of our website and the services we offer. By accessing or using the Website, you agree to be bound by these Terms and our Privacy Policy, accessible at https://rekky.ai/privacy.
 
       ## 1. Ownership
 
-      Upon purchasing a package from Mise, you are granted the right to download and use the code for accessing an admin panel for Mise. While you own the downloaded code, you are expressly prohibited from reselling, redistributing, or otherwise transferring the code to third parties without explicit permission from Mise.
+      Upon purchasing a package from Rekky, you are granted the right to download and use the code for accessing an admin panel for Rekky. While you own the downloaded code, you are expressly prohibited from reselling, redistributing, or otherwise transferring the code to third parties without explicit permission from Rekky.
 
       ## 2. User Data
 
@@ -112,7 +112,7 @@ interface:
 
       ## 7. Contact Information
 
-      If you have any questions about these Terms, please contact us at contact@librechat.ai.
+      If you have any questions about these Terms, please contact us at contact@rekky.ai.
 
       By using the Website, you acknowledge that you have read these Terms of Service and agree to be bound by them.
 
@@ -234,7 +234,7 @@ registration:
 actions:
   allowedDomains:
     - 'swapi.dev'
-    - 'librechat.ai'
+    - 'rekky.ai'
     - 'google.com'
     # - 'http://10.225.26.25:7894'  # Internal IP with protocol/port (uncomment if needed)
   # `allowedAddresses` is an SSRF exemption list, NOT a strict whitelist.

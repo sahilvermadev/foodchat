@@ -191,6 +191,51 @@ describe('AuthContextProvider — login onError redirect handling', () => {
   });
 });
 
+describe('AuthContextProvider — login success navigation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    sessionStorage.clear();
+    window.history.replaceState({}, '', '/login');
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    sessionStorage.clear();
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('navigates a regular login to a safe deep link', () => {
+    jest.useFakeTimers();
+    window.history.replaceState({}, '', '/login?redirect_to=%2Frecipes%2Frecipe-1');
+    renderProvider();
+
+    act(() => {
+      mockCapturedLoginOptions.onSuccess({
+        user: { id: '1', role: 'USER' },
+        token: 'token',
+      });
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith('/recipes/recipe-1', { replace: true });
+  });
+
+  it('routes a pending second factor to the public 2FA screen', () => {
+    renderProvider();
+
+    act(() => {
+      mockCapturedLoginOptions.onSuccess({
+        twoFAPending: true,
+        tempToken: 'temporary+token',
+      });
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith('/login/2fa?tempToken=temporary%2Btoken', {
+      replace: true,
+    });
+  });
+});
+
 describe('AuthContextProvider — logout onSuccess/onError handling', () => {
   const mockSetTokenHeader = jest.requireMock('librechat-data-provider').setTokenHeader;
 

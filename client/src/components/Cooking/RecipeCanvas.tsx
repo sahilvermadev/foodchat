@@ -17,14 +17,15 @@ import {
 } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { NotificationSeverity } from '~/common';
-import { code, a as standardA, p, img } from '~/components/Chat/Messages/Content/MarkdownComponents';
+import { code, a as StandardA, p, img } from '~/components/Chat/Messages/Content/MarkdownComponents';
 import { Citation, CompositeCitation, HighlightedText } from '~/components/Web/Citation';
 import { MCPUIResource, MCPUIResourceCarousel, mcpUIResourcePlugin } from '~/components/MCPUIResource';
 import { CodeBlockProvider } from '~/Providers';
 import { unicodeCitation } from '~/components/Web';
 import { langSubset } from '~/utils';
 import RecipeMetrics from './Metrics';
-import { recipeMarkdownDisplay } from './recipe';
+import StructuredIngredients, { hasDisplayableIngredients } from './StructuredIngredients';
+import { recipeMarkdownDisplay, stripIngredientsSection } from './recipe';
 
 // KitchenTimer Component
 function KitchenTimer({ seconds }: { seconds: number }) {
@@ -86,7 +87,7 @@ function KitchenTimer({ seconds }: { seconds: number }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-2 px-3 py-1 mx-1.5 rounded-full text-xs font-semibold select-none border transition-all duration-300 ${
+      className={`rekky-timer inline-flex items-center gap-2 px-3 py-1 mx-1.5 rounded-full text-xs font-semibold select-none border transition-all duration-300 ${
         isCompleted
           ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400 animate-pulse'
           : isRunning
@@ -106,7 +107,7 @@ function KitchenTimer({ seconds }: { seconds: number }) {
         ></span>
       </span>
       
-      <span className="font-mono text-sm leading-none">{timeString}</span>
+      <span className="text-sm leading-none">{timeString}</span>
 
       <button
         type="button"
@@ -138,7 +139,7 @@ const customA: React.ElementType = React.memo(function CustomAnchor(props: any) 
       return <KitchenTimer seconds={seconds} />;
     }
   }
-  return <standardA {...props} />;
+  return <StandardA {...props} />;
 });
 
 type RecipeCanvasProps = {
@@ -218,21 +219,27 @@ export default function RecipeCanvas({
   }, [draft, markdown]);
 
   const documentParts = useMemo(() => recipeMarkdownDisplay(documentMarkdown, draft?.recipe.title), [documentMarkdown, draft?.recipe.title]);
+  const hasStructuredIngredients = draft?.recipe
+    ? hasDisplayableIngredients(draft.recipe.ingredients)
+    : false;
 
   const processedBody = useMemo(() => {
     if (!documentParts.body) {
       return '';
     }
+    const body = hasStructuredIngredients
+      ? stripIngredientsSection(documentParts.body)
+      : documentParts.body;
     const formatSeconds = (secStr: string) => {
       const totalSec = parseInt(secStr, 10);
       const m = Math.floor(totalSec / 60);
       const s = totalSec % 60;
       return `${m}:${s.toString().padStart(2, '0')}`;
     };
-    return documentParts.body.replace(/\[timer:(\d+)\]/g, (match, seconds) => {
+    return body.replace(/\[timer:(\d+)\]/g, (match, seconds) => {
       return `[⏱️ ${formatSeconds(seconds)}](#timer-${seconds})`;
     });
-  }, [documentParts.body]);
+  }, [documentParts.body, hasStructuredIngredients]);
 
   const rehypePlugins = useMemo(
     () => [
@@ -329,36 +336,14 @@ export default function RecipeCanvas({
   };
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-primary-alt text-text-primary">
+    <section className="rekky-ui rekky-recipe-surface flex min-h-0 min-w-0 flex-1 flex-col bg-surface-primary-alt text-text-primary">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7 lg:px-10">
-        <article className="mx-auto min-h-full max-w-[56rem] rounded-lg border border-border-light bg-surface-primary shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)]">
+        <article className="mx-auto min-h-full max-w-[68rem] rounded-lg border border-border-light bg-surface-primary shadow-none">
           {documentMarkdown ? (
-            <header className="border-b border-border-light px-5 py-6 sm:px-8 lg:px-10">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  {documentParts.title ? (
-                    <h1 className="font-serif text-3xl font-normal leading-tight tracking-normal text-text-primary sm:text-4xl">
-                      {documentParts.title}
-                    </h1>
-                  ) : null}
-                  {draft ? (
-                    <p className="mt-2 text-xs uppercase tracking-wide text-text-secondary">
-                      {localize(documentTypeKey(draft))}
-                    </p>
-                  ) : null}
-                  {savedRecipe?.categorizationStatus === 'pending' ? (
-                    <p className="mt-2 text-xs text-text-secondary">
-                      {localize('com_recipes_categorizing')}
-                    </p>
-                  ) : null}
-                  {isPreparingDraft ? (
-                    <p className="mt-2 text-xs text-text-secondary">
-                      {localize('com_cooking_updating_canvas')}
-                    </p>
-                  ) : null}
-                </div>
+            <header className="border-b border-border-light px-5 py-7 sm:px-8 sm:py-9 lg:px-12">
+              <div className="flex flex-col gap-5">
                 {canSave ? (
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                     <TooltipAnchor
                       description={localize('com_cooking_copy_markdown')}
                       render={
@@ -388,12 +373,37 @@ export default function RecipeCanvas({
                     </Button>
                   </div>
                 ) : null}
+                <div className="min-w-0">
+                  {documentParts.title ? (
+                    <h1 className="rekky-title text-text-primary">
+                      {documentParts.title}
+                    </h1>
+                  ) : null}
+                  {draft ? (
+                    <p className="rekky-meta mt-3 text-text-secondary">
+                      {localize(documentTypeKey(draft))}
+                    </p>
+                  ) : null}
+                  {savedRecipe?.categorizationStatus === 'pending' ? (
+                    <p className="rekky-meta mt-2 text-text-secondary">
+                      {localize('com_recipes_categorizing')}
+                    </p>
+                  ) : null}
+                  {isPreparingDraft ? (
+                    <p className="rekky-meta mt-2 text-text-secondary">
+                      {localize('com_cooking_updating_canvas')}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </header>
           ) : null}
           {documentMarkdown ? (
-            <div className="px-5 py-6 sm:px-8 sm:py-7 lg:px-10">
+            <div className="px-5 py-7 sm:px-8 sm:py-9 lg:px-12">
               <RecipeMetrics metrics={documentParts.metrics} />
+              {hasStructuredIngredients ? (
+                <StructuredIngredients ingredients={draft?.recipe.ingredients ?? []} />
+              ) : null}
               <div className="cooking-recipe-markdown markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
                 <CodeBlockProvider>
                   <ReactMarkdown

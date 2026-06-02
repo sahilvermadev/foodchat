@@ -27,7 +27,13 @@ import {
   useRefreshTokenMutation,
 } from '~/data-provider';
 import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
-import { SESSION_KEY, isSafeRedirect, getPostLoginRedirect } from '~/utils';
+import {
+  SESSION_KEY,
+  isSafeRedirect,
+  buildLoginRetryRedirect,
+  buildTwoFactorRedirect,
+  resolvePostLoginRedirect,
+} from '~/utils';
 import useTimeout from './useTimeout';
 import store from '~/store';
 
@@ -80,15 +86,10 @@ const AuthContextProvider = ({
         }
 
         const searchParams = new URLSearchParams(window.location.search);
-        const postLoginRedirect = getPostLoginRedirect(searchParams);
-
         const logoutRedirect = logoutRedirectRef.current;
         logoutRedirectRef.current = undefined;
 
-        const finalRedirect =
-          logoutRedirect ??
-          postLoginRedirect ??
-          (redirect && isSafeRedirect(redirect) ? redirect : null);
+        const finalRedirect = logoutRedirect ?? resolvePostLoginRedirect(searchParams, redirect);
 
         if (finalRedirect == null) {
           return;
@@ -104,7 +105,7 @@ const AuthContextProvider = ({
     onSuccess: (data: t.TLoginResponse) => {
       const { user, token, twoFAPending, tempToken } = data;
       if (twoFAPending) {
-        navigate(`/login/2fa?tempToken=${tempToken}`, { replace: true });
+        navigate(buildTwoFactorRedirect(tempToken), { replace: true });
         return;
       }
       setError(undefined);
@@ -113,15 +114,9 @@ const AuthContextProvider = ({
     onError: (error: TResError | unknown) => {
       const resError = error as TResError;
       doSetError(resError.message);
-      // Preserve a valid redirect_to across login failures so the deep link survives retries.
-      // Cannot use buildLoginRedirectUrl() here — it reads the current pathname (already /login)
-      // and would return plain /login, dropping the redirect_to destination.
-      const redirectTo = new URLSearchParams(window.location.search).get('redirect_to');
-      const loginPath =
-        redirectTo && isSafeRedirect(redirectTo)
-          ? `/login?redirect_to=${encodeURIComponent(redirectTo)}`
-          : '/login';
-      navigate(loginPath, { replace: true });
+      navigate(buildLoginRetryRedirect(new URLSearchParams(window.location.search)), {
+        replace: true,
+      });
     },
   });
   const logoutUser = useLogoutUserMutation({

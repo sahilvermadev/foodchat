@@ -2,7 +2,7 @@
 
 Status: Proposed
 Date: May 27, 2026
-Product: Mise cooking assistant, presented to users as Samwise
+Product: Rekky cooking assistant, presented to users as Samwise
 Primary concern: conversational quality, situational judgment, and reliable tool use
 
 ## Problem Statement

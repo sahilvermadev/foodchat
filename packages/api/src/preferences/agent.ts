@@ -69,7 +69,7 @@ const defaultBaseUrl = 'https://openrouter.ai/api/v1';
 const defaultModel = 'google/gemini-3.1-flash-lite';
 const defaultReverseGeocodeUrl = 'https://nominatim.openstreetmap.org/reverse';
 
-const preferencesSystemInstructions = `You are Mise's preferences agent.
+const preferencesSystemInstructions = `You are Rekky's preferences agent.
 
 Your job is to build a durable cooking profile with the user. Ask intelligent, specific questions and save clear answers automatically through tools.
 
@@ -94,7 +94,7 @@ Conversation rules:
 - Do not save one-off recipe requests as preferences.
 - Do not save active/current/possible cooking projects, shopping considerations, or curiosity from the current chat as durable preferences.
 - When the user likes learning through projects, save the stable pattern, e.g. "Enjoys occasional long kitchen projects for technique mastery"; do not save each project such as sourdough, khameeri roti, souffle, crepes, chhach, or a tool they are considering.
-- Do not save "interested in learning...", "currently working on...", "attempting to master...", or "considering buying..." facts unless the user explicitly asks Mise to remember that exact long-term goal.
+- Do not save "interested in learning...", "currently working on...", "attempting to master...", or "considering buying..." facts unless the user explicitly asks Rekky to remember that exact long-term goal.
 - Do not save guesses. If the user is ambiguous, ask a clarifying question.
 - Do not save sensitive personal data unless the user clearly volunteered it and it is useful for cooking support.
 - Never remove or weaken Safety preferences unless the user explicitly confirms that the restriction is no longer true.
@@ -380,7 +380,7 @@ async function reverseGeocodeLocation(
       signal: controller.signal,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'Mise/0.8 preferences location resolver',
+        'User-Agent': 'Rekky/0.8 preferences location resolver',
       },
     });
     if (!response.ok) {
@@ -625,12 +625,18 @@ function getDefaultSuggestions(complete: boolean): Array<{ text: string; display
   return complete
     ? [
         { text: 'Can you summarize my current cooking profile?', display: 'Summarize my profile' },
-        { text: 'How do these preferences personalize my recipes?', display: 'How personalization works' },
-        { text: 'I am all done refining my preferences. Let\'s go back to cooking!', display: 'Done, let\'s cook!' }
+        {
+          text: 'How do these preferences personalize my recipes?',
+          display: 'How personalization works',
+        },
+        {
+          text: "I am all done refining my preferences. Let's go back to cooking!",
+          display: "Done, let's cook!",
+        },
       ]
     : [
         { text: 'I have no food allergies or safety restrictions.', display: 'No allergies' },
-        { text: 'I follow a vegetarian diet.', display: 'Vegetarian' }
+        { text: 'I follow a vegetarian diet.', display: 'Vegetarian' },
       ];
 }
 
@@ -697,14 +703,14 @@ export async function runPreferencesChat(
     if (!assistant.tool_calls?.length) {
       const parsed = parseAssistantResponse(assistant.content);
       const isCompleteStructurally = preferenceProfileStatus(preferences.markdown).complete;
-      const complete = parsed.complete ?? isCompleteStructurally;
+      const profileComplete = parsed.complete ?? isCompleteStructurally;
       return {
         preferences,
         preferencesChanged,
         changedHeadings: normalizeChangedHeadings(changedHeadings),
         text: parsed.text,
-        suggestions: parsed.suggestions || getDefaultSuggestions(complete),
-        complete,
+        suggestions: parsed.suggestions || getDefaultSuggestions(profileComplete),
+        complete: profileComplete,
       };
     }
 
@@ -726,13 +732,13 @@ export async function runPreferencesChat(
     ? 'Your cooking profile is complete enough to personalize recipes now.'
     : 'I updated what I could. What else should I know about how you cook?';
   const parsed = parseAssistantResponse(defaultText);
-  const complete = parsed.complete ?? isCompleteStructurally;
+  const profileComplete = parsed.complete ?? isCompleteStructurally;
   return {
     preferences,
     preferencesChanged,
     changedHeadings: normalizeChangedHeadings(changedHeadings),
     text: parsed.text,
-    suggestions: parsed.suggestions || getDefaultSuggestions(complete),
-    complete,
+    suggestions: parsed.suggestions || getDefaultSuggestions(profileComplete),
+    complete: profileComplete,
   };
 }

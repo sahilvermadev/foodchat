@@ -122,8 +122,8 @@ function SocialLoginRender({
       <>
         {startupConfig.emailLoginEnabled && (
           <>
-            <div className="relative mt-6 flex w-full items-center justify-center border border-t border-gray-300 uppercase dark:border-gray-600">
-              <div className="absolute bg-white px-3 text-xs text-black dark:bg-gray-900 dark:text-white">
+            <div className="relative mt-6 flex w-full items-center justify-center border border-t border-[var(--rekky-linen)] uppercase dark:border-white/10">
+              <div className="absolute bg-[var(--rekky-cream-raised)] px-3 text-xs text-[var(--rekky-umber)] dark:bg-[var(--rekky-plum-900)] dark:text-[var(--rekky-cream-muted)]">
                 Or
               </div>
             </div>

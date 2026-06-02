@@ -1,7 +1,10 @@
 import {
+  buildLoginRetryRedirect,
+  buildTwoFactorRedirect,
   persistRedirectToSession,
   getPostLoginRedirect,
   isSafeRedirect,
+  resolvePostLoginRedirect,
   SESSION_KEY,
 } from '../redirect';
 
@@ -128,32 +131,52 @@ describe('getPostLoginRedirect', () => {
 });
 
 describe('login error redirect_to preservation (AuthContext onError pattern)', () => {
-  /** Mirrors the logic in AuthContext.tsx loginUser.onError */
-  function buildLoginErrorPath(search: string): string {
-    const redirectTo = new URLSearchParams(search).get('redirect_to');
-    return redirectTo && isSafeRedirect(redirectTo)
-      ? `/login?redirect_to=${encodeURIComponent(redirectTo)}`
-      : '/login';
-  }
-
   it('preserves a valid redirect_to across login failure', () => {
-    const result = buildLoginErrorPath('?redirect_to=%2Fc%2Fnew');
+    const result = buildLoginRetryRedirect(new URLSearchParams('?redirect_to=%2Fc%2Fnew'));
     expect(result).toBe('/login?redirect_to=%2Fc%2Fnew');
   });
 
   it('drops an open-redirect attempt (absolute URL)', () => {
-    const result = buildLoginErrorPath('?redirect_to=https%3A%2F%2Fevil.com');
+    const result = buildLoginRetryRedirect(
+      new URLSearchParams('?redirect_to=https%3A%2F%2Fevil.com'),
+    );
     expect(result).toBe('/login');
   });
 
   it('drops a /login redirect_to to prevent loops', () => {
-    const result = buildLoginErrorPath('?redirect_to=%2Flogin');
+    const result = buildLoginRetryRedirect(new URLSearchParams('?redirect_to=%2Flogin'));
     expect(result).toBe('/login');
   });
 
   it('returns plain /login when no redirect_to param exists', () => {
-    const result = buildLoginErrorPath('');
+    const result = buildLoginRetryRedirect(new URLSearchParams());
     expect(result).toBe('/login');
+  });
+});
+
+describe('resolvePostLoginRedirect', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it('uses a valid deep link before the fallback', () => {
+    expect(
+      resolvePostLoginRedirect(new URLSearchParams('redirect_to=%2Frecipes%2Frecipe-1'), '/cook'),
+    ).toBe('/recipes/recipe-1');
+  });
+
+  it('uses a safe fallback when the deep link is unsafe', () => {
+    expect(
+      resolvePostLoginRedirect(new URLSearchParams('redirect_to=https%3A%2F%2Fevil.com'), '/cook'),
+    ).toBe('/cook');
+  });
+});
+
+describe('buildTwoFactorRedirect', () => {
+  it('encodes the temporary token', () => {
+    expect(buildTwoFactorRedirect('token+with/slash')).toBe(
+      '/login/2fa?tempToken=token%2Bwith%2Fslash',
+    );
   });
 });
 

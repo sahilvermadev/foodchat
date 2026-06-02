@@ -26,7 +26,7 @@ function Footer({ className }: { className?: string }) {
   const mainContentParts = (
     typeof config?.customFooter === 'string'
       ? config.customFooter
-      : 'Mise'
+      : 'Rekky'
   ).split('|');
 
   useEffect(() => {

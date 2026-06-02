@@ -12,7 +12,7 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/dev.sh [--build]
 
-Starts the local Mise app:
+Starts the local Rekky app:
   - backend:  http://localhost:3080
   - frontend: http://localhost:3090
 
@@ -89,7 +89,7 @@ run_named() {
   PIDS+=("$!")
 }
 
-echo "Starting Mise dev servers..."
+echo "Starting Rekky dev servers..."
 echo "Backend:  http://localhost:3080"
 echo "Frontend: http://localhost:3090"
 echo

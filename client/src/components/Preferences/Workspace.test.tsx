@@ -28,7 +28,7 @@ jest.mock('~/hooks', () => ({
       com_preferences_detail_label: '{section} detail {number}',
       com_preferences_detail_placeholder: 'Add a detail',
       com_preferences_edit: 'Edit preferences',
-      com_preferences_preview_profile: 'Ask Mise to refine',
+      com_preferences_preview_profile: 'Ask Rekky to refine',
       com_preferences_section_complete: 'Complete',
       com_preferences_section_missing: 'Add more',
       com_preferences_kitchen_group_appliances: 'Appliances',
@@ -36,7 +36,7 @@ jest.mock('~/hooks', () => ({
       com_preferences_kitchen_group_tools: 'Tools',
       com_preferences_kitchen_group_unavailable: 'Unavailable',
       com_preferences_more_count: '+{count} more',
-      com_preferences_review_action: 'Ask Mise to improve this profile',
+      com_preferences_review_action: 'Ask Rekky to improve this profile',
       com_preferences_remove_detail: 'Remove detail',
       com_preferences_save_changes: 'Save changes',
       com_preferences_specialty_add_label: 'Add',
@@ -76,6 +76,10 @@ jest.mock('~/data-provider', () => ({
   }),
 }));
 
+jest.mock('~/components/ui', () => ({
+  ProtectedImage: (props: React.ImgHTMLAttributes<HTMLImageElement>) => <img {...props} />,
+}));
+
 describe('PreferencesWorkspace', () => {
   beforeEach(() => {
     mockMarkdown = [
@@ -112,7 +116,12 @@ describe('PreferencesWorkspace', () => {
       }),
     );
     mockChatMutate.mockImplementation((_variables, options) =>
-      options?.onSuccess?.({ text: 'Profile reviewed.', changedHeadings: [], suggestions: [], complete: false }),
+      options?.onSuccess?.({
+        text: 'Profile reviewed.',
+        changedHeadings: [],
+        suggestions: [],
+        complete: false,
+      }),
     );
   });
 
@@ -122,7 +131,7 @@ describe('PreferencesWorkspace', () => {
     expect(screen.getByText('Your cooking profile')).toBeInTheDocument();
     expect(screen.queryByText('At a glance')).not.toBeInTheDocument();
     expect(
-      screen.queryByText('Teach Mise how you cook, shop, and improvise.'),
+      screen.queryByText('Teach Rekky how you cook, shop, and improvise.'),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText('Specialty Ingredients').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Kitchen').length).toBeGreaterThan(0);
@@ -313,10 +322,10 @@ describe('PreferencesWorkspace', () => {
 
     const safetyCard = screen.getByText('Safety').closest('article');
     expect(safetyCard).not.toBeNull();
-    fireEvent.click(within(safetyCard as HTMLElement).getByText('Edit'));
+    fireEvent.click(within(safetyCard as HTMLElement).getByRole('button', { name: 'Edit Safety' }));
 
     expect(screen.getByText('Peanuts')).toBeInTheDocument();
-    expect(screen.getByText('Save Changes')).toBeInTheDocument();
+    expect(screen.getByText('Save changes')).toBeInTheDocument();
   });
 
   it('edits profile details in place while persisting markdown', () => {
@@ -324,11 +333,11 @@ describe('PreferencesWorkspace', () => {
 
     const dietCard = screen.getByText('Diet').closest('article');
     expect(dietCard).not.toBeNull();
-    fireEvent.click(within(dietCard as HTMLElement).getByText('Edit'));
+    fireEvent.click(within(dietCard as HTMLElement).getByRole('button', { name: 'Edit Diet' }));
 
     // Toggle Vegan preset
     fireEvent.click(screen.getByText('Vegan'));
-    fireEvent.click(screen.getByText('Save Changes'));
+    fireEvent.click(screen.getByText('Save changes'));
 
     expect(mockUpdateMutate).toHaveBeenLastCalledWith(
       {
@@ -356,7 +365,7 @@ describe('PreferencesWorkspace', () => {
   it('opens the agent dialog from the profile preview action', () => {
     render(<PreferencesWorkspace />);
 
-    fireEvent.click(screen.getByText('Ask Mise to refine'));
+    fireEvent.click(screen.getByText('Ask Rekky to refine'));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });

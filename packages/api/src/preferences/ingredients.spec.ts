@@ -87,6 +87,10 @@ describe('specialty ingredient catalog', () => {
       imageUrl: '/api/preferences/ingredients/ingredient-1/image?v=1767225600000&variant=thumbnail',
     });
     expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockFindOne).toHaveBeenCalledWith({
+      imageStyle: 'mise-ingredient-v1',
+      $or: [{ normalizedName: 'gochujang' }, { aliases: 'gochujang' }],
+    });
   });
 
   test('reuses a catalog ingredient created by a concurrent request', async () => {
@@ -146,6 +150,43 @@ describe('specialty ingredient catalog', () => {
     await listSpecialtyIngredients('');
 
     expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
+    expect(mockFind).toHaveBeenCalledWith({ imageStyle: 'mise-ingredient-v1' });
+  });
+
+  test('lists persisted Mise catalog records without generating duplicate illustrations', async () => {
+    mockFind.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([
+            {
+              _id: { toString: () => 'legacy-ingredient' },
+              canonicalName: 'gochujang',
+              normalizedName: 'gochujang',
+              displayName: 'Gochujang',
+              category: 'Condiments & Sauces',
+              aliases: ['gochujang paste'],
+              imageStatus: 'ready',
+              imageData: Buffer.from('stored-image'),
+              imageStyle: 'mise-ingredient-v1',
+              createdAt: new Date('2026-01-01T00:00:00.000Z'),
+              updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+            },
+          ]),
+        }),
+      }),
+    });
+
+    await expect(listSpecialtyIngredients('')).resolves.toMatchObject({
+      ingredients: [
+        {
+          _id: 'legacy-ingredient',
+          imageStyle: 'mise-ingredient-v1',
+          imageStatus: 'ready',
+        },
+      ],
+    });
+    expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 
   test('claims a new illustration atomically before generation starts', async () => {

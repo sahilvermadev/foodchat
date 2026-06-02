@@ -140,7 +140,7 @@ export default function CookingWorkspace({
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-presentation lg:flex-row">
+    <div className="rekky-ui flex h-full min-h-0 w-full flex-col overflow-hidden bg-presentation lg:flex-row">
       {hasRecipeCanvas && (
         <div className="flex shrink-0 border-b border-border-light bg-surface-primary-alt lg:hidden">
           <button
@@ -210,10 +210,10 @@ export default function CookingWorkspace({
                       type="button"
                       aria-current={isSelected ? 'page' : undefined}
                       onClick={() => !isSelected && selectDocument.mutate(document._id)}
-                      className="max-w-56 truncate px-3 py-2 text-sm text-text-primary"
+                      className="max-w-56 truncate px-3 py-2 font-sans text-sm text-text-primary"
                     >
                       {document.recipe.title}
-                      <span className="ml-2 text-xs text-text-secondary">
+                      <span className="rekky-meta ml-2 text-text-secondary">
                         {localize(documentTypeKey(document.documentType))}
                       </span>
                     </button>

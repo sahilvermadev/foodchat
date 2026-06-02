@@ -340,23 +340,21 @@ function KitchenPreferenceSummary({ lines, localize }: { lines: string[]; locali
 
         const hiddenCount = group.items.length - visible.length;
         return (
-          <div key={group.labelKey}>
-            <h3 className="mb-1 text-xs font-semibold uppercase tracking-normal text-text-secondary">
-              {localize(group.labelKey)}
-            </h3>
-            <div className="flex flex-wrap gap-1.5">
+          <div key={group.labelKey} className="pl-1">
+            <h3 className="rekky-meta mb-1 text-text-secondary">{localize(group.labelKey)}</h3>
+            <div className="border-border-light/60 space-y-1 border-l pl-4">
               {visible.map((item) => (
-                <span
+                <p
                   key={`${group.labelKey}:${item}`}
-                  className="rounded-full border border-border-light bg-surface-secondary px-2.5 py-1 text-xs leading-4 text-text-secondary"
+                  className="text-sm leading-5 text-text-secondary"
                 >
                   {item}
-                </span>
+                </p>
               ))}
               {hiddenCount > 0 && (
-                <span className="rounded-full border border-border-light bg-surface-secondary px-2.5 py-1 text-xs leading-4 text-text-secondary">
+                <p className="text-text-secondary/80 text-xs leading-4">
                   {localize('com_preferences_more_count').replace('{count}', String(hiddenCount))}
-                </span>
+                </p>
               )}
             </div>
           </div>
@@ -384,12 +382,13 @@ function DietSafetyEditor({
   lines: string[];
   onChange: (nextLines: string[]) => void;
 }) {
+  const localize = useLocalize();
   const isSafety = heading === 'Safety';
   const presets = isSafety ? ALLERGEN_PRESETS : DIET_PRESETS;
 
   const activeNames = useMemo(() => {
     const cleaned = lines.map(cleanPreferenceLine).map((l) => l.toLowerCase());
-    return new Set(
+    return new Set<string>(
       presets
         .filter((p) => cleaned.some((c) => c.includes(p.name.toLowerCase())))
         .map((p) => p.name),
@@ -449,8 +448,12 @@ function DietSafetyEditor({
   return (
     <div className="mt-4 space-y-4">
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-          {isSafety ? 'Select Allergies' : 'Select Diet Profiles'}
+        <h3 className="rekky-meta mb-2 text-text-secondary">
+          {localize(
+            isSafety
+              ? 'com_preferences_editor_select_allergies'
+              : 'com_preferences_editor_select_diets',
+          )}
         </h3>
         <div className="flex flex-wrap gap-2">
           {presets.map((p) => {
@@ -460,12 +463,12 @@ function DietSafetyEditor({
                 key={p.name}
                 type="button"
                 className={cn(
-                  'rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 border',
+                  'rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-200',
                   active
                     ? isSafety
-                      ? 'bg-red-500/10 border-red-500 text-red-700 dark:text-red-400 shadow-[0_0_8px_rgba(239,68,68,0.2)]'
-                      : 'bg-green-500/10 border-green-500 text-green-700 dark:text-green-400 shadow-[0_0_8px_rgba(34,197,94,0.2)]'
-                    : 'bg-surface-primary border-border-light text-text-secondary hover:border-border-medium hover:text-text-primary',
+                      ? 'border-red-500 bg-red-500/10 text-red-700 shadow-[0_0_8px_rgba(239,68,68,0.2)] dark:text-red-400'
+                      : 'border-green-500 bg-green-500/10 text-green-700 shadow-[0_0_8px_rgba(34,197,94,0.2)] dark:text-green-400'
+                    : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:text-text-primary',
                 )}
                 onClick={() => togglePreset(p.name)}
               >
@@ -477,8 +480,8 @@ function DietSafetyEditor({
       </div>
 
       <div className="border-t border-border-light pt-3">
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-          Custom Restrictions
+        <h3 className="rekky-meta mb-2 text-text-secondary">
+          {localize('com_preferences_editor_custom_restrictions')}
         </h3>
         <div className="mb-2 flex flex-wrap gap-1.5">
           {customTags.map((tag) => (
@@ -501,7 +504,11 @@ function DietSafetyEditor({
           <input
             value={inputVal}
             className="min-w-0 flex-1 rounded-md border border-border-light bg-surface-secondary px-2.5 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
-            placeholder={isSafety ? 'e.g., Pine nuts, Cilantro...' : 'e.g., Low-sodium, Sugar-free...'}
+            placeholder={localize(
+              isSafety
+                ? 'com_preferences_editor_allergies_placeholder'
+                : 'com_preferences_editor_diets_placeholder',
+            )}
             onChange={(e) => setInputVal(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -515,7 +522,7 @@ function DietSafetyEditor({
             className="rounded-md border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary"
             onClick={addCustomTag}
           >
-            Add
+            {localize('com_preferences_editor_add')}
           </button>
         </div>
       </div>
@@ -600,10 +607,8 @@ function KitchenCheckboxEditor({
   return (
     <div className="mt-4 space-y-4">
       {Object.entries(KITCHEN_PRESETS).map(([category, items]) => (
-        <div key={category} className="border-b border-border-light last:border-b-0 pb-3 last:pb-0">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary capitalize">
-            {category}
-          </h3>
+        <div key={category} className="border-b border-border-light pb-3 last:border-b-0 last:pb-0">
+          <h3 className="rekky-meta mb-2 text-text-secondary">{category}</h3>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {items.map((item) => {
               const active = activeItems.has(item.name.toLowerCase());
@@ -645,6 +650,7 @@ function CookingLevelSlider({
   lines: string[];
   onChange: (nextLines: string[]) => void;
 }) {
+  const localize = useLocalize();
   const currentLevel = useMemo(() => {
     const raw = lines[0]?.toLowerCase() ?? '';
     const found = COOKING_LEVELS.find((cl) => raw.includes(cl.level.toLowerCase()));
@@ -657,8 +663,8 @@ function CookingLevelSlider({
 
   return (
     <div className="mt-4 space-y-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-        Select Cooking Level
+      <h3 className="rekky-meta text-text-secondary">
+        {localize('com_preferences_editor_select_level')}
       </h3>
       <div className="grid gap-2 sm:grid-cols-2">
         {COOKING_LEVELS.map((cl) => {
@@ -670,7 +676,7 @@ function CookingLevelSlider({
               className={cn(
                 'flex flex-col items-start rounded-lg border p-3 text-left transition-all duration-200',
                 active
-                  ? 'border-amber-500 bg-amber-500/10 text-text-primary shadow-[0_0_8px_rgba(245,158,11,0.2)] scale-[1.01]'
+                  ? 'scale-[1.01] border-amber-500 bg-amber-500/10 text-text-primary shadow-[0_0_8px_rgba(245,158,11,0.2)]'
                   : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:text-text-primary',
               )}
               onClick={() => selectLevel(cl.level)}
@@ -694,6 +700,7 @@ function HouseholdCounterEditor({
   lines: string[];
   onChange: (nextLines: string[]) => void;
 }) {
+  const localize = useLocalize();
   const counts = useMemo(() => {
     let adults = 1;
     let kids = 0;
@@ -746,14 +753,18 @@ function HouseholdCounterEditor({
 
   return (
     <div className="mt-4 space-y-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-        Household Size
+      <h3 className="rekky-meta text-text-secondary">
+        {localize('com_preferences_editor_household_size')}
       </h3>
       <div className="divide-y divide-border-light rounded-lg border border-border-light bg-surface-primary">
         {[
-          { key: 'adults', label: 'Adults', count: counts.adults },
-          { key: 'kids', label: 'Children', count: counts.kids },
-          { key: 'teens', label: 'Teenagers', count: counts.teens },
+          { key: 'adults', label: localize('com_preferences_editor_adults'), count: counts.adults },
+          { key: 'kids', label: localize('com_preferences_editor_children'), count: counts.kids },
+          {
+            key: 'teens',
+            label: localize('com_preferences_editor_teenagers'),
+            count: counts.teens,
+          },
         ].map((item) => (
           <div key={item.key} className="flex items-center justify-between p-3">
             <span className="text-sm font-medium text-text-primary">{item.label}</span>
@@ -789,10 +800,15 @@ function LocationEditor({
   lines: string[];
   onChange: (nextLines: string[]) => void;
 }) {
+  const localize = useLocalize();
   const [isDetecting, setIsDetecting] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const data = useMemo(() => {
+  const data = useMemo<{
+    location: string;
+    timezone: string;
+    system: 'metric' | 'imperial';
+  }>(() => {
     let location = '';
     let timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     let system: 'metric' | 'imperial' = 'metric';
@@ -875,14 +891,18 @@ function LocationEditor({
           ) : (
             <MapPin className="size-4" />
           )}
-          {isDetecting ? 'Detecting Location...' : success ? 'Location Detected! ✓' : '📍 Detect My Location'}
+          {isDetecting
+            ? localize('com_preferences_editor_location_detecting')
+            : success
+              ? localize('com_preferences_editor_location_detected')
+              : localize('com_preferences_editor_location_detect')}
         </button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-secondary">
-            Measurement System
+          <label className="rekky-meta mb-1 block text-text-secondary">
+            {localize('com_preferences_editor_measurement_system')}
           </label>
           <div className="flex rounded-lg border border-border-light bg-surface-primary p-0.5">
             {['metric', 'imperial'].map((sys) => {
@@ -893,7 +913,9 @@ function LocationEditor({
                   type="button"
                   className={cn(
                     'flex-1 rounded-md py-1.5 text-xs font-semibold capitalize transition-all',
-                    active ? 'bg-amber-500 text-white shadow-sm' : 'text-text-secondary hover:text-text-primary',
+                    active
+                      ? 'bg-amber-500 text-white shadow-sm'
+                      : 'text-text-secondary hover:text-text-primary',
                   )}
                   onClick={() => updateField('system', sys)}
                 >
@@ -905,8 +927,11 @@ function LocationEditor({
         </div>
 
         <div>
-          <label htmlFor="location-timezone-select" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-secondary">
-            Timezone
+          <label
+            htmlFor="location-timezone-select"
+            className="rekky-meta mb-1 block text-text-secondary"
+          >
+            {localize('com_preferences_editor_timezone')}
           </label>
           <input
             id="location-timezone-select"
@@ -918,14 +943,14 @@ function LocationEditor({
       </div>
 
       <div>
-        <label htmlFor="location-city-input" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-secondary">
-          Location Coords or City
+        <label htmlFor="location-city-input" className="rekky-meta mb-1 block text-text-secondary">
+          {localize('com_preferences_editor_location_label')}
         </label>
         <input
           id="location-city-input"
           value={data.location}
           className="w-full rounded-lg border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
-          placeholder="e.g. London, UK or Coordinates"
+          placeholder={localize('com_preferences_editor_location_placeholder')}
           onChange={(e) => updateField('location', e.target.value)}
         />
       </div>
@@ -942,6 +967,7 @@ function AutocompleteTagEditor({
   lines: string[];
   onChange: (nextLines: string[]) => void;
 }) {
+  const localize = useLocalize();
   const [inputVal, setInputVal] = useState('');
 
   const tags = useMemo(() => {
@@ -979,8 +1005,8 @@ function AutocompleteTagEditor({
   return (
     <div className="mt-4 space-y-3">
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-          Active Toggles
+        <h3 className="rekky-meta mb-2 text-text-secondary">
+          {localize('com_preferences_editor_active_toggles')}
         </h3>
         <div className="flex flex-wrap gap-1.5">
           {tags.map((tag) => (
@@ -998,7 +1024,11 @@ function AutocompleteTagEditor({
               </button>
             </span>
           ))}
-          {tags.length === 0 && <p className="text-xs italic text-text-secondary">No tags added yet</p>}
+          {tags.length === 0 && (
+            <p className="text-xs italic text-text-secondary">
+              {localize('com_preferences_editor_no_tags')}
+            </p>
+          )}
         </div>
       </div>
 
@@ -1006,7 +1036,10 @@ function AutocompleteTagEditor({
         <input
           value={inputVal}
           className="min-w-0 flex-1 rounded-md border border-border-light bg-surface-secondary px-2.5 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
-          placeholder={`Type to search or add custom ${heading.toLowerCase()}...`}
+          placeholder={localize('com_preferences_editor_tag_placeholder').replace(
+            '{heading}',
+            heading.toLowerCase(),
+          )}
           onChange={(e) => setInputVal(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
@@ -1020,21 +1053,21 @@ function AutocompleteTagEditor({
           className="rounded-md border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary"
           onClick={() => addTag(inputVal)}
         >
-          Add
+          {localize('com_preferences_editor_add')}
         </button>
       </div>
 
       {suggestions.length > 0 && (
         <div>
-          <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-            Suggestions
+          <h4 className="rekky-meta mb-1.5 text-text-secondary">
+            {localize('com_preferences_editor_suggestions')}
           </h4>
           <div className="flex flex-wrap gap-1.5">
             {suggestions.slice(0, 8).map((s) => (
               <button
                 key={s}
                 type="button"
-                className="rounded-full border border-border-light bg-surface-primary px-2.5 py-1 text-xs text-text-secondary hover:border-border-medium hover:text-text-primary transition-all"
+                className="rounded-full border border-border-light bg-surface-primary px-2.5 py-1 text-xs text-text-secondary transition-all hover:border-border-medium hover:text-text-primary"
                 onClick={() => addTag(s)}
               >
                 {s}
@@ -1084,45 +1117,24 @@ function PreferenceCard({
   }
 
   return (
-    <article
-      className="w-full min-w-0 rounded-lg border border-border-light bg-surface-primary p-4 shadow-sm hover:border-border-medium hover:scale-[1.005] transition-all duration-200"
-    >
-      <div className="flex items-start gap-3">
-        <Icon className="icon-md mt-0.5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+    <article className="hover:bg-surface-primary/20 group relative w-full min-w-0 rounded-md py-1 transition-colors">
+      <button
+        type="button"
+        className="absolute inset-0 z-10 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-heavy"
+        aria-label={`${localize('com_ui_edit')} ${config.heading}`}
+        onClick={() => onEdit(config.heading)}
+      >
+        <span className="sr-only">{localize('com_ui_edit')}</span>
+      </button>
+      <div className="flex items-start gap-2.5">
+        <Icon className="text-text-secondary/80 mt-1 size-3.5 flex-shrink-0" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="font-serif text-xl font-normal leading-tight tracking-normal">
+          <div className="flex items-start gap-3">
+            <h2 className="text-lg font-medium uppercase leading-none tracking-[0.08em] text-text-primary transition-colors group-hover:text-surface-submit">
               {config.heading}
             </h2>
-            <span
-              className={cn(
-                'mt-0.5 flex size-4 flex-shrink-0 items-center justify-center rounded-full',
-                isComplete ? 'bg-green-700 text-white' : 'bg-yellow-600 text-white',
-              )}
-              aria-label={
-                isComplete
-                  ? localize('com_preferences_section_complete')
-                  : localize('com_preferences_section_missing')
-              }
-            >
-              {isComplete ? (
-                <CheckCircle2 className="icon-xs" aria-hidden="true" />
-              ) : (
-                <span className="text-[10px] font-bold">!</span>
-              )}
-            </span>
           </div>
           {content}
-          
-          <div className="mt-4 border-t border-border-light pt-2 flex justify-end">
-            <button
-              type="button"
-              className="rounded-md border border-border-light bg-surface-primary px-3 py-1 text-xs text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-all"
-              onClick={() => onEdit(config.heading)}
-            >
-              {localize('com_ui_edit')}
-            </button>
-          </div>
         </div>
       </div>
     </article>
@@ -1204,7 +1216,7 @@ function PreferenceCardModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4 py-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-md"
       onClick={onCancelCard}
     >
       <motion.div
@@ -1220,24 +1232,24 @@ function PreferenceCardModal({
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3 border-b border-border-light pb-2">
               <div>
-                <h2 className="font-serif text-2xl font-normal leading-tight tracking-normal text-text-primary">
-                  Edit {heading}
+                <h2 className="rekky-section-title text-text-primary">
+                  {localize('com_preferences_editor_edit_section').replace('{heading}', heading)}
                 </h2>
-                <p className="text-xs text-text-secondary mt-0.5">Customize your culinary profile settings</p>
+                <p className="mt-0.5 text-xs text-text-secondary">
+                  {localize('com_preferences_editor_hint')}
+                </p>
               </div>
               <button
                 type="button"
                 className="flex size-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover hover:text-text-primary"
                 onClick={onCancelCard}
-                aria-label="Close"
+                aria-label={localize('com_ui_close')}
               >
                 <X className="size-5" />
               </button>
             </div>
 
-            <div className="mt-4 max-h-[60vh] overflow-y-auto pr-1">
-              {content}
-            </div>
+            <div className="mt-4 max-h-[60vh] overflow-y-auto pr-1">{content}</div>
 
             <div className="mt-6 flex justify-end gap-3 border-t border-border-light pt-4">
               <button
@@ -1245,16 +1257,16 @@ function PreferenceCardModal({
                 className="rounded-md border border-border-light bg-surface-primary px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary"
                 onClick={onCancelCard}
               >
-                Cancel
+                {localize('com_ui_cancel')}
               </button>
               <button
                 type="button"
-                className="flex items-center gap-1.5 rounded-md bg-surface-submit px-4 py-2 text-sm font-medium text-white hover:bg-surface-submit-hover disabled:opacity-50 shadow-sm"
+                className="flex items-center gap-1.5 rounded-md bg-surface-submit px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-surface-submit-hover disabled:opacity-50"
                 disabled={isSaving}
                 onClick={() => onSaveCard(heading)}
               >
                 <CheckCircle2 className="size-4 animate-pulse" />
-                Save Changes
+                {localize('com_preferences_save_changes')}
               </button>
             </div>
           </div>
@@ -1287,9 +1299,9 @@ function AtAGlanceGrid({
 }) {
   return (
     <section>
-      <div className="columns-1 md:columns-2 xl:columns-3 2xl:columns-4 gap-4 [column-fill:balance] w-full">
+      <div className="columns-1 gap-x-12 [column-fill:balance] md:columns-2 xl:columns-3 2xl:columns-4">
         {atAGlanceHeadings.map((config) => (
-          <div key={config.heading} className="break-inside-avoid mb-4 w-full">
+          <div key={config.heading} className="mb-10 break-inside-avoid">
             <PreferenceCard
               config={config}
               sections={sections}
@@ -1317,7 +1329,6 @@ function AtAGlanceGrid({
     </section>
   );
 }
-
 
 function IngredientThumb({
   ingredient,
@@ -1352,7 +1363,7 @@ function IngredientThumb({
   }
 
   return (
-    <div className="relative aspect-[5/3] bg-[#f2e8dc]">
+    <div className="bg-surface-primary/45 relative aspect-[5/3] overflow-hidden rounded-md dark:bg-white/5">
       {ingredient?.imageUrl ? (
         <ProtectedImage
           src={ingredient.imageUrl}
@@ -1368,7 +1379,7 @@ function IngredientThumb({
           }
         />
       ) : (
-        <div className="flex size-full flex-col items-center justify-center gap-2 text-text-secondary">
+        <div className="text-text-secondary/75 flex size-full flex-col items-center justify-center gap-2">
           <ImageIcon className="icon-sm" aria-hidden="true" />
           <span className="max-w-[80%] truncate text-[11px] font-medium">{name}</span>
         </div>
@@ -1493,9 +1504,9 @@ function SpecialtyIngredientsPanel({
   }, [areSuggestionsOpen, isConfirmingCreate, onDraftChange]);
 
   return (
-    <section>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="font-serif text-2xl font-normal leading-tight tracking-normal">
+    <section className="pt-2">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-2xl font-medium uppercase leading-none tracking-[0.08em] text-text-primary">
           {localize('com_preferences_specialty_title')}
         </h2>
         <div ref={panelRef} className="relative w-full sm:max-w-sm">
@@ -1510,7 +1521,7 @@ function SpecialtyIngredientsPanel({
             id="specialty-ingredient-input"
             ref={inputRef}
             value={draft}
-            className="w-full min-w-0 rounded-md border border-border-light bg-surface-primary py-2 pl-10 pr-10 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+            className="border-border-light/70 placeholder:text-text-secondary/70 w-full min-w-0 rounded-md border bg-surface-primary py-2 pl-10 pr-10 text-sm text-text-primary shadow-none [color-scheme:light] focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 dark:bg-white/5 dark:[color-scheme:dark]"
             placeholder={localize('com_preferences_specialty_search_placeholder')}
             disabled={isSaving || isResolving}
             onFocus={() => setAreSuggestionsOpen(true)}
@@ -1552,7 +1563,7 @@ function SpecialtyIngredientsPanel({
           {shouldShowSuggestions && (
             <div className="absolute right-0 top-11 z-20 w-full overflow-hidden rounded-md border border-border-light bg-surface-primary shadow-lg sm:w-[26rem]">
               {suggestions.length > 0 && (
-                <div className="border-b border-border-light px-3 py-2 text-xs font-medium uppercase tracking-wide text-text-secondary">
+                <div className="rekky-meta border-b border-border-light px-3 py-2 text-text-secondary">
                   {localize('com_preferences_specialty_suggestions_label')}
                 </div>
               )}
@@ -1627,7 +1638,7 @@ function SpecialtyIngredientsPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-3">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-4 gap-y-5">
         <AnimatePresence initial={false}>
           {ingredients.map((ingredient) => {
             const category =
@@ -1640,28 +1651,28 @@ function SpecialtyIngredientsPanel({
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.96 }}
-                className="group relative overflow-hidden rounded-lg border border-border-light bg-surface-primary shadow-sm"
+                className="group relative min-w-0"
               >
-                <span className="absolute right-3 top-3 flex size-4 items-center justify-center rounded-full bg-green-700 text-white">
+                <span className="absolute right-2 top-2 z-10 flex size-4 items-center justify-center rounded-full bg-black/35 text-white opacity-70 backdrop-blur">
                   <CheckCircle2 className="icon-xs" aria-hidden="true" />
                 </span>
                 <IngredientThumb ingredient={catalogItem} fallbackName={ingredient} />
-                <div className="p-3">
+                <div className="pt-2">
                   <button
                     type="button"
-                    className="block w-full truncate text-left font-serif text-lg font-normal leading-tight tracking-normal text-text-primary"
+                    className="block w-full truncate text-left text-sm font-medium leading-tight text-text-primary"
                     onClick={() => onEdit(ingredient)}
                   >
                     {ingredient}
                   </button>
-                  <p className="mt-1 truncate text-xs leading-4 text-text-secondary">
+                  <p className="rekky-meta mt-1 truncate text-text-secondary">
                     {localize(categoryLabels[category])}
                   </p>
                 </div>
                 <button
                   type="button"
                   aria-label={localize('com_preferences_specialty_remove')}
-                  className="absolute bottom-3 right-3 flex size-7 items-center justify-center rounded-full text-text-secondary opacity-0 hover:bg-surface-hover hover:text-text-primary focus-visible:opacity-100 group-hover:opacity-100"
+                  className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-full bg-black/35 text-white opacity-0 backdrop-blur hover:bg-black/55 focus-visible:opacity-100 group-hover:opacity-100"
                   disabled={isSaving}
                   onClick={() => onRemove(ingredient)}
                 >
@@ -1771,35 +1782,40 @@ function PreferencesAgentDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-md px-0 py-0 sm:items-center sm:px-3 sm:py-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-0 py-0 backdrop-blur-md sm:items-center sm:px-3 sm:py-4">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="preferences-agent-title"
-        className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-t-2xl border border-border-light/10 bg-surface-primary shadow-2xl sm:rounded-2xl overflow-hidden"
+        className="border-border-light/10 flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border bg-surface-primary shadow-2xl sm:rounded-2xl"
       >
-        <div className="flex items-start justify-between gap-3 px-6 pt-6 pb-2">
+        <div className="flex items-start justify-between gap-3 px-6 pb-2 pt-6">
           <div>
-            <h2 id="preferences-agent-title" className="flex items-center gap-2 text-base font-semibold text-text-primary">
+            <h2
+              id="preferences-agent-title"
+              className="flex items-center gap-2 text-base font-semibold text-text-primary"
+            >
               {showCompletedState && (
-                <CheckCircle2 className="size-5 text-green-500 flex-shrink-0" aria-hidden="true" />
+                <CheckCircle2 className="size-5 flex-shrink-0 text-green-500" aria-hidden="true" />
               )}
-              {showCompletedState ? 'Your cooking profile is refined' : localize('com_preferences_review_action')}
-            </h2>
-            <p className="mt-1 text-sm text-text-secondary leading-relaxed">
               {showCompletedState
-                ? 'Mise has built a comprehensive profile to customize your recipes. You can review it or ask to change anything.'
+                ? localize('com_preferences_profile_refined_title')
+                : localize('com_preferences_review_action')}
+            </h2>
+            <p className="mt-1 text-sm leading-relaxed text-text-secondary">
+              {showCompletedState
+                ? localize('com_preferences_profile_refined_hint')
                 : localize('com_preferences_agent_hint')}
             </p>
             {!showCompletedState && (
-              <p className="mt-1 text-xs text-text-secondary/70">
+              <p className="text-text-secondary/70 mt-1 text-xs">
                 {localize('com_preferences_device_location_hint')}
               </p>
             )}
           </div>
           <button
             type="button"
-            className="flex size-9 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
+            className="flex size-9 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
             aria-label={localize('com_ui_close')}
             onClick={onClose}
           >
@@ -1808,7 +1824,7 @@ function PreferencesAgentDialog({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-2">
           <div className="flex flex-col gap-4">
-            {thread.map((message) => (
+            {thread.map((message) =>
               message.content ? (
                 <div
                   key={message.id}
@@ -1816,15 +1832,15 @@ function PreferencesAgentDialog({
                     'max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
                     message.role === 'user'
                       ? 'ml-auto bg-surface-active-alt text-text-primary'
-                      : 'mr-auto bg-surface-secondary/45 text-text-primary',
+                      : 'bg-surface-secondary/45 mr-auto text-text-primary',
                   )}
                 >
                   {message.content}
                 </div>
-              ) : null
-            ))}
+              ) : null,
+            )}
             {isLoading && (
-              <div className="mr-auto flex items-center gap-2 rounded-2xl bg-surface-secondary/45 px-4 py-3 text-sm text-text-secondary">
+              <div className="bg-surface-secondary/45 mr-auto flex items-center gap-2 rounded-2xl px-4 py-3 text-sm text-text-secondary">
                 <Spinner className="icon-sm" />
                 {localize('com_preferences_agent_thinking')}
               </div>
@@ -1832,14 +1848,14 @@ function PreferencesAgentDialog({
             <div ref={endRef} />
           </div>
         </div>
-        
+
         {suggestions.length > 0 && !isLoading && (
-          <div className="flex flex-wrap gap-2 px-6 py-2 bg-surface-primary">
+          <div className="flex flex-wrap gap-2 bg-surface-primary px-6 py-2">
             {suggestions.map((suggestion, index) => (
               <button
                 key={index}
                 type="button"
-                className="rounded-full bg-surface-secondary/50 px-3.5 py-1.5 text-xs text-text-secondary shadow-none hover:bg-surface-hover hover:text-text-primary transition-all duration-150 border-0"
+                className="bg-surface-secondary/50 rounded-full border-0 px-3.5 py-1.5 text-xs text-text-secondary shadow-none transition-all duration-150 hover:bg-surface-hover hover:text-text-primary"
                 onClick={() => onSendSuggestion(suggestion.text)}
               >
                 {suggestion.display}
@@ -1848,8 +1864,8 @@ function PreferencesAgentDialog({
           </div>
         )}
 
-        <div className="px-6 pb-6 pt-3 bg-surface-primary">
-          <div className="flex items-center gap-2 rounded-xl bg-surface-secondary/60 p-1.5 focus-within:bg-surface-secondary/80 transition-all duration-150 border-0">
+        <div className="bg-surface-primary px-6 pb-6 pt-3">
+          <div className="bg-surface-secondary/60 focus-within:bg-surface-secondary/80 flex items-center gap-2 rounded-xl border-0 p-1.5 transition-all duration-150">
             <label htmlFor="preferences-agent-message" className="sr-only">
               {localize('com_preferences_message_label')}
             </label>
@@ -1860,7 +1876,7 @@ function PreferencesAgentDialog({
               className="max-h-24 min-h-[38px] flex-1 resize-none border-0 bg-transparent px-3 py-2 text-sm shadow-none outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
               placeholder={
                 showCompletedState
-                  ? 'Ask Mise to adjust or add anything to your profile...'
+                  ? localize('com_preferences_profile_refined_placeholder')
                   : localize('com_preferences_message_placeholder')
               }
               onChange={(event) => onDraftChange(event.target.value)}
@@ -1874,7 +1890,7 @@ function PreferencesAgentDialog({
             <button
               type="button"
               aria-label={localize('com_ui_submit')}
-              className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-surface-submit text-white hover:bg-surface-submit-hover disabled:opacity-50 transition-colors"
+              className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-surface-submit text-white transition-colors hover:bg-surface-submit-hover disabled:opacity-50"
               disabled={!draft.trim() || isLoading}
               onClick={onSubmit}
             >
@@ -2212,19 +2228,19 @@ export default function PreferencesWorkspace() {
   };
 
   return (
-    <main className="flex h-full min-h-0 flex-col bg-[#faf7f1] text-text-primary dark:bg-background">
+    <main className="rekky-ui rekky-preferences-surface flex h-full min-h-0 flex-col bg-[#f7f1e8] text-text-primary dark:bg-[#141014]">
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="w-full px-4 py-8 sm:px-8 lg:px-14">
-          <section aria-label={localize('com_preferences_document')} className="min-w-0 space-y-6">
-            <header className="pt-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <h1 className="font-serif text-6xl font-normal leading-none tracking-normal text-text-primary sm:text-7xl">
+        <div className="w-full px-5 py-8 sm:px-8 lg:px-16">
+          <section aria-label={localize('com_preferences_document')} className="min-w-0 space-y-12">
+            <header>
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <h1 className="max-w-4xl text-5xl font-medium leading-[0.95] tracking-[-0.01em] text-text-primary sm:text-6xl">
                   {localize('com_preferences_dashboard_title')}
                 </h1>
                 <div className="flex flex-wrap gap-2 md:justify-end">
                   <button
                     type="button"
-                    className="flex items-center gap-2 rounded-lg border border-border-light bg-surface-primary px-3 py-2 text-sm font-medium text-text-secondary shadow-sm hover:bg-surface-hover hover:text-text-primary"
+                    className="bg-surface-primary/65 mt-1 flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-text-secondary shadow-none transition-colors hover:bg-surface-hover hover:text-text-primary"
                     onClick={() => setIsAgentOpen(true)}
                   >
                     <Eye className="icon-sm" aria-hidden="true" />

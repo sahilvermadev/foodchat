@@ -7,13 +7,20 @@ import { useRegisterUserMutation } from 'librechat-data-provider/react-query';
 import { loginPage } from 'librechat-data-provider';
 import type { TRegisterUser, TError } from 'librechat-data-provider';
 import type { TLoginLayoutContext } from '~/common';
-import { useLocalize, useAuthContext, TranslationKeys } from '~/hooks';
+import { useLocalize, TranslationKeys } from '~/hooks';
+import usePublicLogin from '~/hooks/usePublicLogin';
 import { ErrorMessage } from './ErrorMessage';
+
+const authInputClass =
+  'auth-input peer w-full rounded-2xl border border-[var(--rekky-linen)] bg-[var(--rekky-alabaster)] px-3.5 pb-2.5 pt-3 font-sans text-[var(--rekky-charcoal)] caret-[var(--rekky-terracotta)] shadow-sm transition-colors duration-200 [color-scheme:light] focus:border-[var(--rekky-terracotta)] focus:outline-none focus:ring-2 focus:ring-[var(--rekky-terracotta)]/15 dark:border-white/10 dark:bg-[var(--rekky-plum-850)] dark:text-[var(--rekky-cream-text)] dark:caret-[var(--rekky-terracotta)] dark:[color-scheme:dark] dark:focus:border-[var(--rekky-terracotta)]';
+
+const authLabelClass =
+  'pointer-events-none absolute start-3 top-0 z-10 origin-[0] -translate-y-1/2 scale-75 transform rounded-md bg-[var(--rekky-alabaster)] px-2 font-sans text-sm text-[var(--rekky-umber)] transition-colors duration-200 peer-focus:text-[var(--rekky-terracotta)] dark:bg-[var(--rekky-plum-850)] dark:text-[var(--rekky-cream-muted)]';
 
 const Registration: React.FC = () => {
   const navigate = useNavigate();
   const localize = useLocalize();
-  const { login } = useAuthContext();
+  const { login } = usePublicLogin();
   const { theme } = useContext(ThemeContext);
   const { startupConfig, startupConfigError, isFetching } = useOutletContext<TLoginLayoutContext>();
 
@@ -82,19 +89,16 @@ const Registration: React.FC = () => {
             validation,
           )}
           aria-invalid={!!errors[id]}
-          className="webkit-dark-styles transition-color peer w-full rounded-2xl border border-border-light bg-surface-primary px-3.5 pb-2.5 pt-3 text-text-primary duration-200 focus:border-green-500 focus:outline-none"
+          className={authInputClass}
           placeholder=" "
           data-testid={id}
         />
-        <label
-          htmlFor={id}
-          className="absolute start-3 top-1.5 z-10 origin-[0] -translate-y-4 scale-75 transform bg-surface-primary px-2 text-sm text-text-secondary-alt duration-200 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:scale-100 peer-focus:top-1.5 peer-focus:-translate-y-4 peer-focus:scale-75 peer-focus:px-2 peer-focus:text-green-500 rtl:peer-focus:left-auto rtl:peer-focus:translate-x-1/4"
-        >
+        <label htmlFor={id} className={authLabelClass}>
           {localize(label)}
         </label>
       </div>
       {errors[id] && (
-        <span role="alert" className="mt-1 text-sm text-red-500">
+        <span role="alert" className="mt-1 font-mono text-sm text-red-500">
           {String(errors[id]?.message) ?? ''}
         </span>
       )}
@@ -209,19 +213,19 @@ const Registration: React.FC = () => {
                 type="submit"
                 aria-label="Submit registration"
                 variant="submit"
-                className="h-12 w-full rounded-2xl"
+                className="h-12 w-full rounded-2xl bg-[var(--rekky-terracotta)] font-sans text-white hover:bg-[var(--rekky-terracotta-hover)]"
               >
                 {isSubmitting ? <Spinner /> : localize('com_auth_continue')}
               </Button>
             </div>
           </form>
 
-          <p className="my-4 text-center text-sm font-light text-gray-700 dark:text-white">
+          <p className="my-4 text-center text-sm font-light text-[var(--rekky-umber)] dark:text-[var(--rekky-cream-muted)]">
             {localize('com_auth_already_have_account')}{' '}
             <a
               href={loginPage()}
               aria-label="Login"
-              className="inline-flex p-1 text-sm font-medium text-green-600 transition-colors hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+              className="inline-flex p-1 text-sm font-medium text-[var(--rekky-terracotta)] transition-colors hover:text-[var(--rekky-terracotta-hover)]"
             >
               {localize('com_auth_login')}
             </a>

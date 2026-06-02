@@ -3,7 +3,7 @@ import { BookOpen, MessagesSquare } from 'lucide-react';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { NavLink } from '~/common';
-import { ActivePanelProvider } from '~/Providers';
+import { ActivePanelProvider } from '~/Providers/ActivePanelContext';
 import Nav from './Nav';
 
 const links: NavLink[] = [

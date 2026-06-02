@@ -25,7 +25,7 @@ import {
   getDefaultModelSpec,
   getDefaultEndpoint,
   getModelSpecPreset,
-  getMiseDefaultPreset,
+  getRekkyDefaultPreset,
   buildDefaultConvo,
   logger,
 } from '~/utils';
@@ -254,7 +254,7 @@ const useNewConvo = (index = 0) => {
         !_preset &&
         !paramEndpoint &&
         Object.keys(template).length === 0;
-      let preset = _preset ?? (isCookingNewConvo ? getMiseDefaultPreset() : undefined);
+      let preset = _preset ?? (isCookingNewConvo ? getRekkyDefaultPreset() : undefined);
       const result = getDefaultModelSpec(startupConfig);
       const defaultModelSpec = result?.default ?? result?.last;
       if (

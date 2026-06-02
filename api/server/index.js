@@ -218,7 +218,7 @@ const startServer = async () => {
     const saneLang = lang.replace(/"/g, '&quot;');
     const updatedIndexHtml = indexHTML
       ? indexHTML.replace(/lang="en-US"/g, `lang="${saneLang}"`)
-      : '<!doctype html><html><body>Mise API is running.</body></html>';
+      : '<!doctype html><html><body>Rekky API is running.</body></html>';
 
     res.type('html');
     res.send(updatedIndexHtml);

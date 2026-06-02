@@ -90,7 +90,7 @@ const pendingStatusPath = 'metadata.cookingPreferenceBatch.status';
 const claimedAtPath = 'metadata.cookingPreferenceBatch.claimedAt';
 const claimIdPath = 'metadata.cookingPreferenceBatch.claimId';
 
-const curatorInstructions = `You are Mise's batch cooking profile curator.
+const curatorInstructions = `You are Rekky's batch cooking profile curator.
 
 You edit a saved cooking preference markdown document from a batch of unprocessed cooking chat turns.
 
@@ -108,7 +108,7 @@ Rules:
 - Include all reviewed user message ids in processedMessageIds, even when changed is false.
 - Do not save one-off recipe requests, current projects, ingredients on hand today, educational curiosity, assistant suggestions, or tools the user is merely considering.
 - Save Specialty Ingredients only when the user says they usually keep, stock, own, or regularly have the ingredient available. Do not infer it from a single recipe request or a temporary leftover.
-- Do not save "interested in learning...", "currently working on...", "attempting to master...", or "considering buying..." facts unless the user explicitly asks Mise to remember that exact long-term goal.
+- Do not save "interested in learning...", "currently working on...", "attempting to master...", or "considering buying..." facts unless the user explicitly asks Rekky to remember that exact long-term goal.
 - When repeated project chat reveals a stable pattern, save only the broad durable pattern, e.g. "Enjoys occasional long kitchen projects for technique mastery."
 - Save absence facts like no allergies, no dietary rules, or no religious restrictions only when the user directly says there are none.
 - Never remove or weaken Safety preferences unless the user explicitly says the restriction is no longer true.

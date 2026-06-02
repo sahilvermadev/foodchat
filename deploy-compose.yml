@@ -5,7 +5,7 @@ services:
     #   dockerfile: Dockerfile.multi
     #   target: api-build
     image: registry.librechat.ai/danny-avila/librechat-dev-api:latest
-    container_name: Mise-API
+    container_name: rekky-api
     ports:
       - 3080:3080
     depends_on:
@@ -33,7 +33,7 @@ services:
 
   client:
     image: nginx:1.27.0-alpine
-    container_name: Mise-NGINX
+    container_name: rekky-nginx
     ports:
       - 80:80
       - 443:443

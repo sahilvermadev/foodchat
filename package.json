@@ -1,5 +1,5 @@
 {
-  "name": "Mise",
+  "name": "rekky",
   "version": "v0.8.6-rc1",
   "description": "",
   "packageManager": "npm@11.10.0",
@@ -109,7 +109,7 @@
   "bugs": {
     "url": "https://github.com/danny-avila/LibreChat/issues"
   },
-  "homepage": "https://librechat.ai/",
+  "homepage": "https://rekky.ai/",
   "devDependencies": {
     "@axe-core/playwright": "^4.10.1",
     "@eslint/compat": "^1.2.6",

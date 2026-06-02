@@ -34,6 +34,31 @@ export function getPostLoginRedirect(searchParams: URLSearchParams): string | nu
   return target;
 }
 
+export function resolvePostLoginRedirect(
+  searchParams: URLSearchParams,
+  fallback?: string,
+): string | null {
+  const redirect = getPostLoginRedirect(searchParams);
+  if (redirect) {
+    return redirect;
+  }
+  return fallback && isSafeRedirect(fallback) ? fallback : null;
+}
+
+export function buildLoginRetryRedirect(searchParams: URLSearchParams): string {
+  const redirect = searchParams.get(REDIRECT_PARAM);
+  return redirect && isSafeRedirect(redirect)
+    ? `/login?${REDIRECT_PARAM}=${encodeURIComponent(redirect)}`
+    : '/login';
+}
+
+export function buildTwoFactorRedirect(tempToken?: string): string {
+  if (!tempToken) {
+    return '/login/2fa';
+  }
+  return `/login/2fa?tempToken=${encodeURIComponent(tempToken)}`;
+}
+
 export function persistRedirectToSession(value: string): void {
   if (isSafeRedirect(value)) {
     sessionStorage.setItem(SESSION_KEY, value);

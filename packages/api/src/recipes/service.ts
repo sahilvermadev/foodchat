@@ -355,7 +355,9 @@ export function parseServingsFromMarkdown(markdown?: string): number | undefined
   const lines = markdown.split('\n');
   for (const line of lines) {
     const trimmed = line.trim();
-    const match = trimmed.match(/^(?:[-*]\s*)?(?:\*\*|__)?(?:servings|yield)(?:\*\*|__)?\s*:\s*(.+)$/i);
+    const match = trimmed.match(
+      /^(?:[-*]\s*)?(?:\*\*|__)?(?:servings|yield)(?:\*\*|__)?\s*:\s*(.+)$/i,
+    );
     if (match) {
       const valuePart = match[1].trim();
       const numMatch = valuePart.match(/(\d+)/);
@@ -384,7 +386,9 @@ function canonicalRecipe(
   }
 
   const markdownTitle = headingTitleFromMarkdown(documentMarkdown);
-  const updatedRecipe = markdownTitle ? { ...structuredRecipe, title: markdownTitle } : { ...structuredRecipe };
+  const updatedRecipe = markdownTitle
+    ? { ...structuredRecipe, title: markdownTitle }
+    : { ...structuredRecipe };
 
   const parsedServings = parseServingsFromMarkdown(documentMarkdown);
   if (parsedServings !== undefined) {
@@ -575,7 +579,11 @@ function cleanFilter(value: string | undefined): string | undefined {
   return clean || undefined;
 }
 
-function listFilter(user: string, query: SavedRecipesQuery): RecipeListFilter {
+function listFilter(
+  user: string,
+  query: SavedRecipesQuery,
+  includeCursor = true,
+): RecipeListFilter {
   const filter: RecipeListFilter = { user };
   if (query.documentType) {
     filter.documentType = query.documentType;
@@ -589,7 +597,7 @@ function listFilter(user: string, query: SavedRecipesQuery): RecipeListFilter {
       { documentMarkdown: expression },
     ];
   }
-  if (query.cursor) {
+  if (includeCursor && query.cursor) {
     const cursorDate = new Date(query.cursor);
     if (!Number.isNaN(cursorDate.getTime())) {
       filter.updatedAt = { $lt: cursorDate };
@@ -844,35 +852,39 @@ export async function listRecipes(
   await repairLegacyWrapperTitles(user);
   await failStalePending(user);
   const limit = Math.min(Math.max(Number(query.limit) || 20, 1), maxLimit);
-  const recipes = await model()
-    .find(listFilter(user, query))
-    .select(
-      [
-        'user',
-        'title',
-        'documentType',
-        'shortDescription',
-        'illustrationStatus',
-        'illustrationModel',
-        'sourceConversationId',
-        'sourceDraftId',
-        'categorization',
-        'categorizationStatus',
-        'categorizationVersion',
-        'recipe.title',
-        'recipe.servings',
-        'documentMarkdown',
-        'createdAt',
-        'updatedAt',
-      ].join(' '),
-    )
-    .sort({ updatedAt: -1 })
-    .limit(limit + 1);
+  const Recipe = model();
+  const [recipes, total] = await Promise.all([
+    Recipe.find(listFilter(user, query))
+      .select(
+        [
+          'user',
+          'title',
+          'documentType',
+          'shortDescription',
+          'illustrationStatus',
+          'illustrationModel',
+          'sourceConversationId',
+          'sourceDraftId',
+          'categorization',
+          'categorizationStatus',
+          'categorizationVersion',
+          'recipe.title',
+          'recipe.servings',
+          'documentMarkdown',
+          'createdAt',
+          'updatedAt',
+        ].join(' '),
+      )
+      .sort({ updatedAt: -1 })
+      .limit(limit + 1),
+    Recipe.countDocuments(listFilter(user, query, false)),
+  ]);
   scheduleMissingIllustrations(recipes);
   const page = recipes.slice(0, limit).map(serializeSavedRecipeSummary);
   const next = recipes.length > limit ? recipes[limit - 1] : undefined;
   return {
     recipes: page,
+    total,
     ...(next?.updatedAt ? { nextCursor: next.updatedAt.toISOString() } : {}),
   };
 }

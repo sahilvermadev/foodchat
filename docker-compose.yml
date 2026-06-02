@@ -3,7 +3,7 @@
 
 services:
   api:
-    container_name: Mise
+    container_name: rekky
     ports:
       - "${PORT}:${PORT}"
     depends_on:

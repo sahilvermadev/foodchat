@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import type { NavLink } from '~/common';
-import { useActivePanel } from '~/Providers';
+import { useActivePanel } from '~/Providers/ActivePanelContext';
 import { getPanelLinks, resolveRenderedPanel } from './panelSelection';
 
 export default function Nav({ links }: { links: NavLink[] }) {

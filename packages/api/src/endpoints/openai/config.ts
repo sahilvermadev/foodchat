@@ -172,9 +172,9 @@ export function getOpenAIConfig(
   if (useOpenRouter || isVercel) {
     configOptions.defaultHeaders = Object.assign(
       {
-        'HTTP-Referer': 'https://librechat.ai',
-        'X-Title': 'Mise',
-        'X-OpenRouter-Title': 'Mise',
+        'HTTP-Referer': 'https://rekky.ai',
+        'X-Title': 'Rekky',
+        'X-OpenRouter-Title': 'Rekky',
         'X-OpenRouter-Categories': 'general-chat,personal-agent',
       },
       headers,

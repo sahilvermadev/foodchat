@@ -247,5 +247,6 @@ export type SavedRecipesQuery = {
 
 export type SavedRecipesResponse = {
   recipes: SavedRecipeSummary[];
+  total: number;
   nextCursor?: string;
 };

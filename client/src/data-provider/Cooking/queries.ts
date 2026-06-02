@@ -1,6 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { QueryKeys, dataService } from 'librechat-data-provider';
-import type { QueryObserverResult, UseQueryOptions } from '@tanstack/react-query';
+import type {
+  QueryObserverResult,
+  UseInfiniteQueryOptions,
+  UseQueryOptions,
+} from '@tanstack/react-query';
 import type {
   CookingDraft,
   ConversationCookingDocuments,
@@ -94,6 +98,25 @@ export const useRecipesQuery = (
       ...config,
     },
   );
+};
+
+export const useRecipesInfiniteQuery = (
+  params: SavedRecipesQuery,
+  config?: UseInfiniteQueryOptions<SavedRecipesResponse, unknown>,
+) => {
+  return useInfiniteQuery<SavedRecipesResponse>({
+    queryKey: [QueryKeys.recipes, 'infinite', params],
+    queryFn: ({ pageParam }) =>
+      dataService.getRecipes({
+        ...params,
+        cursor: pageParam?.toString(),
+      }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 30 * 60 * 1000,
+    ...config,
+  });
 };
 
 export const useRecipeQuery = (

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useSetRecoilState } from 'recoil';
 import type { TStartupConfig } from 'librechat-data-provider';
 import { TranslationKeys, useLocalize } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
 import AuthLayout from '~/components/Auth/AuthLayout';
 import { REDIRECT_PARAM, SESSION_KEY } from '~/utils';
+import store from '~/store';
 
 const headerMap: Record<string, TranslationKeys> = {
   '/login': 'com_auth_welcome_back',
@@ -18,6 +20,7 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
   const [error, setError] = useState<TranslationKeys | null>(null);
   const [headerText, setHeaderText] = useState<TranslationKeys | null>(null);
   const [startupConfig, setStartupConfig] = useState<TStartupConfig | null>(null);
+  const setQueriesEnabled = useSetRecoilState<boolean>(store.queriesEnabled);
   const {
     data,
     isFetching,
@@ -28,6 +31,10 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
   const localize = useLocalize();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    setQueriesEnabled(true);
+  }, [setQueriesEnabled]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -44,7 +51,7 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
   }, [isAuthenticated, navigate, data]);
 
   useEffect(() => {
-    document.title = startupConfig?.appTitle || 'Mise';
+    document.title = startupConfig?.appTitle || 'Rekky';
   }, [startupConfig?.appTitle]);
 
   useEffect(() => {

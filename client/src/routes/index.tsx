@@ -12,14 +12,13 @@ import { OAuthSuccess, OAuthError } from '~/components/OAuth';
 import { AuthContextProvider } from '~/hooks/AuthContext';
 import RouteErrorBoundary from './RouteErrorBoundary';
 import StartupLayout from './Layouts/Startup';
-import LoginLayout from './Layouts/Login';
 import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
 import Root from './Root';
 import { CookingSession, RecipeDetail, RecipeLibrary } from '~/components/Cooking';
 import { PreferencesWorkspace } from '~/components/Preferences';
 
-const AuthLayout = () => (
+const AuthProviderLayout = () => (
   <AuthContextProvider>
     <Outlet />
     <ApiErrorWatcher />
@@ -56,23 +55,34 @@ export const router = createBrowserRouter(
       ],
     },
     {
-      path: '/',
+      path: 'login',
       element: <StartupLayout />,
       errorElement: <RouteErrorBoundary />,
-      children: [
-        {
-          path: 'register',
-          element: <Registration />,
-        },
-        {
-          path: 'forgot-password',
-          element: <RequestPasswordReset />,
-        },
-        {
-          path: 'reset-password',
-          element: <ResetPassword />,
-        },
-      ],
+      children: [{ index: true, element: <Login /> }],
+    },
+    {
+      path: 'login/2fa',
+      element: <StartupLayout />,
+      errorElement: <RouteErrorBoundary />,
+      children: [{ index: true, element: <TwoFactorScreen /> }],
+    },
+    {
+      path: 'register',
+      element: <StartupLayout />,
+      errorElement: <RouteErrorBoundary />,
+      children: [{ index: true, element: <Registration /> }],
+    },
+    {
+      path: 'forgot-password',
+      element: <StartupLayout />,
+      errorElement: <RouteErrorBoundary />,
+      children: [{ index: true, element: <RequestPasswordReset /> }],
+    },
+    {
+      path: 'reset-password',
+      element: <StartupLayout />,
+      errorElement: <RouteErrorBoundary />,
+      children: [{ index: true, element: <ResetPassword /> }],
     },
     {
       path: 'verify',
@@ -80,23 +90,9 @@ export const router = createBrowserRouter(
       errorElement: <RouteErrorBoundary />,
     },
     {
-      element: <AuthLayout />,
+      element: <AuthProviderLayout />,
       errorElement: <RouteErrorBoundary />,
       children: [
-        {
-          path: '/',
-          element: <LoginLayout />,
-          children: [
-            {
-              path: 'login',
-              element: <Login />,
-            },
-            {
-              path: 'login/2fa',
-              element: <TwoFactorScreen />,
-            },
-          ],
-        },
         {
           path: '/',
           element: <Root />,

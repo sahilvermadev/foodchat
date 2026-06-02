@@ -26,7 +26,11 @@ import type {
   SavedRecipesQuery,
 } from 'librechat-data-provider';
 import type { TranslationKeys } from '~/hooks';
-import { useDeleteSavedRecipeMutation, useRecipesQuery } from '~/data-provider';
+import {
+  useDeleteSavedRecipeMutation,
+  useRecipesInfiniteQuery,
+  useRecipesQuery,
+} from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import { ProtectedImage } from '~/components/ui';
@@ -75,16 +79,14 @@ function SkeletonBlock({ className }: { className: string }) {
 
 function RecipeCardSkeleton() {
   return (
-    <div className="overflow-hidden rounded-lg border border-border-light bg-surface-primary shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)]">
-      <div className="relative aspect-[1.92/1] overflow-hidden bg-surface-hover">
+    <div className="border-border-light/60 bg-surface-primary/80 overflow-hidden rounded-lg border shadow-none">
+      <div className="relative aspect-[2.08/1] overflow-hidden bg-surface-hover">
         <SkeletonBlock className="h-full w-full rounded-none" />
-        <SkeletonBlock className="bg-surface-primary/80 absolute right-4 top-4 h-9 w-20 rounded-full" />
       </div>
-      <div className="flex min-h-[178px] flex-col p-6">
+      <div className="flex min-h-[188px] flex-col p-6">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-2.5">
             <SkeletonBlock className="h-7 w-4/5" />
-            <SkeletonBlock className="h-7 w-3/5" />
           </div>
           <SkeletonBlock className="h-8 w-8 shrink-0 rounded-full" />
         </div>
@@ -111,7 +113,7 @@ function RecipeLibrarySkeleton({ label }: { label: string }) {
     <div
       role="status"
       aria-label={label}
-      className="grid animate-pulse auto-rows-[minmax(0,auto)] gap-5 lg:grid-cols-2 2xl:grid-cols-3"
+      className="grid animate-pulse auto-rows-[minmax(0,auto)] gap-6 lg:grid-cols-2 2xl:grid-cols-3"
     >
       <span className="sr-only">{label}</span>
       {recipeSkeletonItems.map((item) => (
@@ -201,22 +203,6 @@ function displayFilter(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatRecipeDate(value?: string): string {
-  if (!value) {
-    return '';
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-  }).format(date);
-}
-
 function recipeDescription(recipe: SavedRecipeSummary): string {
   const description = recipe.shortDescription?.trim();
   const title = recipe.title.toLowerCase();
@@ -249,19 +235,25 @@ export default function RecipeLibrary() {
     }),
     [filters, query],
   );
-  const recipesQuery = useRecipesQuery(params, {
+  const recipesQuery = useRecipesInfiniteQuery(params, {
     refetchInterval: (data) =>
-      data?.recipes.some(
-        (recipe) =>
-          recipe.categorizationStatus === 'pending' ||
-          recipe.illustrationStatus === 'pending' ||
-          recipe.illustrationStatus === 'generating',
+      data?.pages.some((page) =>
+        page.recipes.some(
+          (recipe) =>
+            recipe.categorizationStatus === 'pending' ||
+            recipe.illustrationStatus === 'pending' ||
+            recipe.illustrationStatus === 'generating',
+        ),
       )
         ? 3000
         : false,
   });
   const filterOptionsQuery = useRecipesQuery({ q: query, limit: 100 });
-  const recipes = recipesQuery.data?.recipes ?? [];
+  const recipes = useMemo(
+    () => recipesQuery.data?.pages.flatMap((page) => page.recipes) ?? [],
+    [recipesQuery.data?.pages],
+  );
+  const total = recipesQuery.data?.pages[0]?.total ?? recipes.length;
   const filterOptionRecipes = filterOptionsQuery.data?.recipes ?? recipes;
   const groups = useMemo(() => filterGroups(filterOptionRecipes), [filterOptionRecipes]);
   const selectedFilters = useMemo(() => activeFilters(filters), [filters]);
@@ -297,35 +289,35 @@ export default function RecipeLibrary() {
     });
   };
   const recipeCountLabel =
-    recipes.length === 1
+    total === 1
       ? localize('com_recipes_count_short_one')
-      : localize('com_recipes_count_short_other', { count: recipes.length });
+      : localize('com_recipes_count_short_other', { count: total });
 
   return (
-    <main className="h-full overflow-y-auto bg-surface-primary-alt px-4 py-8 text-text-primary sm:px-8 lg:px-14">
+    <main className="rekky-ui h-full overflow-y-auto bg-surface-primary-alt px-4 py-7 text-text-primary sm:px-8 lg:px-14">
       <div className="mx-auto flex max-w-[1500px] flex-col gap-7">
-        <header className="pt-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <header className="pt-2 sm:pt-4">
+          <div className="flex flex-col gap-4">
             <div>
-              <h1 className="font-serif text-6xl font-normal leading-none tracking-normal text-text-primary sm:text-7xl">
+              <h1 className="text-[clamp(2.75rem,5vw,3.45rem)] font-medium leading-none tracking-[-0.03em] text-text-primary">
                 {localize('com_recipes_library')}
               </h1>
-              <p className="mt-5 text-base text-text-secondary">
-                {localize('com_recipes_library_subtitle')}
-              </p>
-            </div>
-            {recipesQuery.isLoading ? (
-              <SkeletonBlock className="hidden h-8 w-28 rotate-[-3deg] lg:block" />
-            ) : (
-              <div className="hidden rotate-[-3deg] border-b border-surface-submit px-2 pb-1 font-serif text-lg italic text-surface-submit lg:block">
-                {recipeCountLabel}
+              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-text-secondary">
+                <p className="rekky-body">{localize('com_recipes_library_subtitle')}</p>
+                {recipesQuery.isLoading ? (
+                  <SkeletonBlock className="h-4 w-24" />
+                ) : (
+                  <span className="text-text-secondary/90 border-l border-border-light pl-3 text-sm font-medium">
+                    {recipeCountLabel}
+                  </span>
+                )}
               </div>
-            )}
+            </div>
           </div>
-          <div className="mt-8 flex flex-col gap-3 lg:flex-row">
+          <div className="mt-7 flex max-w-[1260px] flex-col gap-3 lg:flex-row">
             <div className="relative flex-1">
               <Search
-                className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-text-secondary"
+                className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary"
                 aria-hidden="true"
               />
               <Input
@@ -333,12 +325,12 @@ export default function RecipeLibrary() {
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={localize('com_recipes_search_placeholder')}
                 aria-label={localize('com_recipes_search_placeholder')}
-                className="min-h-14 rounded-lg border-border-light bg-surface-primary pl-14 text-base text-text-primary shadow-none placeholder:text-text-secondary focus-visible:ring-1 focus-visible:ring-ring-primary"
+                className="rekky-library-search-input border-border-light/80 min-h-12 rounded-lg pl-11 text-[0.95rem] shadow-none focus-visible:ring-1 focus-visible:ring-ring-primary"
               />
             </div>
             <button
               type="button"
-              className="inline-flex min-h-14 items-center justify-center gap-2 rounded-lg border border-border-light bg-surface-primary px-5 text-sm text-text-primary transition-colors hover:border-surface-submit hover:bg-surface-hover"
+              className="border-border-light/80 bg-surface-primary/80 inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border px-5 text-sm text-text-primary transition-colors hover:border-border-heavy hover:bg-surface-hover"
               onClick={() => setFiltersOpen(true)}
             >
               <ListFilter className="h-4 w-4" aria-hidden="true" />
@@ -352,7 +344,7 @@ export default function RecipeLibrary() {
           </div>
           {selectedFilters.length > 0 ? (
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium uppercase text-text-secondary">
+              <span className="rekky-meta text-text-secondary">
                 {localize('com_recipes_active_filters')}
               </span>
               {selectedFilters.map((filter) => (
@@ -471,140 +463,164 @@ export default function RecipeLibrary() {
           </div>
         ) : null}
         {!recipesQuery.isLoading && recipes.length > 0 ? (
-          <div className="grid auto-rows-[minmax(0,auto)] gap-5 lg:grid-cols-2 2xl:grid-cols-3">
-            {recipes.map((recipe) => {
-              const description = recipeDescription(recipe);
-              const updatedAt = formatRecipeDate(recipe.updatedAt);
-              const servings = recipe.servings;
-              const recipeChips = chips(recipe);
+          <>
+            <div className="grid auto-rows-[minmax(0,auto)] gap-6 lg:grid-cols-2 2xl:grid-cols-3">
+              {recipes.map((recipe) => {
+                const description = recipeDescription(recipe);
+                const servings = recipe.servings;
+                const recipeChips = chips(recipe);
+                const visibleRecipeChips = recipeChips.slice(0, 2);
+                const hiddenRecipeChipCount = recipeChips.length - visibleRecipeChips.length;
 
-              return (
-                <article
-                  key={recipe._id}
-                  className="group relative overflow-hidden rounded-lg border border-border-light bg-surface-primary shadow-[0_4px_20px_-2px_rgba(26,25,23,0.04)] transition-colors hover:border-surface-submit hover:bg-surface-primary-alt"
-                >
-                  <Link
-                    to={`/recipes/${recipe._id}`}
-                    aria-label={localize('com_recipes_open_recipe', { 0: recipe.title })}
-                    className="absolute inset-0 z-0"
-                  />
-                  <div className="pointer-events-none relative aspect-[1.92/1] overflow-hidden bg-surface-hover">
-                    {recipe.illustrationUrl ? (
-                      <ProtectedImage
-                        src={recipe.illustrationUrl}
-                        alt=""
-                        className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-                        loading="lazy"
-                        decoding="async"
-                        fallback={<div className="h-full w-full animate-pulse bg-surface-hover" />}
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-surface-hover">
-                        {recipe.illustrationStatus === 'pending' ||
-                        recipe.illustrationStatus === 'generating' ? (
-                          <div className="bg-surface-primary/50 h-10 w-10 rounded-full border border-border-heavy" />
-                        ) : null}
+                return (
+                  <article
+                    key={recipe._id}
+                    className="border-border-light/60 bg-surface-primary/80 group relative overflow-hidden rounded-lg border shadow-none transition-colors hover:border-border-medium hover:bg-surface-primary"
+                  >
+                    <Link
+                      to={`/recipes/${recipe._id}`}
+                      aria-label={localize('com_recipes_open_recipe', { 0: recipe.title })}
+                      className="absolute inset-0 z-0"
+                    />
+                    <div className="pointer-events-none relative aspect-[2.08/1] overflow-hidden bg-surface-hover">
+                      {recipe.illustrationUrl ? (
+                        <ProtectedImage
+                          src={recipe.illustrationUrl}
+                          alt=""
+                          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                          loading="lazy"
+                          decoding="async"
+                          fallback={
+                            <div className="h-full w-full animate-pulse bg-surface-hover" />
+                          }
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-surface-hover">
+                          {recipe.illustrationStatus === 'pending' ||
+                          recipe.illustrationStatus === 'generating' ? (
+                            <div className="bg-surface-primary/50 h-10 w-10 rounded-full border border-border-heavy" />
+                          ) : null}
+                        </div>
+                      )}
+                      <div className="from-surface-primary/35 absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t to-transparent" />
+                    </div>
+                    <div className="pointer-events-none relative flex min-h-[188px] flex-col p-6">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <h2 className="line-clamp-2 pr-2 text-[1.45rem] font-medium leading-[1.08] tracking-[-0.02em] text-text-primary">
+                          {recipe.title}
+                        </h2>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={localize('com_recipes_recipe_actions', {
+                                0: recipe.title,
+                              })}
+                              className="text-text-secondary/70 pointer-events-auto relative z-10 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full opacity-75 transition hover:bg-surface-hover hover:text-text-primary hover:opacity-100 focus-visible:bg-surface-hover focus-visible:text-text-primary focus-visible:opacity-100"
+                            >
+                              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="pointer-events-auto z-50 min-w-44"
+                          >
+                            <DropdownMenuItem
+                              variant="destructive"
+                              className="cursor-pointer"
+                              onSelect={() => setRecipeToDelete(recipe)}
+                            >
+                              <Trash2 className="size-4" aria-hidden="true" />
+                              {localize('com_recipes_delete_recipe')}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                    )}
-                    {updatedAt ? (
-                      <span className="bg-surface-primary/85 absolute right-4 top-4 rounded-full px-3 py-2 text-sm text-text-secondary backdrop-blur">
-                        {updatedAt}
+                      <span className="text-text-secondary/80 mt-4 text-xs font-semibold uppercase tracking-[0.13em]">
+                        {displayFilter(recipe.documentType)}
                       </span>
-                    ) : null}
-                  </div>
-                  <div className="pointer-events-none relative flex min-h-[178px] flex-col p-6">
-                    <div className="flex min-w-0 items-start justify-between gap-3">
-                      <h2 className="line-clamp-2 font-serif text-[1.72rem] font-normal leading-[1.05] tracking-normal text-text-primary">
-                        {recipe.title}
-                      </h2>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            aria-label={localize('com_recipes_recipe_actions', { 0: recipe.title })}
-                            className="pointer-events-auto relative z-10 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-hover text-text-secondary transition-colors hover:bg-surface-active-alt hover:text-text-primary"
-                          >
-                            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          className="pointer-events-auto z-50 min-w-44"
-                        >
-                          <DropdownMenuItem
-                            variant="destructive"
-                            className="cursor-pointer"
-                            onSelect={() => setRecipeToDelete(recipe)}
-                          >
-                            <Trash2 className="size-4" aria-hidden="true" />
-                            {localize('com_recipes_delete_recipe')}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    <span className="mt-3 w-fit rounded-full border border-border-light bg-surface-primary-alt px-2.5 py-1 text-xs capitalize text-text-secondary">
-                      {displayFilter(recipe.documentType)}
-                    </span>
-                    {recipe.categorizationStatus === 'pending' ? (
-                      <span className="mt-3 w-fit rounded-full border border-border-light bg-surface-primary-alt px-2.5 py-1 text-xs text-text-secondary">
-                        {localize('com_recipes_categorizing')}
-                      </span>
-                    ) : null}
-                    {description ? (
-                      <p className="mt-3 line-clamp-2 max-w-[31rem] text-base leading-7 text-text-secondary">
-                        {description}
-                      </p>
-                    ) : null}
-                    <div className="mt-5 flex flex-wrap gap-2 text-sm text-text-secondary">
-                      {recipe.documentType === 'recipe' &&
-                      typeof servings === 'number' &&
-                      servings > 0 ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-border-light bg-surface-primary-alt px-3 py-1.5">
-                          <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                          {localize('com_cooking_servings_count', { 0: String(servings) })}
+                      {recipe.categorizationStatus === 'pending' ? (
+                        <span className="text-text-secondary/80 mt-2 text-xs font-medium">
+                          {localize('com_recipes_categorizing')}
                         </span>
                       ) : null}
-                    </div>
-                    <div className="mt-auto flex flex-wrap gap-1.5 pt-4">
-                      {recipeChips.map((chip) => (
-                        <span
-                          key={chip}
-                          className={cn(
-                            'rounded-full border border-border-light bg-surface-hover px-3 py-1.5 text-sm text-text-secondary',
-                          )}
-                        >
-                          {displayFilter(chip)}
-                        </span>
-                      ))}
-                      {recipeChips.length === 0 && recipe.categorizationStatus === 'failed' ? (
-                        <span className="rounded-full border border-border-light bg-surface-hover px-3 py-1.5 text-sm text-text-secondary">
-                          {localize('com_recipes_saved')}
-                        </span>
+                      {description ? (
+                        <p className="mt-4 line-clamp-2 max-w-[31rem] text-[0.96rem] leading-7 text-text-secondary">
+                          {description}
+                        </p>
                       ) : null}
+                      <div className="mt-auto flex min-h-[3.4rem] flex-col justify-end gap-3 pt-5">
+                        <div className="text-text-secondary/90 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-2 text-xs font-semibold uppercase tracking-[0.09em]">
+                          {recipe.documentType === 'recipe' &&
+                          typeof servings === 'number' &&
+                          servings > 0 ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                              {localize('com_cooking_servings_count', { 0: String(servings) })}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-2">
+                          {visibleRecipeChips.map((chip) => (
+                            <span
+                              key={chip}
+                              className="text-text-secondary/75 text-xs font-semibold uppercase tracking-[0.1em]"
+                            >
+                              {displayFilter(chip)}
+                            </span>
+                          ))}
+                          {hiddenRecipeChipCount > 0 ? (
+                            <span className="text-text-secondary/75 text-xs font-semibold uppercase tracking-[0.1em]">
+                              +{hiddenRecipeChipCount}
+                            </span>
+                          ) : null}
+                          {recipeChips.length === 0 && recipe.categorizationStatus === 'failed' ? (
+                            <span className="text-text-secondary/75 text-xs font-semibold uppercase tracking-[0.1em]">
+                              {localize('com_recipes_saved')}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
+                  </article>
+                );
+              })}
+              <Link
+                to="/cook"
+                className="flex min-h-[218px] items-center justify-center rounded-lg border border-dashed border-border-medium bg-surface-primary p-8 text-center transition-colors hover:border-surface-submit hover:bg-surface-primary-alt"
+              >
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-surface-submit text-surface-submit">
+                    <Plus className="h-6 w-6" aria-hidden="true" />
                   </div>
-                </article>
-              );
-            })}
-            <Link
-              to="/cook"
-              className="flex min-h-[218px] items-center justify-center rounded-lg border border-dashed border-border-medium bg-surface-primary p-8 text-center transition-colors hover:border-surface-submit hover:bg-surface-primary-alt"
-            >
-              <div className="flex flex-col items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-surface-submit text-surface-submit">
-                  <Plus className="h-6 w-6" aria-hidden="true" />
+                  <div>
+                    <p className="rekky-section-title text-surface-submit">
+                      {localize('com_recipes_add_new')}
+                    </p>
+                    <p className="rekky-body mt-2 max-w-60 text-sm leading-6 text-text-secondary">
+                      {localize('com_recipes_add_new_hint')}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-serif text-xl italic text-surface-submit">
-                    {localize('com_recipes_add_new')}
-                  </p>
-                  <p className="mt-2 max-w-60 text-sm leading-6 text-text-secondary">
-                    {localize('com_recipes_add_new_hint')}
-                  </p>
-                </div>
+              </Link>
+            </div>
+            {recipesQuery.hasNextPage ? (
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  className="rounded-lg border border-border-light bg-surface-primary px-5 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={recipesQuery.isFetchingNextPage}
+                  onClick={() => void recipesQuery.fetchNextPage()}
+                >
+                  {localize(
+                    recipesQuery.isFetchingNextPage
+                      ? 'com_recipes_loading_more'
+                      : 'com_recipes_load_more',
+                  )}
+                </button>
               </div>
-            </Link>
-          </div>
+            ) : null}
+          </>
         ) : null}
       </div>
       <OGDialog

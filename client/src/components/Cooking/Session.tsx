@@ -13,7 +13,7 @@ import {
   StickyNote,
   Thermometer,
 } from 'lucide-react';
-import type { CookingTimer } from 'librechat-data-provider';
+import type { CookingTimer, Ingredient } from 'librechat-data-provider';
 import {
   useCookingSessionQuery,
   useCompleteCookingSessionMutation,
@@ -21,6 +21,7 @@ import {
 } from '~/data-provider';
 import useWakeLock from '~/hooks/useWakeLock';
 import { useLocalize } from '~/hooks';
+import { cn } from '~/utils';
 
 type TimerRunState = {
   remainingSeconds: number;
@@ -33,6 +34,18 @@ const formatTimer = (seconds: number) => {
   const minutes = Math.floor(safeSeconds / 60);
   const remainingSeconds = safeSeconds % 60;
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+};
+
+const formatIngredientQuantity = (ingredient: Ingredient) =>
+  [ingredient.quantity, ingredient.unit].filter(Boolean).join(' ');
+
+const formatIngredientText = (ingredient: Ingredient) => {
+  const name = ingredient.item.trim();
+  const preparation = ingredient.preparation?.trim();
+  if (!name) {
+    return ingredient.originalText;
+  }
+  return preparation ? `${name}, ${preparation}` : name;
 };
 
 const isTypingTarget = (target: EventTarget | null) => {
@@ -260,12 +273,12 @@ export default function CookingSession() {
     .join(' ');
 
   return (
-    <main className="min-h-full bg-surface-primary pb-24 text-text-primary md:pb-0">
+    <main className="rekky-ui min-h-full bg-surface-primary pb-24 text-text-primary md:pb-0">
       <header className="bg-surface-primary/95 sticky top-0 z-10 border-b border-border-light px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase text-text-secondary">{stepProgress}</p>
-            <h1 className="truncate text-base font-semibold sm:text-lg">
+            <p className="rekky-meta text-text-secondary">{stepProgress}</p>
+            <h1 className="truncate font-serif text-base font-semibold sm:text-lg">
               {session.recipeSnapshot.title}
             </h1>
           </div>
@@ -311,10 +324,12 @@ export default function CookingSession() {
               />
             </div>
 
-            <p className="mb-3 text-sm font-medium text-text-secondary">
+            <p className="rekky-meta mb-3 text-text-secondary">
               {localize('com_cooking_step_number', { 0: step.order })}
             </p>
-            <p className="text-3xl font-semibold leading-tight sm:text-4xl">{step.text}</p>
+            <p className="rekky-body text-3xl font-semibold leading-tight sm:text-4xl">
+              {step.text}
+            </p>
 
             {(step.temperature || step.warnings.length > 0 || step.tips.length > 0) && (
               <div className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
@@ -350,7 +365,9 @@ export default function CookingSession() {
 
             {activeTimers.length > 0 && (
               <div className="mt-7 space-y-3" aria-live="polite">
-                <h2 className="text-sm font-semibold">{localize('com_cooking_timers')}</h2>
+                <h2 className="rekky-section-title text-text-primary">
+                  {localize('com_cooking_timers')}
+                </h2>
                 {activeTimers.map((timer) => {
                   const timerState = timerStates[timer.id];
                   const status = timerState?.status ?? 'idle';
@@ -366,10 +383,10 @@ export default function CookingSession() {
                           <Clock className="h-4 w-4" aria-hidden="true" />
                           <span>{timer.label}</span>
                         </div>
-                        <p className="mt-1 text-2xl font-semibold tabular-nums">
+                        <p className="rekky-timer mt-1 text-2xl font-bold">
                           {formatTimer(remainingSeconds)}
                         </p>
-                        <p className="text-sm text-text-secondary">{timerStatusLabel(status)}</p>
+                        <p className="rekky-meta text-text-secondary">{timerStatusLabel(status)}</p>
                       </div>
                       <Button
                         type="button"
@@ -395,29 +412,40 @@ export default function CookingSession() {
 
           <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
             <section className="rounded-lg border border-border-light bg-surface-secondary p-4">
-              <h2 className="text-sm font-semibold">{localize('com_cooking_ingredients')}</h2>
+              <h2 className="rekky-section-title text-text-primary">
+                {localize('com_cooking_ingredients')}
+              </h2>
               <div className="mt-3 space-y-2">
                 {session.recipeSnapshot.ingredients.map((ingredient) => {
                   const checked = checkedIngredients[ingredient.id] ?? false;
+                  const quantity = formatIngredientQuantity(ingredient);
                   return (
                     <label
                       key={ingredient.id}
-                      className="flex items-start gap-2 rounded-md border border-border-light bg-surface-primary p-2 text-sm"
+                      className={cn(
+                        'rekky-ingredient-check grid grid-cols-[minmax(4.25rem,auto)_minmax(0,1fr)] gap-3 rounded-md border border-border-light bg-surface-primary p-2 text-sm',
+                        checked && 'is-completed',
+                      )}
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) =>
-                          setCheckedIngredients((current) => ({
-                            ...current,
-                            [ingredient.id]: event.target.checked,
-                          }))
-                        }
-                        className="mt-1"
-                        aria-label={ingredient.originalText}
-                      />
-                      <span className={checked ? 'text-text-secondary line-through' : undefined}>
-                        {ingredient.originalText}
+                      <span className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) =>
+                            setCheckedIngredients((current) => ({
+                              ...current,
+                              [ingredient.id]: event.target.checked,
+                            }))
+                          }
+                          className="mt-1"
+                          aria-label={ingredient.originalText}
+                        />
+                        <span className="rekky-quantity font-bold text-text-primary">
+                          {quantity || '-'}
+                        </span>
+                      </span>
+                      <span className="rekky-ingredient-text rekky-body text-sm leading-6 text-text-secondary">
+                        {formatIngredientText(ingredient)}
                       </span>
                     </label>
                   );
@@ -426,7 +454,9 @@ export default function CookingSession() {
             </section>
 
             <section className="rounded-lg border border-border-light bg-surface-secondary p-4">
-              <h2 className="text-sm font-semibold">{localize('com_cooking_steps')}</h2>
+              <h2 className="rekky-section-title text-text-primary">
+                {localize('com_cooking_steps')}
+              </h2>
               <div className="mt-3 space-y-3">
                 {session.recipeSnapshot.steps.map((recipeStep, index) => {
                   const isCurrent = index === session.currentStepIndex;
@@ -435,27 +465,31 @@ export default function CookingSession() {
                       key={recipeStep.id}
                       ref={isCurrent ? currentStepRef : undefined}
                       aria-current={isCurrent ? 'step' : undefined}
-                      className={
-                        isCurrent
-                          ? 'rounded-lg border border-text-primary bg-surface-primary p-4 shadow-sm'
-                          : 'rounded-lg border border-border-light bg-surface-primary p-4 opacity-75'
-                      }
+                      className={cn(
+                        'rekky-cooking-step rounded-lg border border-border-light bg-surface-primary p-4 shadow-sm',
+                        isCurrent && 'is-current',
+                      )}
                     >
-                      <p className="text-xs font-medium text-text-secondary">
+                      <p
+                        className={cn(
+                          'rekky-meta text-text-secondary',
+                          isCurrent && 'text-sm text-surface-submit',
+                        )}
+                      >
                         {localize('com_cooking_step_number', { 0: recipeStep.order })}
                       </p>
                       <p
                         className={
                           isCurrent
-                            ? 'mt-2 text-lg font-semibold leading-7'
-                            : 'mt-2 text-sm leading-6 text-text-secondary'
+                            ? 'rekky-body mt-2 text-lg font-semibold leading-7'
+                            : 'rekky-body mt-2 text-sm leading-6 text-text-secondary'
                         }
                       >
                         {isCurrent ? `${localize('com_cooking_current_step')}: ` : ''}
                         {recipeStep.text}
                       </p>
                       {recipeStep.timers.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-text-secondary">
+                        <div className="rekky-meta mt-3 flex flex-wrap gap-2 text-text-secondary">
                           {recipeStep.timers.map((timer) => (
                             <span
                               key={timer.id}

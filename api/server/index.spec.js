@@ -1,7 +1,18 @@
 const fs = require('fs');
+const express = require('express');
 const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
+
+const mockLogger = {
+  debug: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+};
+
+jest.mock('../../packages/data-schemas/dist/config/winston.cjs', () => mockLogger);
+jest.mock('../../packages/data-schemas/dist/config/meiliLogger.cjs', () => mockLogger);
 
 jest.mock('~/server/services/Config', () => ({
   loadCustomConfig: jest.fn(() => Promise.resolve({})),
@@ -38,13 +49,14 @@ describe('Server Configuration', () => {
 
   let mongoServer;
   let app;
+  let listenSpy;
 
   /** Mocked fs.readFileSync for index.html */
   const originalReadFileSync = fs.readFileSync;
   beforeAll(() => {
     fs.readFileSync = function (filepath, options) {
       if (filepath.includes('index.html')) {
-        return '<!DOCTYPE html><html><head><title>Mise</title></head><body><div id="root"></div></body></html>';
+        return '<!DOCTYPE html><html><head><title>Rekky</title></head><body><div id="root"></div></body></html>';
       }
       return originalReadFileSync(filepath, options);
     };
@@ -69,12 +81,15 @@ describe('Server Configuration', () => {
 
     fs.writeFileSync(
       path.join('/tmp/dist', 'index.html'),
-      '<!DOCTYPE html><html><head><title>Mise</title></head><body><div id="root"></div></body></html>',
+      '<!DOCTYPE html><html><head><title>Rekky</title></head><body><div id="root"></div></body></html>',
     );
 
     mongoServer = await MongoMemoryServer.create();
     process.env.MONGO_URI = mongoServer.getUri();
     process.env.PORT = '0'; // Use a random available port
+    listenSpy = jest.spyOn(express.application, 'listen').mockImplementation(() => ({
+      close: jest.fn(),
+    }));
     app = require('~/server');
 
     // Wait for the app to be healthy
@@ -82,6 +97,7 @@ describe('Server Configuration', () => {
   });
 
   afterAll(async () => {
+    listenSpy.mockRestore();
     await mongoServer.stop();
     await mongoose.disconnect();
   });

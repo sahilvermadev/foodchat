@@ -6,7 +6,7 @@ import { SquarePen } from 'lucide-react';
 import { QueryKeys } from 'librechat-data-provider';
 import { Skeleton, Button, TooltipAnchor, ThemeSelector } from '@librechat/client';
 import type { NavLink } from '~/common';
-import { useActivePanel, DEFAULT_PANEL } from '~/Providers';
+import { useActivePanel, DEFAULT_PANEL } from '~/Providers/ActivePanelContext';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { clearMessagesCache, cn } from '~/utils';
 import store from '~/store';
@@ -140,7 +140,7 @@ function ExpandedPanel({
   return (
     <div
       className={cn(
-        'flex h-full flex-shrink-0 flex-col border-r px-2 py-2',
+        'flex h-full w-[4.5rem] flex-shrink-0 flex-col border-r px-2 py-2',
         transparent
           ? 'border-transparent bg-transparent'
           : 'border-border-light bg-surface-primary-alt',
@@ -152,10 +152,10 @@ function ExpandedPanel({
           description={localize('com_ui_app_name')}
           render={
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-lg"
+              className="flex h-12 w-14 items-center justify-center rounded-lg"
               aria-label={localize('com_ui_app_name')}
             >
-              <span className="select-none text-[0.92rem] font-bold uppercase leading-none tracking-[0.1em] text-text-primary">
+              <span className="rekky-sidebar-wordmark select-none text-text-primary">
                 {localize('com_ui_app_name')}
               </span>
             </div>

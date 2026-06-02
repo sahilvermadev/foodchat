@@ -2,6 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-display: swap;
+  font-family: Syne;
+  font-style: normal;
+  font-weight: 800;
+  src: url('$fonts/Syne-800.woff2') format('woff2');
+}
+
+@font-face {
+  font-display: swap;
+  font-family: Lora;
+  font-style: normal;
+  font-weight: 400 700;
+  src: url('$fonts/Lora-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-display: swap;
+  font-family: Merriweather;
+  font-style: normal;
+  font-weight: 400;
+  src: url('$fonts/Merriweather-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-display: swap;
+  font-family: Merriweather;
+  font-style: normal;
+  font-weight: 700;
+  src: url('$fonts/Merriweather-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-display: swap;
+  font-family: Space Grotesk;
+  font-style: normal;
+  font-weight: 300 700;
+  src: url('$fonts/SpaceGrotesk-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-display: swap;
+  font-family: JetBrains Mono;
+  font-style: normal;
+  font-weight: 100 800;
+  src: url('$fonts/JetBrainsMono-variable.woff2') format('woff2');
+}
+
 .message-render {
   scroll-margin-top: 4rem;
 }
@@ -55,81 +103,93 @@
   --amber-800: #92400e;
   --amber-900: #78350f;
   --amber-950: #451a03;
-  --mise-terracotta: #c85a32;
-  --mise-terracotta-hover: #b24e2a;
-  --mise-soft-clay: #f4ebe1;
-  --mise-alabaster: #fafaf7;
-  --mise-stone: #f3f1eb;
-  --mise-linen: #e6e3da;
-  --mise-charcoal: #1a1917;
-  --mise-umber: #4a4844;
-  --mise-cream: var(--mise-stone);
-  --mise-cream-raised: var(--mise-alabaster);
-  --mise-parchment: var(--mise-soft-clay);
-  --mise-parchment-hover: var(--mise-soft-clay);
-  --mise-ink: var(--mise-charcoal);
-  --mise-mushroom: var(--mise-umber);
-  --mise-tomato: var(--mise-terracotta);
-  --mise-tomato-hover: var(--mise-terracotta-hover);
-  --mise-leaf: #75c46b;
-  --mise-lemon: #f2c94c;
-  --mise-aubergine: #6d3a6d;
-  --mise-plum-950: #171217;
-  --mise-plum-925: #1b151b;
-  --mise-plum-900: #221d20;
-  --mise-plum-850: #2a2224;
-  --mise-plum-800: #34272c;
-  --mise-plum-750: #3a3034;
-  --mise-plum-700: #4a3b40;
-  --mise-cream-text: #ffffff;
-  --mise-cream-muted: #d8d0c8;
-  --mise-mushroom-muted: #afa59d;
+  --rekky-terracotta: #c85a32;
+  --rekky-terracotta-hover: #b24e2a;
+  --rekky-soft-clay: #f4ebe1;
+  --rekky-alabaster: #fafaf7;
+  --rekky-stone: #f3f1eb;
+  --rekky-linen: #e6e3da;
+  --rekky-charcoal: #1a1917;
+  --rekky-umber: #4a4844;
+  --rekky-cream: var(--rekky-stone);
+  --rekky-cream-raised: var(--rekky-alabaster);
+  --rekky-parchment: var(--rekky-soft-clay);
+  --rekky-parchment-hover: var(--rekky-soft-clay);
+  --rekky-ink: var(--rekky-charcoal);
+  --rekky-mushroom: var(--rekky-umber);
+  --rekky-tomato: var(--rekky-terracotta);
+  --rekky-tomato-hover: var(--rekky-terracotta-hover);
+  --rekky-leaf: #75c46b;
+  --rekky-lemon: #f2c94c;
+  --rekky-aubergine: #6d3a6d;
+  --rekky-plum-950: #171217;
+  --rekky-plum-925: #1b151b;
+  --rekky-plum-900: #221d20;
+  --rekky-plum-850: #2a2224;
+  --rekky-plum-800: #34272c;
+  --rekky-plum-750: #3a3034;
+  --rekky-plum-700: #4a3b40;
+  --rekky-cream-text: #ffffff;
+  --rekky-cream-muted: #d8d0c8;
+  --rekky-mushroom-muted: #afa59d;
   --brand-purple: #ab68ff;
   --gizmo-gray-500: #999;
   --gizmo-gray-600: #666;
   --gizmo-gray-950: #0f0f0f;
+  --font-editorial: 'Space Grotesk';
+  --font-body: 'Space Grotesk';
+  --font-technical: 'JetBrains Mono';
+  --font-recipe-heading: 'Lora';
+  --font-recipe-body: 'Merriweather';
+  --font-preferences-heading: 'Space Grotesk';
+  --font-preferences-body: 'Space Grotesk';
+  --font-brand: 'Syne';
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
   --font-size-lg: 1.125rem;
   --font-size-xl: 1.25rem;
+  --font-size-display: clamp(2.75rem, 7vw, 5.75rem);
+  --font-size-page-title: clamp(2.15rem, 4vw, 3.75rem);
+  --font-size-section-title: clamp(1.15rem, 1.8vw, 1.5rem);
+  --font-size-recipe-body: clamp(1rem, 1.2vw, 1.08rem);
   --markdown-font-size: 1rem;
 }
 html {
-  --brand-purple: var(--mise-aubergine);
-  --presentation: var(--mise-cream);
-  --text-primary: var(--mise-ink);
-  --text-secondary: var(--mise-mushroom);
-  --text-secondary-alt: var(--mise-mushroom);
+  --brand-purple: var(--rekky-aubergine);
+  --presentation: var(--rekky-cream);
+  --text-primary: var(--rekky-ink);
+  --text-secondary: var(--rekky-mushroom);
+  --text-secondary-alt: var(--rekky-mushroom);
   --text-tertiary: #6f6b64;
   --text-warning: #8a5a00;
   --text-destructive: var(--red-600);
-  --ring-primary: var(--mise-tomato-hover);
-  --header-primary: var(--mise-cream-raised);
-  --header-hover: var(--mise-parchment);
-  --header-button-hover: var(--mise-parchment);
-  --surface-active: var(--mise-parchment-hover);
-  --surface-active-alt: var(--mise-soft-clay);
-  --surface-hover: var(--mise-parchment-hover);
+  --ring-primary: var(--rekky-tomato-hover);
+  --header-primary: var(--rekky-cream-raised);
+  --header-hover: var(--rekky-parchment);
+  --header-button-hover: var(--rekky-parchment);
+  --surface-active: var(--rekky-parchment-hover);
+  --surface-active-alt: var(--rekky-soft-clay);
+  --surface-hover: var(--rekky-parchment-hover);
   --surface-hover-alt: #efe3d6;
-  --surface-primary: var(--mise-cream-raised);
-  --surface-primary-alt: var(--mise-cream);
-  --surface-primary-contrast: var(--mise-parchment);
-  --surface-secondary: var(--mise-parchment);
-  --surface-secondary-alt: var(--mise-parchment-hover);
-  --surface-tertiary: var(--mise-linen);
-  --surface-tertiary-alt: var(--mise-cream-raised);
-  --surface-dialog: var(--mise-cream-raised);
-  --surface-submit: var(--mise-tomato);
-  --surface-submit-hover: var(--mise-tomato-hover);
+  --surface-primary: var(--rekky-cream-raised);
+  --surface-primary-alt: var(--rekky-cream);
+  --surface-primary-contrast: var(--rekky-parchment);
+  --surface-secondary: var(--rekky-parchment);
+  --surface-secondary-alt: var(--rekky-parchment-hover);
+  --surface-tertiary: var(--rekky-linen);
+  --surface-tertiary-alt: var(--rekky-cream-raised);
+  --surface-dialog: var(--rekky-cream-raised);
+  --surface-submit: var(--rekky-tomato);
+  --surface-submit-hover: var(--rekky-tomato-hover);
   --surface-destructive: var(--red-700);
   --surface-destructive-hover: var(--red-800);
-  --surface-chat: var(--mise-stone);
-  --border-light: var(--mise-linen);
+  --surface-chat: var(--rekky-stone);
+  --border-light: var(--rekky-linen);
   --border-medium-alt: #d8d2c4;
   --border-medium: #d8d2c4;
   --border-heavy: #b9b1a2;
-  --border-xheavy: var(--mise-umber);
+  --border-xheavy: var(--rekky-umber);
   --border-destructive: var(--red-600);
   /* These are test styles */
 
@@ -159,40 +219,40 @@ html {
   --switch-unchecked: 0 0% 58%;
 }
 .dark {
-  --brand-purple: var(--mise-aubergine);
-  --presentation: var(--mise-plum-950);
-  --text-primary: var(--mise-cream-text);
-  --text-secondary: var(--mise-cream-muted);
-  --text-secondary-alt: var(--mise-mushroom-muted);
-  --text-tertiary: var(--mise-mushroom-muted);
-  --text-warning: var(--mise-lemon);
+  --brand-purple: var(--rekky-aubergine);
+  --presentation: var(--rekky-plum-950);
+  --text-primary: var(--rekky-cream-text);
+  --text-secondary: var(--rekky-cream-muted);
+  --text-secondary-alt: var(--rekky-mushroom-muted);
+  --text-tertiary: var(--rekky-mushroom-muted);
+  --text-warning: var(--rekky-lemon);
   --text-destructive: #ff8a7a;
-  --ring-primary: var(--mise-tomato);
-  --header-primary: var(--mise-plum-900);
-  --header-hover: var(--mise-plum-850);
-  --header-button-hover: var(--mise-plum-850);
-  --surface-active: var(--mise-plum-750);
-  --surface-active-alt: var(--mise-plum-850);
-  --surface-hover: var(--mise-plum-800);
-  --surface-hover-alt: var(--mise-plum-750);
-  --surface-primary: var(--mise-plum-900);
-  --surface-primary-alt: var(--mise-plum-950);
-  --surface-primary-contrast: var(--mise-plum-925);
-  --surface-secondary: var(--mise-plum-850);
-  --surface-secondary-alt: var(--mise-plum-800);
-  --surface-tertiary: var(--mise-plum-750);
-  --surface-tertiary-alt: var(--mise-plum-700);
-  --surface-dialog: var(--mise-plum-900);
-  --surface-submit: var(--mise-tomato);
-  --surface-submit-hover: var(--mise-tomato-hover);
+  --ring-primary: var(--rekky-tomato);
+  --header-primary: var(--rekky-plum-900);
+  --header-hover: var(--rekky-plum-850);
+  --header-button-hover: var(--rekky-plum-850);
+  --surface-active: var(--rekky-plum-750);
+  --surface-active-alt: var(--rekky-plum-850);
+  --surface-hover: var(--rekky-plum-800);
+  --surface-hover-alt: var(--rekky-plum-750);
+  --surface-primary: var(--rekky-plum-900);
+  --surface-primary-alt: var(--rekky-plum-950);
+  --surface-primary-contrast: var(--rekky-plum-925);
+  --surface-secondary: var(--rekky-plum-850);
+  --surface-secondary-alt: var(--rekky-plum-800);
+  --surface-tertiary: var(--rekky-plum-750);
+  --surface-tertiary-alt: var(--rekky-plum-700);
+  --surface-dialog: var(--rekky-plum-900);
+  --surface-submit: var(--rekky-tomato);
+  --surface-submit-hover: var(--rekky-tomato-hover);
   --surface-destructive: var(--red-800);
   --surface-destructive-hover: var(--red-900);
-  --surface-chat: var(--mise-plum-900);
-  --border-light: var(--mise-plum-750);
-  --border-medium-alt: var(--mise-plum-700);
-  --border-medium: var(--mise-plum-700);
+  --surface-chat: var(--rekky-plum-900);
+  --border-light: var(--rekky-plum-750);
+  --border-medium-alt: var(--rekky-plum-700);
+  --border-medium: var(--rekky-plum-700);
   --border-heavy: #6b5a60;
-  --border-xheavy: var(--mise-mushroom-muted);
+  --border-xheavy: var(--rekky-mushroom-muted);
   --border-destructive: #ff8a7a;
   /* These are test styles */
 
@@ -258,13 +318,126 @@ html {
   color: var(--text-tertiary);
 }
 
+.rekky-title {
+  font-family: var(--font-editorial), Georgia, serif;
+  font-size: var(--font-size-page-title);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.rekky-section-title {
+  font-family: var(--font-editorial), Georgia, serif;
+  font-size: var(--font-size-section-title);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.rekky-sans-display-title {
+  font-family: var(--font-preferences-heading), Inter, sans-serif;
+  font-size: clamp(3rem, 6vw, 3.75rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 0.95;
+}
+
+.rekky-body {
+  font-family: var(--font-body), Inter, sans-serif;
+  font-size: var(--font-size-recipe-body);
+  line-height: 1.7;
+}
+
+.rekky-ui {
+  font-family: var(--font-body), Inter, sans-serif;
+}
+
+.rekky-sidebar-wordmark {
+  font-family: var(--font-brand), 'Space Grotesk', Inter, sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  text-transform: lowercase;
+}
+
+.rekky-recipe-surface {
+  --font-editorial: var(--font-recipe-heading);
+  --font-body: var(--font-recipe-body);
+}
+
+.rekky-recipe-surface .rekky-title {
+  font-size: clamp(2rem, 3.4vw, 3rem);
+  letter-spacing: 0.01em;
+  line-height: 1;
+  text-transform: none;
+}
+
+.rekky-preferences-surface {
+  --font-editorial: var(--font-preferences-heading);
+  --font-body: var(--font-preferences-body);
+}
+
+.rekky-meta {
+  font-family: var(--font-technical), 'Roboto Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.rekky-quantity,
+.rekky-timer {
+  font-family: var(--font-technical), 'Roboto Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.rekky-timer {
+  letter-spacing: 0.02em;
+}
+
+.rekky-ingredient-check {
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+.rekky-ingredient-check.is-completed {
+  opacity: 0.55;
+  transform: translateX(0.25rem);
+}
+
+.rekky-ingredient-check.is-completed .rekky-ingredient-text {
+  text-decoration: line-through;
+}
+
+.rekky-cooking-step {
+  opacity: 0.4;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+
+.rekky-cooking-step.is-current {
+  border-left-color: var(--rekky-terracotta);
+  border-left-width: 4px;
+  opacity: 1;
+}
+
 .prose.cooking-recipe-markdown {
   color: var(--text-secondary);
+  font-family: var(--font-body), Inter, sans-serif;
   line-height: 1.75;
 }
 
 .prose.cooking-recipe-markdown :where(h2, h3) {
   color: var(--text-primary);
+  font-family: var(--font-editorial), Georgia, serif;
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -276,7 +449,9 @@ html {
 
 .prose.cooking-recipe-markdown :where(p, li) {
   color: var(--text-secondary);
+  font-family: var(--font-body), Inter, sans-serif;
   line-height: 1.75;
+  max-width: 52rem;
 }
 
 .prose.cooking-recipe-markdown :where(strong) {
@@ -284,25 +459,49 @@ html {
 }
 
 .prose.cooking-recipe-markdown :where(table) {
+  background: transparent;
   border-color: var(--border-light);
   border-radius: 0.5rem;
+  border-collapse: separate;
+  border-spacing: 0;
   border-style: solid;
   border-width: 1px;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+  margin-top: 1rem;
   overflow: hidden;
   width: 100%;
 }
 
 .prose.cooking-recipe-markdown :where(th, td) {
   border-color: var(--border-light);
-  padding: 0.75rem 0.9rem;
+  border-left-width: 0;
+  border-right-width: 0;
+  padding: 0.85rem 1rem;
+  vertical-align: top;
 }
 
-.prose.cooking-recipe-markdown :where(thead tr, tbody tr:nth-child(even)) {
-  background: var(--surface-primary-alt);
+.prose.cooking-recipe-markdown :where(th) {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+  font-family: var(--font-technical), 'Roboto Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.prose.cooking-recipe-markdown :where(tbody tr:nth-child(odd)) {
-  background: var(--surface-primary);
+.prose.cooking-recipe-markdown :where(td) {
+  color: var(--text-secondary);
+}
+
+.prose.cooking-recipe-markdown :where(tbody tr) {
+  background: transparent;
+}
+
+.prose.cooking-recipe-markdown :where(tbody tr:nth-child(even)) {
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .icon-xs {
@@ -1598,6 +1797,10 @@ html {
   height: 100%;
 }
 
+body {
+  font-family: Inter, sans-serif;
+}
+
 .dark body,
 .dark html {
   --tw-bg-opacity: 1;
@@ -2260,6 +2463,21 @@ html {
   -webkit-text-fill-color: #fff;
   background-clip: content-box;
   -webkit-box-shadow: 0 0 0 50vh var(--surface-primary-alt) inset;
+}
+
+.auth-input:-webkit-autofill,
+.auth-input:-webkit-autofill:hover,
+.auth-input:-webkit-autofill:focus {
+  caret-color: var(--rekky-terracotta);
+  -webkit-text-fill-color: var(--rekky-charcoal);
+  -webkit-box-shadow: 0 0 0 1000px var(--rekky-alabaster) inset;
+}
+
+.dark .auth-input:-webkit-autofill,
+.dark .auth-input:-webkit-autofill:hover,
+.dark .auth-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--rekky-cream-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--rekky-plum-850) inset;
 }
 
 /* Ordered Listing */
@@ -3012,4 +3230,21 @@ html {
 
 .sharepoint-picker-bg {
   background-color: #f5f5f5;
+}
+
+.rekky-library-search-input,
+.rekky-library-search-input:focus {
+  background-color: var(--surface-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.rekky-library-search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.rekky-library-search-input:-webkit-autofill,
+.rekky-library-search-input:-webkit-autofill:hover,
+.rekky-library-search-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-primary);
+  -webkit-box-shadow: 0 0 0 1000px var(--surface-primary) inset;
 }

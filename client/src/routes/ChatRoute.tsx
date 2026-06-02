@@ -10,8 +10,8 @@ import {
   processValidSettings,
   getDefaultModelSpec,
   getModelSpecPreset,
-  getMiseDefaultPreset,
-  ensureMiseDefaultModelPreference,
+  getRekkyDefaultPreset,
+  ensureRekkyDefaultModelPreference,
   isNotFoundError,
   logger,
 } from '~/utils';
@@ -124,14 +124,14 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
       return;
     }
 
-    const changed = ensureMiseDefaultModelPreference();
+    const changed = ensureRekkyDefaultModelPreference();
     if (!changed) {
       return;
     }
 
     newConversation({
       modelsData: modelsQuery.data,
-      preset: getMiseDefaultPreset(),
+      preset: getRekkyDefaultPreset(),
       template: getNewCookingConversationTemplate(),
       keepLatestMessage: true,
       routeBase: '/cook',
@@ -159,7 +159,7 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
       const spec = result?.default ?? result?.last;
       let specPreset: TPreset | undefined;
       if (isCookingMode) {
-        specPreset = getMiseDefaultPreset();
+        specPreset = getRekkyDefaultPreset();
       } else if (spec) {
         specPreset = getModelSpecPreset(spec);
       }
