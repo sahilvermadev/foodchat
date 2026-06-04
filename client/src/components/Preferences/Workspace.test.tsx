@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom/extend-expect';
@@ -28,13 +27,19 @@ jest.mock('~/hooks', () => ({
       com_preferences_detail_label: '{section} detail {number}',
       com_preferences_detail_placeholder: 'Add a detail',
       com_preferences_edit: 'Edit preferences',
+      com_preferences_editor_add: 'Add',
       com_preferences_preview_profile: 'Ask Rekky to refine',
       com_preferences_section_complete: 'Complete',
       com_preferences_section_missing: 'Add more',
       com_preferences_kitchen_group_appliances: 'Appliances',
+      com_preferences_kitchen_group_cooktops: 'Cooktops',
       com_preferences_kitchen_group_cooking: 'Cooking setup',
       com_preferences_kitchen_group_tools: 'Tools',
       com_preferences_kitchen_group_unavailable: 'Unavailable',
+      com_preferences_kitchen_custom_category_label: 'Add custom {category}',
+      com_preferences_kitchen_custom_appliance_placeholder: 'Add appliance',
+      com_preferences_kitchen_custom_cooktop_placeholder: 'Add cooktop',
+      com_preferences_kitchen_custom_tool_placeholder: 'Add tool',
       com_preferences_more_count: '+{count} more',
       com_preferences_review_action: 'Ask Rekky to improve this profile',
       com_preferences_remove_detail: 'Remove detail',
@@ -353,6 +358,59 @@ describe('PreferencesWorkspace', () => {
           '- Owner of kitchen scale and mandoline.',
           '- Stove with three burners (primary).',
           '- No kitchen torch available.',
+          '',
+          '## Specialty Ingredients',
+          '- fish sauce',
+        ].join('\n'),
+      },
+      expect.any(Object),
+    );
+  });
+
+  it('offers expanded kitchen presets and supports custom kitchen tools', () => {
+    render(<PreferencesWorkspace />);
+
+    const kitchenCard = screen.getAllByText('Kitchen')[0].closest('article');
+    expect(kitchenCard).not.toBeNull();
+    fireEvent.click(
+      within(kitchenCard as HTMLElement).getByRole('button', { name: 'Edit Kitchen' }),
+    );
+
+    expect(screen.getByText('Stand Mixer')).toBeInTheDocument();
+    expect(screen.getByText('Rice Cooker')).toBeInTheDocument();
+    expect(screen.getByText('Digital Kitchen Scale')).toBeInTheDocument();
+    expect(screen.getByText('Mortar and Pestle')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Rice Cooker'));
+    fireEvent.click(screen.getByText('Digital Meat Thermometer'));
+
+    const customApplianceInput = screen.getByPlaceholderText('Add appliance');
+    fireEvent.change(customApplianceInput, { target: { value: 'countertop smoker' } });
+    fireEvent.click(within(customApplianceInput.closest('div') as HTMLElement).getByText('Add'));
+
+    const customCooktopInput = screen.getByPlaceholderText('Add cooktop');
+    fireEvent.change(customCooktopInput, { target: { value: 'portable butane burner' } });
+    fireEvent.click(within(customCooktopInput.closest('div') as HTMLElement).getByText('Add'));
+
+    const customToolInput = screen.getByPlaceholderText('Add tool');
+    fireEvent.change(customToolInput, { target: { value: 'carbon steel wok' } });
+    fireEvent.click(within(customToolInput.closest('div') as HTMLElement).getByText('Add'));
+    fireEvent.click(screen.getByText('Save changes'));
+
+    expect(mockUpdateMutate).toHaveBeenLastCalledWith(
+      {
+        markdown: [
+          '## Safety',
+          '- No peanuts',
+          '',
+          '## Kitchen',
+          '- Appliances: Rice Cooker, Siemens oven, Electric grill, Portable blender, Countertop smoker',
+          '- Stove with three burners (primary)',
+          '- Portable butane burner',
+          '- Digital Meat Thermometer',
+          '- Owner of Kitchen scale and mandoline.',
+          '- Owner of Carbon steel wok.',
+          '- No kitchen torch available',
           '',
           '## Specialty Ingredients',
           '- fish sauce',

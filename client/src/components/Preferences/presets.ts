@@ -30,8 +30,14 @@ export const KITCHEN_PRESETS = {
     { name: 'Microwave', label: 'Microwave' },
     { name: 'Slow Cooker', label: 'Slow Cooker' },
     { name: 'Instant Pot', label: 'Instant Pot' },
+    { name: 'Rice Cooker', label: 'Rice Cooker' },
     { name: 'Food Processor', label: 'Food Processor' },
     { name: 'Blender', label: 'Blender' },
+    { name: 'Immersion Blender', label: 'Immersion Blender' },
+    { name: 'Stand Mixer', label: 'Stand Mixer' },
+    { name: 'Hand Mixer', label: 'Hand Mixer' },
+    { name: 'Toaster', label: 'Toaster' },
+    { name: 'Toaster Oven', label: 'Toaster Oven' },
     { name: 'Sous Vide', label: 'Sous Vide' },
   ],
   cooktops: [
@@ -40,19 +46,35 @@ export const KITCHEN_PRESETS = {
     { name: 'Electric Cooktop', label: 'Electric Cooktop' },
   ],
   tools: [
-    { name: 'Chef Knife', label: 'Chef\'s Knife' },
+    { name: 'Chef Knife', label: "Chef's Knife" },
+    { name: 'Digital Kitchen Scale', label: 'Digital Kitchen Scale' },
+    { name: 'Digital Meat Thermometer', label: 'Digital Meat Thermometer' },
+    { name: 'Stainless Steel Skillet', label: 'Stainless Steel Skillet' },
+    { name: 'Non-Stick Skillet', label: 'Non-Stick Skillet' },
     { name: 'Cast Iron Skillet', label: 'Cast Iron Skillet' },
+    { name: 'Saucepan', label: 'Saucepan' },
+    { name: 'Stockpot', label: 'Stockpot' },
     { name: 'Baking Sheet', label: 'Baking Sheet' },
+    { name: 'Baking Dish', label: 'Baking Dish' },
     { name: 'Wok', label: 'Wok' },
     { name: 'Dutch Oven', label: 'Dutch Oven' },
+    { name: 'Mortar and Pestle', label: 'Mortar and Pestle' },
   ],
 } as const;
 
 export const COOKING_LEVELS = [
   { level: 'Beginner', label: 'Beginner', desc: 'Simple, quick meals & basic techniques' },
-  { level: 'Home Cook', label: 'Home Cook', desc: 'Comfortable with standard recipes & knife skills' },
+  {
+    level: 'Home Cook',
+    label: 'Home Cook',
+    desc: 'Comfortable with standard recipes & knife skills',
+  },
   { level: 'Advanced', label: 'Advanced', desc: 'Enjoys multi-step processes & complex methods' },
-  { level: 'Master Chef', label: 'Master Chef', desc: 'Professional-level craft & creative customization' },
+  {
+    level: 'Master Chef',
+    label: 'Master Chef',
+    desc: 'Professional-level craft & creative customization',
+  },
 ] as const;
 
 export const AUTOCOMPLETE_SUGGESTIONS: Record<string, string[]> = {
