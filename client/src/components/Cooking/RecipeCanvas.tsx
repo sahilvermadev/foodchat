@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import copy from 'copy-to-clipboard';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -7,9 +7,32 @@ import rehypeKatex from 'rehype-katex';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkDirective from 'remark-directive';
-import type { CookingDraft, StructuredRecipe } from 'librechat-data-provider';
-import { BookmarkCheck, BookmarkPlus, Check, Copy, RefreshCw, Play, Pause, RotateCcw } from 'lucide-react';
-import { Button, TooltipAnchor, useToastContext } from '@librechat/client';
+import type {
+  CookingDraft,
+  SavedRecipeList,
+  SaveRecipeRequest,
+  StructuredRecipe,
+} from 'librechat-data-provider';
+import {
+  BookmarkCheck,
+  BookmarkPlus,
+  Check,
+  ChevronDown,
+  Copy,
+  Pause,
+  Play,
+  RefreshCw,
+  RotateCcw,
+} from 'lucide-react';
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  TooltipAnchor,
+  useToastContext,
+} from '@librechat/client';
 import {
   useSaveRecipeMutation,
   useSavedRecipeByDraftQuery,
@@ -17,9 +40,18 @@ import {
 } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { NotificationSeverity } from '~/common';
-import { code, a as StandardA, p, img } from '~/components/Chat/Messages/Content/MarkdownComponents';
+import {
+  code,
+  a as StandardA,
+  p,
+  img,
+} from '~/components/Chat/Messages/Content/MarkdownComponents';
 import { Citation, CompositeCitation, HighlightedText } from '~/components/Web/Citation';
-import { MCPUIResource, MCPUIResourceCarousel, mcpUIResourcePlugin } from '~/components/MCPUIResource';
+import {
+  MCPUIResource,
+  MCPUIResourceCarousel,
+  mcpUIResourcePlugin,
+} from '~/components/MCPUIResource';
 import { CodeBlockProvider } from '~/Providers';
 import { unicodeCitation } from '~/components/Web';
 import { langSubset } from '~/utils';
@@ -84,35 +116,41 @@ function KitchenTimer({ seconds }: { seconds: number }) {
   const secs = timeLeft % 60;
   const timeString = `${minutes}:${secs.toString().padStart(2, '0')}`;
   const isCompleted = timeLeft === 0;
+  let timerToneClass =
+    'border-border-medium bg-surface-active text-text-secondary hover:text-text-primary';
+  if (isRunning) {
+    timerToneClass =
+      'border-amber-500/30 bg-amber-500/10 text-amber-600 shadow-[0_0_10px_rgba(245,158,11,0.05)] dark:text-amber-400';
+  }
+  if (isCompleted) {
+    timerToneClass = 'animate-pulse border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400';
+  }
+  let timerDotClass = 'bg-text-tertiary';
+  if (isRunning) {
+    timerDotClass = 'bg-amber-500';
+  }
+  if (isCompleted) {
+    timerDotClass = 'bg-red-500';
+  }
 
   return (
     <span
-      className={`rekky-timer inline-flex items-center gap-2 px-3 py-1 mx-1.5 rounded-full text-xs font-semibold select-none border transition-all duration-300 ${
-        isCompleted
-          ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400 animate-pulse'
-          : isRunning
-          ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.05)]'
-          : 'bg-surface-active border-border-medium text-text-secondary hover:text-text-primary'
-      }`}
+      className={`rekky-timer mx-1.5 inline-flex select-none items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-300 ${timerToneClass}`}
       style={{ verticalAlign: 'middle' }}
     >
       <span className="relative flex h-3 w-3 items-center justify-center">
         {isRunning && (
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-30"></span>
         )}
-        <span
-          className={`relative inline-flex rounded-full h-2 w-2 ${
-            isCompleted ? 'bg-red-500' : isRunning ? 'bg-amber-500' : 'bg-text-tertiary'
-          }`}
-        ></span>
+        <span className={`relative inline-flex h-2 w-2 rounded-full ${timerDotClass}`}></span>
       </span>
-      
+
       <span className="text-sm leading-none">{timeString}</span>
 
       <button
         type="button"
         onClick={handleStartPause}
-        className="p-0.5 rounded-full hover:bg-surface-hover transition-colors"
+        className="rounded-full p-0.5 transition-colors hover:bg-surface-hover"
         title={isRunning ? 'Pause' : 'Start'}
       >
         {isRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -121,7 +159,7 @@ function KitchenTimer({ seconds }: { seconds: number }) {
       <button
         type="button"
         onClick={handleReset}
-        className="p-0.5 rounded-full hover:bg-surface-hover transition-colors"
+        className="rounded-full p-0.5 transition-colors hover:bg-surface-hover"
         title="Reset"
       >
         <RotateCcw className="h-3.5 w-3.5" />
@@ -132,7 +170,7 @@ function KitchenTimer({ seconds }: { seconds: number }) {
 
 // Custom Anchor Component
 const customA: React.ElementType = React.memo(function CustomAnchor(props: any) {
-  const { href, children } = props;
+  const { href } = props;
   if (href && href.startsWith('#timer-')) {
     const seconds = parseInt(href.substring(7), 10);
     if (!isNaN(seconds)) {
@@ -218,7 +256,10 @@ export default function RecipeCanvas({
     return draft ? recipeToMarkdown(draft.recipe) : '';
   }, [draft, markdown]);
 
-  const documentParts = useMemo(() => recipeMarkdownDisplay(documentMarkdown, draft?.recipe.title), [documentMarkdown, draft?.recipe.title]);
+  const documentParts = useMemo(
+    () => recipeMarkdownDisplay(documentMarkdown, draft?.recipe.title),
+    [documentMarkdown, draft?.recipe.title],
+  );
   const hasStructuredIngredients = draft?.recipe
     ? hasDisplayableIngredients(draft.recipe.ingredients)
     : false;
@@ -308,32 +349,95 @@ export default function RecipeCanvas({
     }
   };
 
-  const handleSave = () => {
-    if (!canSave || !draft || isSaving) {
-      return;
+  const savePayload = (saveList?: SavedRecipeList): SaveRecipeRequest | null => {
+    if (!draft) {
+      return null;
     }
-
-    const payload = {
+    return {
       title: draft.recipe.title,
       documentType: draft.documentType,
       documentMarkdown,
       recipe: draft.recipe,
       sourceDraftId: draft._id,
+      ...(saveList ? { saveList } : {}),
       ...(conversationId ? { sourceConversationId: conversationId } : {}),
     };
+  };
+
+  const saveNewRecipe = (saveList: SavedRecipeList) => {
+    if (!canSave || isSaving) {
+      return;
+    }
+    const payload = savePayload(saveList);
+    if (!payload) {
+      return;
+    }
+    saveRecipe.mutate(payload);
+  };
+
+  const handleSave = () => {
+    if (!canSave || !draft || isSaving) {
+      return;
+    }
 
     if (savedRecipe && hasChangedSavedRecipe) {
+      const payload = savePayload();
+      if (!payload) {
+        return;
+      }
       updateSavedRecipe.mutate({
         recipeId: savedRecipe._id,
         payload,
       });
       return;
     }
-
-    if (!savedRecipe) {
-      saveRecipe.mutate(payload);
-    }
   };
+
+  const saveButton = !hasSavedRecipe ? (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="sm"
+          variant="submit"
+          disabled={isSaving}
+          className="h-9 gap-2 px-3"
+          aria-label={localize('com_recipes_save_recipe')}
+        >
+          {saveIcon}
+          <span>{buttonLabel}</span>
+          <ChevronDown className="h-3.5 w-3.5 opacity-85" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="min-w-44 rounded-lg border-border-light bg-surface-primary p-1.5 shadow-xl"
+      >
+        <DropdownMenuItem
+          className="flex cursor-pointer items-center rounded-md px-2.5 py-2 text-sm text-text-primary transition-colors hover:bg-surface-hover focus:bg-surface-hover"
+          onSelect={() => saveNewRecipe('want_to_cook')}
+        >
+          {localize('com_recipes_save_list_want_to_cook')}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="flex cursor-pointer items-center rounded-md px-2.5 py-2 text-sm text-text-primary transition-colors hover:bg-surface-hover focus:bg-surface-hover"
+          onSelect={() => saveNewRecipe('cooked_already')}
+        >
+          {localize('com_recipes_save_list_cooked_already')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : (
+    <Button
+      size="sm"
+      variant={hasChangedSavedRecipe ? 'submit' : 'outline'}
+      disabled={isSaving || !hasChangedSavedRecipe}
+      onClick={handleSave}
+      className="h-9 gap-2 px-3"
+    >
+      {saveIcon}
+      <span>{buttonLabel}</span>
+    </Button>
+  );
 
   return (
     <section className="rekky-ui rekky-recipe-surface flex min-h-0 min-w-0 flex-1 flex-col bg-surface-primary-alt text-text-primary">
@@ -361,23 +465,12 @@ export default function RecipeCanvas({
                         </button>
                       }
                     />
-                    <Button
-                      size="sm"
-                      variant={hasChangedSavedRecipe || !hasSavedRecipe ? 'submit' : 'outline'}
-                      disabled={isSaving || (hasSavedRecipe && !hasChangedSavedRecipe)}
-                      onClick={handleSave}
-                      className="h-9 gap-2 px-3"
-                    >
-                      {saveIcon}
-                      <span>{buttonLabel}</span>
-                    </Button>
+                    {saveButton}
                   </div>
                 ) : null}
                 <div className="min-w-0">
                   {documentParts.title ? (
-                    <h1 className="rekky-title text-text-primary">
-                      {documentParts.title}
-                    </h1>
+                    <h1 className="rekky-title text-text-primary">{documentParts.title}</h1>
                   ) : null}
                   {draft ? (
                     <p className="rekky-meta mt-3 text-text-secondary">

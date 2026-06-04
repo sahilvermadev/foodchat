@@ -22,6 +22,7 @@ import {
 } from '@librechat/client';
 import type {
   RecipeTimeBucket,
+  SavedRecipeList,
   SavedRecipeSummary,
   SavedRecipesQuery,
 } from 'librechat-data-provider';
@@ -53,6 +54,9 @@ type ActiveFilter = {
   labelKey: TranslationKeys;
   value: string;
 };
+type SaveListFilter = SavedRecipeList | 'all';
+
+const saveListFilters: SaveListFilter[] = ['all', 'want_to_cook', 'cooked_already'];
 const filterKeys: FilterKey[] = [
   'documentType',
   'cuisine',
@@ -203,6 +207,20 @@ function displayFilter(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function saveListLabelKey(value: SaveListFilter): TranslationKeys {
+  if (value === 'want_to_cook') {
+    return 'com_recipes_save_list_want_to_cook';
+  }
+  if (value === 'cooked_already') {
+    return 'com_recipes_save_list_cooked_already';
+  }
+  return 'com_recipes_save_list_all';
+}
+
+function recipeSaveList(recipe: SavedRecipeSummary): SavedRecipeList {
+  return recipe.saveList ?? 'want_to_cook';
+}
+
 function recipeDescription(recipe: SavedRecipeSummary): string {
   const description = recipe.shortDescription?.trim();
   const title = recipe.title.toLowerCase();
@@ -218,6 +236,7 @@ export default function RecipeLibrary() {
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const [query, setQuery] = useState('');
+  const [saveListFilter, setSaveListFilter] = useState<SaveListFilter>('all');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [recipeToDelete, setRecipeToDelete] = useState<SavedRecipeSummary | null>(null);
@@ -231,9 +250,10 @@ export default function RecipeLibrary() {
       timeBucket: filters.timeBucket as RecipeTimeBucket | undefined,
       mainIngredient: filters.mainIngredient,
       equipment: filters.equipment,
+      ...(saveListFilter !== 'all' ? { saveList: saveListFilter } : {}),
       limit: 30,
     }),
-    [filters, query],
+    [filters, query, saveListFilter],
   );
   const recipesQuery = useRecipesInfiniteQuery(params, {
     refetchInterval: (data) =>
@@ -369,6 +389,32 @@ export default function RecipeLibrary() {
               </button>
             </div>
           ) : null}
+          <div
+            className="mt-5 flex flex-wrap gap-2"
+            role="tablist"
+            aria-label={localize('com_recipes_save_list_filter_label')}
+          >
+            {saveListFilters.map((value) => {
+              const active = saveListFilter === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className={cn(
+                    'rounded-full border px-3.5 py-2 text-sm font-medium transition-colors',
+                    active
+                      ? 'border-surface-submit bg-surface-submit text-white'
+                      : 'border-border-light bg-surface-primary text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+                  )}
+                  onClick={() => setSaveListFilter(value)}
+                >
+                  {localize(saveListLabelKey(value))}
+                </button>
+              );
+            })}
+          </div>
         </header>
 
         {filtersOpen ? (
@@ -538,6 +584,9 @@ export default function RecipeLibrary() {
                       </div>
                       <span className="text-text-secondary/80 mt-4 text-xs font-semibold uppercase tracking-[0.13em]">
                         {displayFilter(recipe.documentType)}
+                      </span>
+                      <span className="text-text-secondary/80 mt-2 text-xs font-semibold uppercase tracking-[0.13em]">
+                        {localize(saveListLabelKey(recipeSaveList(recipe)))}
                       </span>
                       {recipe.categorizationStatus === 'pending' ? (
                         <span className="text-text-secondary/80 mt-2 text-xs font-medium">

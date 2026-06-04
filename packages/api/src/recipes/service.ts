@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import type {
   RecipeCategorization,
   SavedRecipe,
+  SavedRecipeList,
   SavedRecipeSummary,
   SaveRecipeRequest,
   SavedRecipesQuery,
@@ -20,10 +21,12 @@ const maxLimit = 50;
 const pendingTimeoutMs = 1000 * 60 * 2;
 const activeIllustrationJobs = new Set<string>();
 const usersWithRepairedTitles = new Set<string>();
+const usersWithRepairedSaveLists = new Set<string>();
 
 type RecipeListFilter = {
   user: string;
   documentType?: string;
+  saveList?: SavedRecipeList;
   updatedAt?: { $lt: Date };
   $or?: Array<{ title?: RegExp; shortDescription?: RegExp; documentMarkdown?: RegExp }>;
   'categorization.cuisine'?: string;
@@ -484,6 +487,7 @@ function serializeSavedRecipe(recipe: ISavedRecipe, thumbnail = false): SavedRec
     illustrationStatus: recipe.illustrationStatus ?? 'pending',
     ...(recipe.illustrationModel ? { illustrationModel: recipe.illustrationModel } : {}),
     documentMarkdown: recipe.documentMarkdown,
+    saveList: cleanSaveList(recipe.saveList),
     ...(structuredRecipe ? { recipe: structuredRecipe } : {}),
     ...(recipe.sourceConversationId ? { sourceConversationId: recipe.sourceConversationId } : {}),
     ...(recipe.sourceDraftId ? { sourceDraftId: recipe.sourceDraftId } : {}),
@@ -530,6 +534,22 @@ async function repairLegacyWrapperTitles(user: string): Promise<void> {
   usersWithRepairedTitles.add(user);
 }
 
+async function repairLegacySaveLists(user: string): Promise<void> {
+  if (usersWithRepairedSaveLists.has(user)) {
+    return;
+  }
+
+  await model().updateMany(
+    {
+      user,
+      $or: [{ saveList: { $exists: false } }, { saveList: null }],
+    },
+    { $set: { saveList: 'want_to_cook' } },
+    { timestamps: false },
+  );
+  usersWithRepairedSaveLists.add(user);
+}
+
 function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
   const categorization = serializeCategorization(recipe.categorization);
   const storedTitle = recipe.title.trim();
@@ -553,6 +573,7 @@ function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
     user: recipe.user,
     title,
     documentType: recipe.documentType ?? 'recipe',
+    saveList: cleanSaveList(recipe.saveList),
     ...(recipe.shortDescription?.trim()
       ? { shortDescription: truncateSentence(recipe.shortDescription) }
       : {}),
@@ -579,6 +600,14 @@ function cleanFilter(value: string | undefined): string | undefined {
   return clean || undefined;
 }
 
+function cleanSaveList(value: string | undefined): SavedRecipeList {
+  return value === 'cooked_already' ? 'cooked_already' : 'want_to_cook';
+}
+
+function querySaveList(value: string | undefined): SavedRecipeList | undefined {
+  return value === 'want_to_cook' || value === 'cooked_already' ? value : undefined;
+}
+
 function listFilter(
   user: string,
   query: SavedRecipesQuery,
@@ -587,6 +616,10 @@ function listFilter(
   const filter: RecipeListFilter = { user };
   if (query.documentType) {
     filter.documentType = query.documentType;
+  }
+  const saveList = querySaveList(query.saveList);
+  if (saveList) {
+    filter.saveList = saveList;
   }
   const q = query.q?.trim();
   if (q) {
@@ -765,6 +798,7 @@ export async function saveRecipe(user: string, payload: SaveRecipeRequest): Prom
       recipe,
     ),
     documentMarkdown,
+    saveList: cleanSaveList(payload.saveList),
     ...(recipe ? { recipe } : {}),
     ...(payload.sourceConversationId ? { sourceConversationId: payload.sourceConversationId } : {}),
     ...(payload.sourceDraftId ? { sourceDraftId: payload.sourceDraftId } : {}),
@@ -781,6 +815,7 @@ export async function saveRecipe(user: string, payload: SaveRecipeRequest): Prom
 
 export async function getRecipe(user: string, recipeId: string): Promise<SavedRecipe | null> {
   await repairLegacyWrapperTitles(user);
+  await repairLegacySaveLists(user);
   await failStalePending(user);
   const recipe = await model()
     .findOne({ _id: recipeId, user })
@@ -793,6 +828,7 @@ export async function getRecipe(user: string, recipeId: string): Promise<SavedRe
 
 export async function getRecipeByDraft(user: string, draftId: string): Promise<SavedRecipe | null> {
   await repairLegacyWrapperTitles(user);
+  await repairLegacySaveLists(user);
   await failStalePending(user);
   const recipe = await model()
     .findOne({ user, sourceDraftId: draftId })
@@ -850,6 +886,7 @@ export async function listRecipes(
   query: SavedRecipesQuery,
 ): Promise<SavedRecipesResponse> {
   await repairLegacyWrapperTitles(user);
+  await repairLegacySaveLists(user);
   await failStalePending(user);
   const limit = Math.min(Math.max(Number(query.limit) || 20, 1), maxLimit);
   const Recipe = model();
@@ -871,6 +908,7 @@ export async function listRecipes(
           'recipe.title',
           'recipe.servings',
           'documentMarkdown',
+          'saveList',
           'createdAt',
           'updatedAt',
         ].join(' '),
@@ -913,6 +951,7 @@ export async function updateSavedRecipe(
   const shouldRegenerateIllustration = !hasIllustration(existing) || titleChanged;
 
   existing.documentType = payload.documentType ?? existing.documentType ?? 'recipe';
+  existing.saveList = cleanSaveList(payload.saveList ?? existing.saveList);
   existing.shortDescription = cleanShortDescription(
     payload.shortDescription,
     existing.title,

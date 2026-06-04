@@ -66,6 +66,7 @@ export interface ISavedRecipe extends Document {
   illustrationStatus?: SavedRecipe['illustrationStatus'];
   illustrationModel?: string;
   documentMarkdown: string;
+  saveList: SavedRecipe['saveList'];
   recipe?: StructuredRecipe;
   sourceConversationId?: string;
   sourceDraftId?: string;

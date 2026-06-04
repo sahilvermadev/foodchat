@@ -184,6 +184,12 @@ export const savedRecipeSchema = new Schema<ISavedRecipe>(
     },
     illustrationModel: { type: String },
     documentMarkdown: { type: String, required: true },
+    saveList: {
+      type: String,
+      enum: ['want_to_cook', 'cooked_already'],
+      default: 'want_to_cook',
+      required: true,
+    },
     recipe: { type: structuredRecipeSchema },
     sourceConversationId: { type: String, index: true },
     sourceDraftId: { type: String, index: true },
@@ -202,6 +208,7 @@ export const savedRecipeSchema = new Schema<ISavedRecipe>(
 
 savedRecipeSchema.index({ user: 1, updatedAt: -1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, title: 1, tenantId: 1 });
+savedRecipeSchema.index({ user: 1, saveList: 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, sourceDraftId: 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.cuisine': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.mealType': 1, tenantId: 1 });

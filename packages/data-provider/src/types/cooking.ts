@@ -55,6 +55,7 @@ export type RecipeCategorizationStatus = 'pending' | 'complete' | 'failed';
 export type RecipeIllustrationStatus = 'pending' | 'generating' | 'complete' | 'failed';
 export type RecipeDifficulty = 'beginner' | 'intermediate' | 'advanced';
 export type RecipeTimeBucket = 'under_15' | 'under_30' | 'under_60' | 'long_cook';
+export type SavedRecipeList = 'want_to_cook' | 'cooked_already';
 
 export type CookingDocument = {
   _id: string;
@@ -107,6 +108,7 @@ export type SavedRecipe = {
   illustrationStatus?: RecipeIllustrationStatus;
   illustrationModel?: string;
   documentMarkdown: string;
+  saveList: SavedRecipeList;
   recipe?: StructuredRecipe;
   sourceConversationId?: string;
   sourceDraftId?: string;
@@ -219,6 +221,7 @@ export type SaveRecipeRequest = {
   documentType?: CookingDocumentType;
   shortDescription?: string;
   documentMarkdown: string;
+  saveList?: SavedRecipeList;
   recipe?: StructuredRecipe;
   sourceConversationId?: string;
   sourceDraftId?: string;
@@ -229,6 +232,7 @@ export type UpdateSavedRecipeRequest = {
   documentType?: CookingDocumentType;
   shortDescription?: string;
   documentMarkdown?: string;
+  saveList?: SavedRecipeList;
   recipe?: StructuredRecipe;
 };
 
@@ -241,6 +245,7 @@ export type SavedRecipesQuery = {
   mainIngredient?: string;
   equipment?: string;
   documentType?: CookingDocumentType;
+  saveList?: SavedRecipeList;
   limit?: number;
   cursor?: string;
 };

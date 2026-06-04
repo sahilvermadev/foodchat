@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { render, screen } from '@testing-library/react';
@@ -41,6 +40,7 @@ function savedRecipe(ingredients: NonNullable<SavedRecipe['recipe']>['ingredient
     user: 'user-1',
     title: 'Changezi Chicken',
     documentType: 'recipe',
+    saveList: 'want_to_cook',
     documentMarkdown: `# Changezi Chicken
 
 ## Ingredients

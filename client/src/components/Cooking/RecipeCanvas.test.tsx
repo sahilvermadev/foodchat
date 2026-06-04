@@ -1,9 +1,10 @@
-/* eslint-disable i18next/no-literal-string */
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom/extend-expect';
 import type { CookingDraft } from 'librechat-data-provider';
 import RecipeCanvas from './RecipeCanvas';
+
+const mockSaveRecipe = jest.fn();
 
 jest.mock('react-markdown', () => ({
   __esModule: true,
@@ -19,7 +20,7 @@ jest.mock('~/components/Chat/Messages/Content/Markdown', () => ({
 
 jest.mock('~/components/Chat/Messages/Content/MarkdownComponents', () => ({
   code: ({ children }: { children: React.ReactNode }) => <code>{children}</code>,
-  a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props} />,
+  a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{props.children}</a>,
   p: (props: React.HTMLAttributes<HTMLParagraphElement>) => <p {...props} />,
   img: (props: React.ImgHTMLAttributes<HTMLImageElement>) => <img {...props} />,
 }));
@@ -45,7 +46,7 @@ jest.mock('~/components/Web', () => ({
 }));
 
 jest.mock('~/data-provider', () => ({
-  useSaveRecipeMutation: () => ({ isLoading: false, mutate: jest.fn() }),
+  useSaveRecipeMutation: () => ({ isLoading: false, mutate: mockSaveRecipe }),
   useSavedRecipeByDraftQuery: () => ({ data: null }),
   useUpdateSavedRecipeMutation: () => ({ isLoading: false, mutate: jest.fn() }),
 }));
@@ -65,6 +66,22 @@ jest.mock('@librechat/client', () => ({
       {children}
     </button>
   ),
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => (
+    <div role="menu">{children}</div>
+  ),
+  DropdownMenuItem: ({
+    children,
+    onSelect,
+  }: {
+    children: React.ReactNode;
+    onSelect?: () => void;
+  }) => (
+    <button type="button" role="menuitem" onClick={onSelect}>
+      {children}
+    </button>
+  ),
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TooltipAnchor: ({ render }: { render: React.ReactNode }) => render,
   useToastContext: () => ({ showToast: jest.fn() }),
 }));
@@ -98,6 +115,10 @@ function draftWithIngredients(ingredients: CookingDraft['recipe']['ingredients']
 }
 
 describe('RecipeCanvas recipe data display', () => {
+  beforeEach(() => {
+    mockSaveRecipe.mockClear();
+  });
+
   test('renders bullet Recipe Data lines as metric tiles', () => {
     renderCanvas(`# Dal
 
@@ -226,5 +247,32 @@ describe('RecipeCanvas recipe data display', () => {
     expect(screen.getByTestId('structured-ingredients')).toHaveTextContent('chicken');
     expect(screen.getByTestId('markdown-body')).not.toHaveTextContent('stale markdown chicken');
     expect(screen.getByTestId('markdown-body')).toHaveTextContent('## Instructions');
+  });
+
+  test('saves a new recipe to the selected recipe list from the save button menu', () => {
+    const markdown = `# Changezi Chicken
+
+## Ingredients
+- 500g chicken`;
+    const draft = draftWithIngredients([]);
+
+    render(
+      <RecipeCanvas
+        markdown={markdown}
+        conversationId="convo-1"
+        isPreparingDraft={false}
+        draft={draft}
+      />,
+    );
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('menuitem', { name: /com_recipes_save_list_cooked_already/ }));
+
+    expect(mockSaveRecipe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceDraftId: 'draft-1',
+        saveList: 'cooked_already',
+      }),
+    );
   });
 });

@@ -30,7 +30,7 @@ jest.mock('../illustrations/media', () => ({
     }
     return null;
   }),
-  createIllustrationThumbnail: jest.fn(async (media) => ({
+  createIllustrationThumbnail: jest.fn(async (_media) => ({
     buffer: Buffer.from('thumbnail'),
     contentType: 'image/webp',
   })),
@@ -161,6 +161,60 @@ describe('saved cooking document types', () => {
     expect(categorizeRecipe).not.toHaveBeenCalled();
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(illustrateRecipe).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('saved recipe lists', () => {
+  test('stores and filters want-to-cook and cooked-already recipes', async () => {
+    const user = 'recipe-list-user';
+    await saveRecipe(user, {
+      title: 'Cooked Soup',
+      documentType: 'guide',
+      documentMarkdown: markdown.replace('Thai Iced Tea', 'Cooked Soup'),
+      recipe: recipe('Cooked Soup'),
+      saveList: 'cooked_already',
+    });
+    await saveRecipe(user, {
+      title: 'Future Soup',
+      documentType: 'guide',
+      documentMarkdown: markdown.replace('Thai Iced Tea', 'Future Soup'),
+      recipe: recipe('Future Soup'),
+    });
+
+    const cooked = await listRecipes(user, { saveList: 'cooked_already' });
+    const wanted = await listRecipes(user, { saveList: 'want_to_cook' });
+
+    expect(cooked.recipes).toHaveLength(1);
+    expect(cooked.recipes[0]?.title).toBe('Cooked Soup');
+    expect(cooked.recipes[0]?.saveList).toBe('cooked_already');
+    expect(wanted.recipes).toHaveLength(1);
+    expect(wanted.recipes[0]?.title).toBe('Future Soup');
+    expect(wanted.recipes[0]?.saveList).toBe('want_to_cook');
+  });
+
+  test('repairs legacy recipes without a saved list into want-to-cook', async () => {
+    const created = await mongoose.models.SavedRecipe.create({
+      user: 'legacy-recipe-list-user',
+      title: 'Legacy Soup',
+      documentMarkdown: '# Legacy Soup',
+      categorizationStatus: 'complete',
+      illustrationStatus: 'complete',
+      categorizationVersion: 1,
+    });
+    await mongoose.models.SavedRecipe.updateOne(
+      { _id: created._id },
+      { $unset: { saveList: 1 } },
+      { timestamps: false },
+    );
+
+    const cooked = await listRecipes('legacy-recipe-list-user', { saveList: 'cooked_already' });
+    const wanted = await listRecipes('legacy-recipe-list-user', { saveList: 'want_to_cook' });
+    const repaired = await mongoose.models.SavedRecipe.findById(created._id).lean();
+
+    expect(cooked.recipes).toHaveLength(0);
+    expect(wanted.recipes).toHaveLength(1);
+    expect(wanted.recipes[0]?.saveList).toBe('want_to_cook');
+    expect(repaired?.saveList).toBe('want_to_cook');
   });
 });
 

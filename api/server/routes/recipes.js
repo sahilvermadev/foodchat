@@ -53,6 +53,12 @@ function assertDocumentType(value) {
   }
 }
 
+function assertSaveList(value) {
+  if (value != null && !['want_to_cook', 'cooked_already'].includes(value)) {
+    throw new CookingValidationError('Recipe list is malformed.');
+  }
+}
+
 function assertSaveBody(body) {
   const payload = isObject(body) ? body : {};
   assertDocumentMarkdown(payload.documentMarkdown);
@@ -60,6 +66,7 @@ function assertSaveBody(body) {
   assertOptionalText(payload.sourceConversationId, 'Conversation id is malformed.');
   assertOptionalText(payload.sourceDraftId, 'Draft id is malformed.');
   assertDocumentType(payload.documentType);
+  assertSaveList(payload.saveList);
   if (payload.recipe != null) {
     assertRecipe(payload.recipe);
   }
@@ -69,13 +76,19 @@ function assertPatchBody(body) {
   const payload = isObject(body) ? body : {};
   assertOptionalText(payload.title, 'Recipe title is malformed.');
   assertDocumentType(payload.documentType);
+  assertSaveList(payload.saveList);
   if (payload.documentMarkdown != null) {
     assertDocumentMarkdown(payload.documentMarkdown);
   }
   if (payload.recipe != null) {
     assertRecipe(payload.recipe);
   }
-  if (payload.title == null && payload.documentMarkdown == null && payload.recipe == null) {
+  if (
+    payload.title == null &&
+    payload.documentMarkdown == null &&
+    payload.recipe == null &&
+    payload.saveList == null
+  ) {
     throw new CookingValidationError('Recipe update is empty.');
   }
 }
@@ -111,6 +124,7 @@ router.post('/', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
+    assertSaveList(req.query.saveList);
     const recipes = await listRecipes(userId(req), req.query);
     res.json(recipes);
   } catch (error) {

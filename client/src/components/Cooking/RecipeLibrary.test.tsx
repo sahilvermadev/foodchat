@@ -2,12 +2,13 @@ import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/extend-expect';
-import type { SavedRecipeSummary } from 'librechat-data-provider';
+import type { SavedRecipeSummary, SavedRecipesQuery } from 'librechat-data-provider';
 import RecipeLibrary from './RecipeLibrary';
 
 const mockDeleteRecipe = jest.fn();
 const mockShowToast = jest.fn();
 const mockFetchNextPage = jest.fn();
+let mockInfiniteParams: SavedRecipesQuery | undefined;
 let mockInfinitePages: Array<{
   recipes: SavedRecipeSummary[];
   total?: number;
@@ -19,6 +20,7 @@ const mockSavedRecipe: SavedRecipeSummary = {
   user: 'user-1',
   title: 'Thai Iced Tea',
   documentType: 'recipe',
+  saveList: 'want_to_cook',
   illustrationStatus: 'complete',
   categorizationStatus: 'complete',
   categorizationVersion: 1,
@@ -28,13 +30,16 @@ const mockSavedRecipe: SavedRecipeSummary = {
 
 jest.mock('~/data-provider', () => ({
   useDeleteSavedRecipeMutation: () => ({ isLoading: false, mutate: mockDeleteRecipe }),
-  useRecipesInfiniteQuery: () => ({
-    data: { pages: mockInfinitePages },
-    fetchNextPage: mockFetchNextPage,
-    hasNextPage: true,
-    isFetchingNextPage: false,
-    isLoading: false,
-  }),
+  useRecipesInfiniteQuery: (params: SavedRecipesQuery) => {
+    mockInfiniteParams = params;
+    return {
+      data: { pages: mockInfinitePages },
+      fetchNextPage: mockFetchNextPage,
+      hasNextPage: true,
+      isFetchingNextPage: false,
+      isLoading: false,
+    };
+  },
   useRecipesQuery: () => ({ data: { recipes: [mockSavedRecipe], total: 1 }, isLoading: false }),
 }));
 
@@ -83,6 +88,7 @@ jest.mock('@librechat/client', () => ({
 describe('RecipeLibrary actions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockInfiniteParams = undefined;
     mockInfinitePages = [{ recipes: [mockSavedRecipe], total: 31, nextCursor: 'next-page' }];
   });
 
@@ -123,5 +129,19 @@ describe('RecipeLibrary actions', () => {
     );
 
     expect(screen.getByText('com_recipes_count_short_one')).toBeInTheDocument();
+  });
+
+  test('filters recipes by saved list', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <RecipeLibrary />
+      </MemoryRouter>,
+    );
+
+    expect(mockInfiniteParams).not.toHaveProperty('saveList');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'com_recipes_save_list_cooked_already' }));
+
+    expect(mockInfiniteParams).toEqual(expect.objectContaining({ saveList: 'cooked_already' }));
   });
 });

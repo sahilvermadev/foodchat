@@ -119,6 +119,40 @@ describe('recipes routes', () => {
     expect(recipesApi.deleteSavedRecipe).toHaveBeenCalledWith('auth-user', 'recipe-1');
   });
 
+  test('accepts saved recipe list choices', async () => {
+    await request(app)
+      .post('/api/recipes')
+      .send({
+        title: 'Body title',
+        documentMarkdown: '# Soup',
+        recipe: recipe(),
+        saveList: 'cooked_already',
+      })
+      .expect(201, { _id: 'recipe-1' });
+
+    expect(recipesApi.saveRecipe).toHaveBeenCalledWith(
+      'auth-user',
+      expect.objectContaining({ saveList: 'cooked_already' }),
+    );
+  });
+
+  test('rejects malformed saved recipe list choices', async () => {
+    await request(app)
+      .post('/api/recipes')
+      .send({ documentMarkdown: '# Soup', saveList: 'someday' })
+      .expect(400, { error: 'Recipe list is malformed.' });
+
+    expect(recipesApi.saveRecipe).not.toHaveBeenCalled();
+  });
+
+  test('rejects malformed saved recipe list filters', async () => {
+    await request(app)
+      .get('/api/recipes?saveList=someday')
+      .expect(400, { error: 'Recipe list is malformed.' });
+
+    expect(recipesApi.listRecipes).not.toHaveBeenCalled();
+  });
+
   test('serves versioned thumbnail illustrations with browser caching', async () => {
     const response = await request(app)
       .get('/api/recipes/recipe-1/illustration?variant=thumbnail&v=1')
@@ -159,7 +193,8 @@ describe('recipes routes', () => {
     if (body != null) {
       call.send(body);
     }
-    await call.expect(404);
+    const response = await call;
+    expect(response.status).toBe(404);
   });
 
   test.each([
@@ -168,6 +203,7 @@ describe('recipes routes', () => {
     ['empty update', 'patch', '/recipe-1', {}],
     ['bad update markdown', 'patch', '/recipe-1', { documentMarkdown: '' }],
   ])('rejects %s with 400 before service call', async (_name, method, path, body) => {
-    await request(app)[method](`/api/recipes${path}`).send(body).expect(400);
+    const response = await request(app)[method](`/api/recipes${path}`).send(body);
+    expect(response.status).toBe(400);
   });
 });
