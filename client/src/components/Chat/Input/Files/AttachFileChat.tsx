@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react';
+import { AttachmentIcon, TooltipAnchor } from '@librechat/client';
 import {
   Constants,
   supportsFiles,
@@ -9,7 +10,29 @@ import {
 import type { TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter } from '~/common';
 import { useGetFileConfig, useGetEndpointsQuery } from '~/data-provider';
+import { useLocalize } from '~/hooks';
 import AttachFileMenu from './AttachFileMenu';
+
+function DisabledAttachmentButton() {
+  const localize = useLocalize();
+
+  return (
+    <TooltipAnchor
+      description={localize('com_sidepanel_attach_files')}
+      disabled
+      render={
+        <button
+          type="button"
+          disabled
+          aria-label={localize('com_sidepanel_attach_files')}
+          className="flex size-11 items-center justify-center rounded-full p-1 disabled:cursor-not-allowed"
+        >
+          <AttachmentIcon />
+        </button>
+      }
+    />
+  );
+}
 
 function AttachFileChat({
   disableInputs,
@@ -27,11 +50,11 @@ function AttachFileChat({
   const conversationId = conversation?.conversationId ?? Constants.NEW_CONVO;
   const { endpoint } = conversation ?? { endpoint: null };
 
-  const { data: fileConfig = null } = useGetFileConfig({
+  const { data: fileConfig = null, isLoading: isFileConfigLoading } = useGetFileConfig({
     select: (data) => mergeFileConfig(data as Parameters<typeof mergeFileConfig>[0]),
   });
 
-  const { data: endpointsConfig } = useGetEndpointsQuery();
+  const { data: endpointsConfig, isLoading: areEndpointsLoading } = useGetEndpointsQuery();
 
   const endpointType = useMemo(
     () => resolveEndpointType(endpointsConfig, endpoint),
@@ -54,6 +77,10 @@ function AttachFileChat({
     () => (disableInputs || endpointFileConfig?.disabled) ?? false,
     [disableInputs, endpointFileConfig?.disabled],
   );
+
+  if (!endpoint || isFileConfigLoading || areEndpointsLoading) {
+    return <DisabledAttachmentButton />;
+  }
 
   if (endpointSupportsFiles && !isUploadDisabled) {
     return (

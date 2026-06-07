@@ -377,13 +377,11 @@ const ChatForm = memo(function ChatForm({
                 {isSubmitting && showStopButton ? (
                   <StopButton stop={handleStopGenerating} setShowStopButton={setShowStopButton} />
                 ) : (
-                  endpoint && (
-                    <SendButton
-                      ref={submitButtonRef}
-                      control={methods.control}
-                      disabled={filesLoading || isSubmitting || disableInputs || isNotAppendable}
-                    />
-                  )
+                  <SendButton
+                    ref={submitButtonRef}
+                    control={methods.control}
+                    disabled={isInputUnavailable || filesLoading || isSubmitting || isNotAppendable}
+                  />
                 )}
               </div>
             </div>
