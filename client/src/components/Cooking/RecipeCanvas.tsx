@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import copy from 'copy-to-clipboard';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -7,6 +7,7 @@ import rehypeKatex from 'rehype-katex';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkDirective from 'remark-directive';
+import type { Pluggable } from 'unified';
 import type {
   CookingDraft,
   SavedRecipeList,
@@ -41,10 +42,10 @@ import {
 import { useLocalize } from '~/hooks';
 import { NotificationSeverity } from '~/common';
 import {
-  code,
   a as StandardA,
   p,
   img,
+  table as MarkdownTable,
 } from '~/components/Chat/Messages/Content/MarkdownComponents';
 import { Citation, CompositeCitation, HighlightedText } from '~/components/Web/Citation';
 import {
@@ -52,62 +53,166 @@ import {
   MCPUIResourceCarousel,
   mcpUIResourcePlugin,
 } from '~/components/MCPUIResource';
+import { RekkyJsonMarkdownCode } from '~/components/RekkyJsonRender';
 import { CodeBlockProvider } from '~/Providers';
 import { unicodeCitation } from '~/components/Web';
 import { langSubset } from '~/utils';
 import RecipeMetrics from './Metrics';
 import StructuredIngredients, { hasDisplayableIngredients } from './StructuredIngredients';
 import { recipeMarkdownDisplay, stripIngredientsSection } from './recipe';
+import { remarkCookingTimers } from './timerMarkdown';
 
-// KitchenTimer Component
-function KitchenTimer({ seconds }: { seconds: number }) {
+type BrowserAudioContext = typeof AudioContext;
+
+function playTimerCompleteAlarm() {
+  const AudioContextCtor = (window.AudioContext ||
+    (window as Window & { webkitAudioContext?: BrowserAudioContext }).webkitAudioContext) as
+    | BrowserAudioContext
+    | undefined;
+
+  if (!AudioContextCtor) {
+    return;
+  }
+
+  const audioCtx = new AudioContextCtor();
+  void audioCtx.resume?.();
+
+  const compressor = audioCtx.createDynamicsCompressor();
+  compressor.threshold.setValueAtTime(-18, audioCtx.currentTime);
+  compressor.knee.setValueAtTime(16, audioCtx.currentTime);
+  compressor.ratio.setValueAtTime(4, audioCtx.currentTime);
+  compressor.attack.setValueAtTime(0.004, audioCtx.currentTime);
+  compressor.release.setValueAtTime(0.18, audioCtx.currentTime);
+  compressor.connect(audioCtx.destination);
+
+  const masterGain = audioCtx.createGain();
+  masterGain.gain.setValueAtTime(0.72, audioCtx.currentTime);
+  masterGain.connect(compressor);
+
+  const playTone = (startTime: number, frequency: number, duration: number, peakGain = 0.42) => {
+    const oscillator = audioCtx.createOscillator();
+    const harmonic = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const harmonicGain = audioCtx.createGain();
+
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(frequency, startTime);
+    oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.012, startTime + duration);
+
+    harmonic.type = 'sine';
+    harmonic.frequency.setValueAtTime(frequency * 2, startTime);
+
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+    harmonicGain.gain.setValueAtTime(0.0001, startTime);
+    harmonicGain.gain.linearRampToValueAtTime(peakGain * 0.18, startTime + 0.016);
+    harmonicGain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration * 0.72);
+
+    oscillator.connect(gain);
+    gain.connect(masterGain);
+    harmonic.connect(harmonicGain);
+    harmonicGain.connect(masterGain);
+    oscillator.start(startTime);
+    oscillator.stop(startTime + duration + 0.04);
+    harmonic.start(startTime);
+    harmonic.stop(startTime + duration + 0.04);
+  };
+
+  const start = audioCtx.currentTime + 0.04;
+  [
+    [0, 659.25, 0.16, 0.34],
+    [0.18, 880, 0.18, 0.42],
+    [0.4, 1174.66, 0.26, 0.36],
+    [0.86, 659.25, 0.16, 0.32],
+    [1.04, 880, 0.18, 0.4],
+    [1.26, 1318.51, 0.32, 0.36],
+  ].forEach(([offset, frequency, duration, peakGain]) => {
+    playTone(start + offset, frequency, duration, peakGain);
+  });
+
+  if ('vibrate' in navigator) {
+    navigator.vibrate([70, 40, 90]);
+  }
+
+  window.setTimeout(() => {
+    void audioCtx.close();
+  }, 2200);
+}
+
+export function KitchenTimer({ seconds, label }: { seconds: number; label?: string }) {
+  const localize = useLocalize();
   const [timeLeft, setTimeLeft] = useState(seconds);
   const [isRunning, setIsRunning] = useState(false);
+  const endsAtRef = useRef<number | null>(null);
+
+  const syncRemainingTime = useCallback(() => {
+    const endsAt = endsAtRef.current;
+    if (endsAt === null) {
+      return;
+    }
+
+    const remaining = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+    setTimeLeft(remaining);
+    if (remaining > 0) {
+      return;
+    }
+
+    endsAtRef.current = null;
+    setIsRunning(false);
+    try {
+      playTimerCompleteAlarm();
+    } catch (error) {
+      console.error('Timer alarm failed:', error);
+    }
+  }, []);
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    if (isRunning && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
-      }, 1000);
-    } else if (timeLeft === 0 && isRunning) {
-      setIsRunning(false);
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const playBeep = (time: number, freq: number) => {
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, time);
-          gain.gain.setValueAtTime(0.3, time);
-          gain.gain.exponentialRampToValueAtTime(0.01, time + 0.25);
-          osc.connect(gain);
-          gain.connect(audioCtx.destination);
-          osc.start(time);
-          osc.stop(time + 0.3);
-        };
-        // Pleasant triple high-pitch chime sound
-        playBeep(audioCtx.currentTime, 880);
-        playBeep(audioCtx.currentTime + 0.3, 880);
-        playBeep(audioCtx.currentTime + 0.6, 1200);
-      } catch (err) {
-        console.error('Audio chime failed:', err);
-      }
+    if (!isRunning) {
+      return undefined;
     }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isRunning, timeLeft]);
 
-  const handleStartPause = (e: React.MouseEvent) => {
+    syncRemainingTime();
+    const interval = window.setInterval(syncRemainingTime, 250);
+    document.addEventListener('visibilitychange', syncRemainingTime);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', syncRemainingTime);
+    };
+  }, [isRunning, syncRemainingTime]);
+
+  const isCompleted = timeLeft === 0;
+  const hasStarted = timeLeft !== seconds;
+  const timerName = label
+    ? localize('com_cooking_named_timer', { 0: label })
+    : localize('com_cooking_timer');
+
+  const handlePrimaryAction = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsRunning(!isRunning);
+    if (isCompleted) {
+      setTimeLeft(seconds);
+      endsAtRef.current = Date.now() + seconds * 1000;
+      setIsRunning(true);
+      return;
+    }
+    if (isRunning) {
+      syncRemainingTime();
+      endsAtRef.current = null;
+      setIsRunning(false);
+      return;
+    }
+
+    endsAtRef.current = Date.now() + timeLeft * 1000;
+    setIsRunning(true);
   };
 
   const handleReset = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    endsAtRef.current = null;
     setIsRunning(false);
     setTimeLeft(seconds);
   };
@@ -115,69 +220,78 @@ function KitchenTimer({ seconds }: { seconds: number }) {
   const minutes = Math.floor(timeLeft / 60);
   const secs = timeLeft % 60;
   const timeString = `${minutes}:${secs.toString().padStart(2, '0')}`;
-  const isCompleted = timeLeft === 0;
-  let timerToneClass =
-    'border-border-medium bg-surface-active text-text-secondary hover:text-text-primary';
+  let timerToneClass = 'border-border-light bg-surface-primary text-text-secondary';
   if (isRunning) {
     timerToneClass =
-      'border-amber-500/30 bg-amber-500/10 text-amber-600 shadow-[0_0_10px_rgba(245,158,11,0.05)] dark:text-amber-400';
+      'border-amber-500/25 bg-amber-500/10 text-amber-600 shadow-[0_0_8px_rgba(245,158,11,0.04)] dark:text-amber-300';
   }
   if (isCompleted) {
-    timerToneClass = 'animate-pulse border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400';
+    timerToneClass =
+      'border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300';
   }
-  let timerDotClass = 'bg-text-tertiary';
+  let primaryActionLabel = localize('com_cooking_start_named_timer', { 0: timerName });
   if (isRunning) {
-    timerDotClass = 'bg-amber-500';
+    primaryActionLabel = localize('com_cooking_pause_named_timer', { 0: timerName });
   }
   if (isCompleted) {
-    timerDotClass = 'bg-red-500';
+    primaryActionLabel = localize('com_cooking_restart_named_timer', { 0: timerName });
+  }
+
+  let timerIcon = <Play className="h-3 w-3" aria-hidden="true" />;
+  if (isRunning) {
+    timerIcon = <Pause className="h-3 w-3" aria-hidden="true" />;
+  }
+  if (isCompleted) {
+    timerIcon = <Check className="h-3 w-3" aria-hidden="true" />;
   }
 
   return (
     <span
-      className={`rekky-timer mx-1.5 inline-flex select-none items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-300 ${timerToneClass}`}
-      style={{ verticalAlign: 'middle' }}
+      className={`rekky-timer mx-1 inline-flex h-6 select-none items-center gap-0.5 rounded-full border px-1 text-[0.72rem] font-semibold leading-none transition-colors duration-200 ${timerToneClass}`}
+      style={{ verticalAlign: '-0.14em' }}
+      aria-label={`${timerName} ${timeString}`}
+      title={timerName}
     >
-      <span className="relative flex h-3 w-3 items-center justify-center">
-        {isRunning && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-30"></span>
-        )}
-        <span className={`relative inline-flex h-2 w-2 rounded-full ${timerDotClass}`}></span>
-      </span>
-
-      <span className="text-sm leading-none">{timeString}</span>
-
       <button
         type="button"
-        onClick={handleStartPause}
-        className="rounded-full p-0.5 transition-colors hover:bg-surface-hover"
-        title={isRunning ? 'Pause' : 'Start'}
+        onClick={handlePrimaryAction}
+        className="inline-flex h-5 min-w-12 items-center justify-center gap-1 rounded-full px-1.5 tabular-nums transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-1 focus-visible:ring-border-heavy"
+        aria-label={primaryActionLabel}
+        title={primaryActionLabel}
       >
-        {isRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+        {timerIcon}
+        <span>{timeString}</span>
       </button>
 
-      <button
-        type="button"
-        onClick={handleReset}
-        className="rounded-full p-0.5 transition-colors hover:bg-surface-hover"
-        title="Reset"
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-      </button>
+      {hasStarted && (
+        <button
+          type="button"
+          onClick={handleReset}
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary focus:outline-none focus-visible:ring-1 focus-visible:ring-border-heavy"
+          aria-label={localize('com_cooking_reset_named_timer', { 0: timerName })}
+          title={localize('com_cooking_reset_timer')}
+        >
+          <RotateCcw className="h-3 w-3" aria-hidden="true" />
+        </button>
+      )}
     </span>
   );
 }
 
-// Custom Anchor Component
-const customA: React.ElementType = React.memo(function CustomAnchor(props: any) {
-  const { href } = props;
-  if (href && href.startsWith('#timer-')) {
-    const seconds = parseInt(href.substring(7), 10);
-    if (!isNaN(seconds)) {
-      return <KitchenTimer seconds={seconds} />;
-    }
+type RekkyTimerElementProps = {
+  seconds?: number | string;
+  label?: string;
+};
+
+const RekkyTimerElement = React.memo(function RekkyTimerElement({
+  seconds: rawSeconds,
+  label,
+}: RekkyTimerElementProps) {
+  const seconds = Number(rawSeconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return null;
   }
-  return <StandardA {...props} />;
+  return <KitchenTimer seconds={seconds} label={label} />;
 });
 
 type RecipeCanvasProps = {
@@ -268,18 +382,9 @@ export default function RecipeCanvas({
     if (!documentParts.body) {
       return '';
     }
-    const body = hasStructuredIngredients
+    return hasStructuredIngredients
       ? stripIngredientsSection(documentParts.body)
       : documentParts.body;
-    const formatSeconds = (secStr: string) => {
-      const totalSec = parseInt(secStr, 10);
-      const m = Math.floor(totalSec / 60);
-      const s = totalSec % 60;
-      return `${m}:${s.toString().padStart(2, '0')}`;
-    };
-    return body.replace(/\[timer:(\d+)\]/g, (match, seconds) => {
-      return `[⏱️ ${formatSeconds(seconds)}](#timer-${seconds})`;
-    });
   }, [documentParts.body, hasStructuredIngredients]);
 
   const rehypePlugins = useMemo(
@@ -297,15 +402,32 @@ export default function RecipeCanvas({
     [],
   );
 
-  const remarkPlugins = useMemo(
+  const remarkPlugins = useMemo<Pluggable[]>(
     () => [
       supersub,
       remarkGfm,
       remarkDirective,
+      remarkCookingTimers,
       [remarkMath, { singleDollarTextMath: false }],
       unicodeCitation,
       mcpUIResourcePlugin,
     ],
+    [],
+  );
+  const markdownComponents = useMemo(
+    () => ({
+      code: RekkyJsonMarkdownCode,
+      a: StandardA,
+      p,
+      img,
+      table: MarkdownTable,
+      'rekky-timer': RekkyTimerElement,
+      citation: Citation,
+      'highlighted-text': HighlightedText,
+      'composite-citation': CompositeCitation,
+      'mcp-ui-resource': MCPUIResource,
+      'mcp-ui-carousel': MCPUIResourceCarousel,
+    }),
     [],
   );
 
@@ -329,12 +451,12 @@ export default function RecipeCanvas({
   if (isSaving) {
     buttonLabel = localize('com_recipes_saving');
   }
-  let saveIcon = <BookmarkPlus className="h-4 w-4" aria-hidden="true" />;
+  let saveIcon = <BookmarkPlus className="size-5 sm:size-4" aria-hidden="true" />;
   if (hasSavedRecipe && !hasChangedSavedRecipe) {
-    saveIcon = <BookmarkCheck className="h-4 w-4" aria-hidden="true" />;
+    saveIcon = <BookmarkCheck className="size-5 sm:size-4" aria-hidden="true" />;
   }
   if (isSaving) {
-    saveIcon = <RefreshCw className="h-4 w-4 animate-spin" aria-hidden="true" />;
+    saveIcon = <RefreshCw className="size-5 animate-spin sm:size-4" aria-hidden="true" />;
   }
 
   const handleCopyMarkdown = () => {
@@ -400,12 +522,12 @@ export default function RecipeCanvas({
           size="sm"
           variant="submit"
           disabled={isSaving}
-          className="h-9 gap-2 px-3"
+          className="size-11 gap-0 rounded-full bg-transparent p-0 text-surface-submit shadow-none hover:bg-surface-hover hover:text-surface-submit sm:h-9 sm:w-auto sm:gap-2 sm:rounded-md sm:bg-surface-submit sm:px-3 sm:text-white sm:hover:bg-surface-submit sm:hover:text-white"
           aria-label={localize('com_recipes_save_recipe')}
         >
           {saveIcon}
-          <span>{buttonLabel}</span>
-          <ChevronDown className="h-3.5 w-3.5 opacity-85" aria-hidden="true" />
+          <span className="hidden sm:inline">{buttonLabel}</span>
+          <ChevronDown className="hidden h-3.5 w-3.5 opacity-85 sm:block" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -432,67 +554,72 @@ export default function RecipeCanvas({
       variant={hasChangedSavedRecipe ? 'submit' : 'outline'}
       disabled={isSaving || !hasChangedSavedRecipe}
       onClick={handleSave}
-      className="h-9 gap-2 px-3"
+      className="size-11 gap-0 rounded-full border-0 bg-transparent p-0 text-surface-submit shadow-none hover:bg-surface-hover hover:text-surface-submit disabled:text-surface-submit sm:h-9 sm:w-auto sm:gap-2 sm:rounded-md sm:border sm:px-3"
+      aria-label={buttonLabel}
     >
       {saveIcon}
-      <span>{buttonLabel}</span>
+      <span className="hidden sm:inline">{buttonLabel}</span>
     </Button>
   );
 
+  const documentActions = canSave ? (
+    <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+      <TooltipAnchor
+        description={localize('com_cooking_copy_markdown')}
+        render={
+          <button
+            type="button"
+            onClick={handleCopyMarkdown}
+            aria-label={localize('com_cooking_copy_markdown')}
+            className="inline-flex size-11 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-heavy sm:size-8 sm:rounded-md"
+          >
+            {isCopied ? (
+              <Check className="size-[1.125rem] sm:size-4" aria-hidden="true" />
+            ) : (
+              <Copy className="size-[1.125rem] sm:size-4" aria-hidden="true" />
+            )}
+          </button>
+        }
+      />
+      {saveButton}
+    </div>
+  ) : null;
+
   return (
     <section className="rekky-ui rekky-recipe-surface flex min-h-0 min-w-0 flex-1 flex-col bg-surface-primary-alt text-text-primary">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7 lg:px-10">
-        <article className="mx-auto min-h-full max-w-[68rem] rounded-lg border border-border-light bg-surface-primary shadow-none">
+      <div className="min-h-0 flex-1 overflow-y-auto px-0 py-0 sm:px-7 sm:py-6 lg:px-10">
+        <article className="mx-auto min-h-full max-w-[68rem] border-y border-border-light bg-surface-primary shadow-none sm:rounded-lg sm:border">
           {documentMarkdown ? (
-            <header className="border-b border-border-light px-5 py-7 sm:px-8 sm:py-9 lg:px-12">
-              <div className="flex flex-col gap-5">
-                {canSave ? (
-                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                    <TooltipAnchor
-                      description={localize('com_cooking_copy_markdown')}
-                      render={
-                        <button
-                          type="button"
-                          onClick={handleCopyMarkdown}
-                          aria-label={localize('com_cooking_copy_markdown')}
-                          className="inline-flex size-8 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-heavy"
-                        >
-                          {isCopied ? (
-                            <Check className="size-4" aria-hidden="true" />
-                          ) : (
-                            <Copy className="size-4" aria-hidden="true" />
-                          )}
-                        </button>
-                      }
-                    />
-                    {saveButton}
-                  </div>
+            <header className="border-b border-border-light px-4 py-6 sm:px-8 sm:py-9 lg:px-12">
+              <div className="min-w-0">
+                {documentParts.title ? (
+                  <h1 className="rekky-title text-text-primary">{documentParts.title}</h1>
                 ) : null}
-                <div className="min-w-0">
-                  {documentParts.title ? (
-                    <h1 className="rekky-title text-text-primary">{documentParts.title}</h1>
-                  ) : null}
-                  {draft ? (
-                    <p className="rekky-meta mt-3 text-text-secondary">
-                      {localize(documentTypeKey(draft))}
-                    </p>
-                  ) : null}
-                  {savedRecipe?.categorizationStatus === 'pending' ? (
-                    <p className="rekky-meta mt-2 text-text-secondary">
-                      {localize('com_recipes_categorizing')}
-                    </p>
-                  ) : null}
-                  {isPreparingDraft ? (
-                    <p className="rekky-meta mt-2 text-text-secondary">
-                      {localize('com_cooking_updating_canvas')}
-                    </p>
-                  ) : null}
+                <div className="mt-3 flex min-h-11 items-start justify-between gap-3 sm:min-h-9">
+                  <div className="min-w-0 pt-1 sm:pt-0">
+                    {draft ? (
+                      <p className="rekky-meta text-text-secondary">
+                        {localize(documentTypeKey(draft))}
+                      </p>
+                    ) : null}
+                    {savedRecipe?.categorizationStatus === 'pending' ? (
+                      <p className="rekky-meta mt-2 text-text-secondary">
+                        {localize('com_recipes_categorizing')}
+                      </p>
+                    ) : null}
+                    {isPreparingDraft ? (
+                      <p className="rekky-meta mt-2 text-text-secondary">
+                        {localize('com_cooking_updating_canvas')}
+                      </p>
+                    ) : null}
+                  </div>
+                  {documentActions}
                 </div>
               </div>
             </header>
           ) : null}
           {documentMarkdown ? (
-            <div className="px-5 py-7 sm:px-8 sm:py-9 lg:px-12">
+            <div className="px-4 py-6 sm:px-8 sm:py-9 lg:px-12">
               <RecipeMetrics metrics={documentParts.metrics} />
               {hasStructuredIngredients ? (
                 <StructuredIngredients ingredients={draft?.recipe.ingredients ?? []} />
@@ -500,21 +627,11 @@ export default function RecipeCanvas({
               <div className="cooking-recipe-markdown markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
                 <CodeBlockProvider>
                   <ReactMarkdown
-                    remarkPlugins={remarkPlugins as any}
-                    rehypePlugins={rehypePlugins as any}
-                    components={
-                      {
-                        code,
-                        a: customA,
-                        p,
-                        img,
-                        citation: Citation,
-                        'highlighted-text': HighlightedText,
-                        'composite-citation': CompositeCitation,
-                        'mcp-ui-resource': MCPUIResource,
-                        'mcp-ui-carousel': MCPUIResourceCarousel,
-                      } as any
-                    }
+                    /** @ts-expect-error Unified plugin versions expose incompatible duplicate types. */
+                    remarkPlugins={remarkPlugins}
+                    /** @ts-expect-error Unified plugin versions expose incompatible duplicate types. */
+                    rehypePlugins={rehypePlugins}
+                    components={markdownComponents as { [nodeType: string]: React.ElementType }}
                   >
                     {processedBody}
                   </ReactMarkdown>

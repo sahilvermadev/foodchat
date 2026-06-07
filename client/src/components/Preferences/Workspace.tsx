@@ -74,6 +74,11 @@ type KitchenDisplayGroup = {
 
 type KitchenPresetCategory = keyof typeof KITCHEN_PRESETS;
 
+type KitchenPresetMatch = {
+  category: KitchenPresetCategory;
+  name: string;
+};
+
 type ProfileDrafts = Map<PreferenceHeading, string[]>;
 
 const kitchenCategoryLabelKeys: Record<KitchenPresetCategory, TranslationKeys> = {
@@ -292,12 +297,48 @@ function sentenceCase(value: string): string {
   return clean ? `${clean.charAt(0).toUpperCase()}${clean.slice(1)}` : clean;
 }
 
-function splitKitchenItems(value: string): string[] {
+function normalizeKitchenItem(value: string): string {
   return value
-    .replace(/\.$/, '')
-    .split(/,\s+|\s+and\s+/)
-    .map(sentenceCase)
-    .filter(Boolean);
+    .normalize('NFKC')
+    .replace(/^owner of\s+/i, '')
+    .replace(/[’']/g, "'")
+    .replace(/'s\b/gi, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+const kitchenPresetLookup = new Map<string, KitchenPresetMatch>();
+
+(
+  Object.entries(KITCHEN_PRESETS) as Array<
+    [KitchenPresetCategory, ReadonlyArray<{ name: string; label: string }>]
+  >
+).forEach(([category, presets]) => {
+  presets.forEach((preset) => {
+    const match = { category, name: preset.name };
+    kitchenPresetLookup.set(normalizeKitchenItem(preset.name), match);
+    kitchenPresetLookup.set(normalizeKitchenItem(preset.label), match);
+  });
+});
+
+function resolveKitchenPreset(value: string): KitchenPresetMatch | undefined {
+  return kitchenPresetLookup.get(normalizeKitchenItem(value));
+}
+
+function splitKitchenItems(value: string): string[] {
+  return value.replace(/\.$/, '').split(/,\s+/).map(sentenceCase).filter(Boolean);
+}
+
+function kitchenCategoryItems(line: string, singular: string, plural: string): string[] | null {
+  if (new RegExp(`^${singular}:`, 'i').test(line)) {
+    return [sentenceCase(line.replace(new RegExp(`^${singular}:\\s*`, 'i'), ''))].filter(Boolean);
+  }
+  if (new RegExp(`^${plural}:`, 'i').test(line)) {
+    return splitKitchenItems(line.replace(new RegExp(`^${plural}:\\s*`, 'i'), ''));
+  }
+  return null;
 }
 
 function kitchenDisplayGroups(lines: string[]): KitchenDisplayGroup[] {
@@ -310,8 +351,19 @@ function kitchenDisplayGroups(lines: string[]): KitchenDisplayGroup[] {
 
   lines.map(cleanPreferenceLine).forEach((line) => {
     const lower = line.toLowerCase();
-    if (lower.startsWith('appliances:')) {
-      groups.appliances.push(...splitKitchenItems(line.replace(/^appliances:\s*/i, '')));
+    const appliances = kitchenCategoryItems(line, 'appliance', 'appliances');
+    const cooktops = kitchenCategoryItems(line, 'cooktop', 'cooktops');
+    const tools = kitchenCategoryItems(line, 'tool', 'tools');
+    if (appliances) {
+      groups.appliances.push(...appliances);
+      return;
+    }
+    if (cooktops) {
+      groups.cooking.push(...cooktops);
+      return;
+    }
+    if (tools) {
+      groups.tools.push(...tools);
       return;
     }
     if (lower.startsWith('no ')) {
@@ -341,7 +393,7 @@ function KitchenPreferenceSummary({ lines, localize }: { lines: string[]; locali
   let used = 0;
 
   return (
-    <div className="mt-3 space-y-3">
+    <div className="mt-2 space-y-2.5 sm:mt-3 sm:space-y-3">
       {groups.map((group) => {
         const remaining = visibleBudget - used;
         const visible = group.items.slice(0, Math.max(remaining, 0));
@@ -352,13 +404,13 @@ function KitchenPreferenceSummary({ lines, localize }: { lines: string[]; locali
 
         const hiddenCount = group.items.length - visible.length;
         return (
-          <div key={group.labelKey} className="pl-1">
-            <h3 className="rekky-meta mb-1 text-text-secondary">{localize(group.labelKey)}</h3>
-            <div className="border-border-light/60 space-y-1 border-l pl-4">
+          <div key={group.labelKey} className="grid gap-1 sm:block sm:pl-1">
+            <h3 className="rekky-meta text-text-secondary sm:mb-1">{localize(group.labelKey)}</h3>
+            <div className="sm:border-border-light/60 space-y-1 sm:border-l sm:pl-4">
               {visible.map((item) => (
                 <p
                   key={`${group.labelKey}:${item}`}
-                  className="text-sm leading-5 text-text-secondary"
+                  className="text-[0.92rem] leading-5 text-text-secondary sm:text-sm"
                 >
                   {item}
                 </p>
@@ -458,7 +510,7 @@ function DietSafetyEditor({
   };
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className="space-y-5">
       <div>
         <h3 className="rekky-meta mb-2 text-text-secondary">
           {localize(
@@ -478,11 +530,12 @@ function DietSafetyEditor({
                 key={p.name}
                 type="button"
                 className={cn(
-                  'rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-200',
+                  'min-h-11 rounded-full border px-3 py-2 text-sm font-medium transition-colors duration-200 sm:min-h-0 sm:py-1.5',
                   active
                     ? activeClass
                     : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:text-text-primary',
                 )}
+                aria-pressed={active}
                 onClick={() => togglePreset(p.name)}
               >
                 {p.label}
@@ -500,12 +553,13 @@ function DietSafetyEditor({
           {customTags.map((tag) => (
             <span
               key={tag}
-              className="flex items-center gap-1 rounded-full border border-border-light bg-surface-secondary px-2.5 py-1 text-xs text-text-primary"
+              className="flex min-h-9 items-center gap-1 rounded-full border border-border-light bg-surface-secondary py-1 pl-3 pr-1 text-xs text-text-primary"
             >
               {tag}
               <button
                 type="button"
-                className="text-text-secondary hover:text-text-primary"
+                className="flex size-8 items-center justify-center rounded-full text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                aria-label={`${localize('com_ui_delete')} ${tag}`}
                 onClick={() => removeCustomTag(tag)}
               >
                 <X className="size-3" />
@@ -516,7 +570,7 @@ function DietSafetyEditor({
         <div className="flex gap-2">
           <input
             value={inputVal}
-            className="min-w-0 flex-1 rounded-md border border-border-light bg-surface-secondary px-2.5 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+            className="min-h-11 min-w-0 flex-1 rounded-lg border border-border-light bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
             placeholder={localize(
               isSafety
                 ? 'com_preferences_editor_allergies_placeholder'
@@ -532,7 +586,7 @@ function DietSafetyEditor({
           />
           <button
             type="button"
-            className="rounded-md border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+            className="min-h-11 rounded-lg border border-border-light bg-surface-primary px-3 text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary"
             onClick={addCustomTag}
           >
             {localize('com_preferences_editor_add')}
@@ -556,92 +610,106 @@ function KitchenCheckboxEditor({
     cooktops: '',
     tools: '',
   });
-  const { activeItems, customCategories } = useMemo(() => {
+  const [activeCategory, setActiveCategory] = useState<KitchenPresetCategory>('appliances');
+  const { activeItems, customCategories, customLabels } = useMemo(() => {
     const items = new Set<string>();
     const categories = new Map<string, KitchenPresetCategory | 'unavailable'>();
+    const labels = new Map<string, string>();
     lines.map(cleanPreferenceLine).forEach((line) => {
       const lower = line.toLowerCase();
-      if (lower.startsWith('appliances:')) {
-        splitKitchenItems(line.replace(/^appliances:\s*/i, '')).forEach((item) => {
-          const key = item.toLowerCase();
+      const categoryItems: Array<{
+        category: KitchenPresetCategory;
+        items: string[] | null;
+      }> = [
+        { category: 'appliances', items: kitchenCategoryItems(line, 'appliance', 'appliances') },
+        { category: 'cooktops', items: kitchenCategoryItems(line, 'cooktop', 'cooktops') },
+        { category: 'tools', items: kitchenCategoryItems(line, 'tool', 'tools') },
+      ];
+      const explicitCategory = categoryItems.find(({ items }) => items !== null);
+      if (explicitCategory?.items) {
+        explicitCategory.items.forEach((item) => {
+          const preset = resolveKitchenPreset(item);
+          const key = normalizeKitchenItem(preset?.name ?? item);
           items.add(key);
-          if (!KITCHEN_PRESETS.appliances.some((preset) => preset.name.toLowerCase() === key)) {
-            categories.set(key, 'appliances');
+          if (!preset) {
+            categories.set(key, explicitCategory.category);
+            labels.set(key, sentenceCase(item));
           }
         });
       } else if (lower.startsWith('no ')) {
-        items.add(lower);
-        categories.set(lower, 'unavailable');
-      } else {
-        const key = line.replace(/^owner of\s+/i, '').toLowerCase();
+        const key = normalizeKitchenItem(line);
         items.add(key);
-        categories.set(
-          key,
-          /\b(stove|cooktop|burner|oven|bbq|grill)\b/i.test(line) ? 'cooktops' : 'tools',
-        );
+        categories.set(key, 'unavailable');
+        labels.set(key, sentenceCase(line));
+      } else {
+        const item = line.replace(/^owner of\s+/i, '');
+        const preset = resolveKitchenPreset(item);
+        const key = normalizeKitchenItem(preset?.name ?? item);
+        items.add(key);
+        if (!preset) {
+          categories.set(
+            key,
+            /\b(stove|cooktop|burner|oven|bbq|grill)\b/i.test(line) ? 'cooktops' : 'tools',
+          );
+          labels.set(key, sentenceCase(item));
+        }
       }
     });
-    return { activeItems: items, customCategories: categories };
+    return { activeItems: items, customCategories: categories, customLabels: labels };
   }, [lines]);
 
   const selectedKitchenLines = (
     selectedItems: Set<string>,
     categoryOverrides = new Map<string, KitchenPresetCategory>(),
+    labelOverrides = new Map<string, string>(),
   ) => {
     const appliances: string[] = [];
     const cooktops: string[] = [];
     const tools: string[] = [];
-    const customToolLines: string[] = [];
     const unavailable: string[] = [];
 
     KITCHEN_PRESETS.appliances.forEach((p) => {
-      if (selectedItems.has(p.name.toLowerCase())) {
-        appliances.push(p.name);
+      if (selectedItems.has(normalizeKitchenItem(p.name))) {
+        appliances.push(p.label);
       }
     });
     KITCHEN_PRESETS.cooktops.forEach((p) => {
-      if (selectedItems.has(p.name.toLowerCase())) {
-        cooktops.push(p.name);
+      if (selectedItems.has(normalizeKitchenItem(p.name))) {
+        cooktops.push(p.label);
       }
     });
     KITCHEN_PRESETS.tools.forEach((p) => {
-      if (selectedItems.has(p.name.toLowerCase())) {
-        tools.push(p.name);
+      if (selectedItems.has(normalizeKitchenItem(p.name))) {
+        tools.push(p.label);
       }
     });
 
     Array.from(selectedItems).forEach((item) => {
-      const isPreset =
-        KITCHEN_PRESETS.appliances.some((p) => p.name.toLowerCase() === item) ||
-        KITCHEN_PRESETS.cooktops.some((p) => p.name.toLowerCase() === item) ||
-        KITCHEN_PRESETS.tools.some((p) => p.name.toLowerCase() === item);
-      if (isPreset) {
+      if (resolveKitchenPreset(item)) {
         return;
       }
 
       const category = categoryOverrides.get(item) ?? customCategories.get(item) ?? 'tools';
+      const label = labelOverrides.get(item) ?? customLabels.get(item) ?? sentenceCase(item);
       if (category === 'appliances') {
-        appliances.push(sentenceCase(item));
+        appliances.push(label);
         return;
       }
       if (category === 'cooktops') {
-        cooktops.push(sentenceCase(item));
+        cooktops.push(label);
         return;
       }
       if (category === 'unavailable') {
-        unavailable.push(sentenceCase(item));
+        unavailable.push(label);
         return;
       }
-      customToolLines.push(`Owner of ${sentenceCase(item)}.`);
+      tools.push(label);
     });
 
     const nextLines: string[] = [];
-    if (appliances.length > 0) {
-      nextLines.push(`Appliances: ${appliances.join(', ')}`);
-    }
-    cooktops.forEach((c) => nextLines.push(c));
-    tools.forEach((t) => nextLines.push(t));
-    customToolLines.forEach((line) => nextLines.push(line));
+    appliances.forEach((item) => nextLines.push(`Appliance: ${item}`));
+    cooktops.forEach((item) => nextLines.push(`Cooktop: ${item}`));
+    tools.forEach((item) => nextLines.push(`Tool: ${item}`));
     unavailable.forEach((line) => nextLines.push(line));
 
     return nextLines.length > 0 ? nextLines : [''];
@@ -652,7 +720,7 @@ function KitchenCheckboxEditor({
   };
 
   const toggleItem = (name: string) => {
-    const key = name.toLowerCase();
+    const key = normalizeKitchenItem(resolveKitchenPreset(name)?.name ?? name);
     const nextActive = new Set(activeItems);
     if (nextActive.has(key)) {
       nextActive.delete(key);
@@ -669,15 +737,71 @@ function KitchenCheckboxEditor({
       return;
     }
 
-    const key = clean.toLowerCase();
+    const preset = resolveKitchenPreset(clean);
+    const key = normalizeKitchenItem(preset?.name ?? clean);
     const nextActive = new Set(activeItems);
     nextActive.add(key);
-    onChange(selectedKitchenLines(nextActive, new Map([[key, category]])));
+    const categoryOverrides = new Map<string, KitchenPresetCategory>();
+    if (!preset) {
+      categoryOverrides.set(key, category);
+    }
+    const labelOverrides = new Map<string, string>();
+    if (!preset) {
+      labelOverrides.set(key, sentenceCase(clean));
+    }
+    onChange(selectedKitchenLines(nextActive, categoryOverrides, labelOverrides));
     setCustomItems((current) => ({ ...current, [category]: '' }));
   };
 
+  const customItemsByCategory = useMemo(() => {
+    const categories: Record<KitchenPresetCategory, string[]> = {
+      appliances: [],
+      cooktops: [],
+      tools: [],
+    };
+    activeItems.forEach((item) => {
+      if (resolveKitchenPreset(item)) {
+        return;
+      }
+      const category = customCategories.get(item);
+      if (category && category !== 'unavailable') {
+        categories[category].push(customLabels.get(item) ?? sentenceCase(item));
+      }
+    });
+    return categories;
+  }, [activeItems, customCategories, customLabels]);
+
   return (
-    <div className="mt-4 space-y-4">
+    <div className="space-y-4">
+      <div
+        className="grid grid-cols-3 rounded-lg bg-surface-secondary p-1 sm:hidden"
+        role="tablist"
+        aria-label={localize('com_preferences_editor_edit_section').replace('{heading}', 'Kitchen')}
+      >
+        {(Object.keys(KITCHEN_PRESETS) as KitchenPresetCategory[]).map((category) => {
+          const selected = activeCategory === category;
+          const count =
+            KITCHEN_PRESETS[category].filter((item) =>
+              activeItems.has(normalizeKitchenItem(item.name)),
+            ).length + customItemsByCategory[category].length;
+          return (
+            <button
+              key={category}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={cn(
+                'min-h-10 rounded-md px-2 text-xs font-medium transition-colors',
+                selected ? 'bg-surface-primary text-text-primary shadow-sm' : 'text-text-secondary',
+              )}
+              onClick={() => setActiveCategory(category)}
+            >
+              {localize(kitchenCategoryLabelKeys[category])}
+              {count > 0 && <span className="ml-1 text-[0.65rem] opacity-60">{count}</span>}
+            </button>
+          );
+        })}
+      </div>
       {(
         Object.entries(KITCHEN_PRESETS) as Array<
           [KitchenPresetCategory, ReadonlyArray<{ name: string; label: string }>]
@@ -688,22 +812,29 @@ function KitchenCheckboxEditor({
         return (
           <div
             key={category}
-            className="border-b border-border-light pb-3 last:border-b-0 last:pb-0"
+            className={cn(
+              'border-b border-border-light pb-4 last:border-b-0 last:pb-0',
+              category !== activeCategory && 'max-sm:hidden',
+            )}
           >
-            <h3 className="rekky-meta mb-2 text-text-secondary">{label}</h3>
-            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-              {items.map((item) => {
-                const active = activeItems.has(item.name.toLowerCase());
+            <h3 className="rekky-meta mb-2 hidden text-text-secondary sm:block">{label}</h3>
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-2 lg:grid-cols-4">
+              {[
+                ...items,
+                ...customItemsByCategory[category].map((name) => ({ name, label: name })),
+              ].map((item) => {
+                const active = activeItems.has(normalizeKitchenItem(item.name));
                 return (
                   <button
                     key={item.name}
                     type="button"
                     className={cn(
-                      'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-all',
+                      'flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[0.8rem] font-medium leading-4 transition-colors sm:px-3 sm:text-sm',
                       active
                         ? 'border-amber-500 bg-amber-500/10 text-amber-800 dark:text-amber-300'
                         : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:text-text-primary',
                     )}
+                    aria-pressed={active}
                     onClick={() => toggleItem(item.name)}
                   >
                     <span
@@ -716,11 +847,11 @@ function KitchenCheckboxEditor({
                     >
                       {active && <CheckCircle2 className="size-3" />}
                     </span>
-                    <span className="truncate">{item.label}</span>
+                    <span className="min-w-0 break-words">{item.label}</span>
                   </button>
                 );
               })}
-              <div className="bg-surface-primary/40 group flex items-center gap-2 rounded-lg border border-dashed border-border-light px-3 py-2 transition-colors focus-within:border-border-medium focus-within:bg-surface-primary hover:border-border-medium hover:bg-surface-primary">
+              <div className="bg-surface-primary/40 group col-span-2 flex min-h-11 items-center gap-2 rounded-lg border border-dashed border-border-light px-3 py-2 transition-colors focus-within:border-border-medium focus-within:bg-surface-primary hover:border-border-medium hover:bg-surface-primary sm:col-span-1">
                 <label className="sr-only" htmlFor={`custom-kitchen-${category}`}>
                   {localize('com_preferences_kitchen_custom_category_label').replace(
                     '{category}',
@@ -785,7 +916,7 @@ function CookingLevelSlider({
   };
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className="space-y-4">
       <h3 className="rekky-meta text-text-secondary">
         {localize('com_preferences_editor_select_level')}
       </h3>
@@ -797,14 +928,14 @@ function CookingLevelSlider({
               key={cl.level}
               type="button"
               className={cn(
-                'flex flex-col items-start rounded-lg border p-3 text-left transition-all duration-200',
+                'flex min-h-16 flex-col items-start rounded-lg border p-3 text-left transition-colors duration-200',
                 active
-                  ? 'scale-[1.01] border-amber-500 bg-amber-500/10 text-text-primary shadow-[0_0_8px_rgba(245,158,11,0.2)]'
+                  ? 'border-amber-500 bg-amber-500/10 text-text-primary'
                   : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:text-text-primary',
               )}
               onClick={() => selectLevel(cl.level)}
             >
-              <div className="flex items-center gap-2 font-serif text-lg font-normal">
+              <div className="flex items-center gap-2 text-base font-medium">
                 <span>{cl.label}</span>
               </div>
               <p className="mt-1 text-xs text-text-secondary">{cl.desc}</p>
@@ -875,7 +1006,7 @@ function HouseholdCounterEditor({
   };
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className="space-y-4">
       <h3 className="rekky-meta text-text-secondary">
         {localize('com_preferences_editor_household_size')}
       </h3>
@@ -889,12 +1020,12 @@ function HouseholdCounterEditor({
             count: counts.teens,
           },
         ].map((item) => (
-          <div key={item.key} className="flex items-center justify-between p-3">
+          <div key={item.key} className="flex min-h-16 items-center justify-between p-3">
             <span className="text-sm font-medium text-text-primary">{item.label}</span>
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                className="flex size-8 items-center justify-center rounded-md border border-border-light bg-surface-secondary text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-30"
+                className="flex size-11 items-center justify-center rounded-lg border border-border-light bg-surface-secondary text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-30 sm:size-9"
                 disabled={item.count === 0}
                 onClick={() => updateCount(item.key as 'adults' | 'kids' | 'teens', -1)}
               >
@@ -903,7 +1034,7 @@ function HouseholdCounterEditor({
               <span className="w-8 text-center text-sm font-semibold">{item.count}</span>
               <button
                 type="button"
-                className="flex size-8 items-center justify-center rounded-md border border-border-light bg-surface-secondary text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                className="flex size-11 items-center justify-center rounded-lg border border-border-light bg-surface-secondary text-text-secondary hover:bg-surface-hover hover:text-text-primary sm:size-9"
                 onClick={() => updateCount(item.key as 'adults' | 'kids' | 'teens', 1)}
               >
                 +
@@ -1004,13 +1135,13 @@ function LocationEditor({
       );
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <button
           type="button"
           disabled={isDetecting}
           className={cn(
-            'flex flex-1 items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-all duration-200',
+            'flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors duration-200',
             success
               ? 'border-green-500 bg-green-500/10 text-green-700'
               : 'border-border-light bg-surface-primary text-text-secondary hover:bg-surface-hover hover:text-text-primary',
@@ -1039,7 +1170,7 @@ function LocationEditor({
                   key={sys}
                   type="button"
                   className={cn(
-                    'flex-1 rounded-md py-1.5 text-xs font-semibold capitalize transition-all',
+                    'min-h-10 flex-1 rounded-md py-1.5 text-xs font-semibold capitalize transition-colors',
                     active
                       ? 'bg-amber-500 text-white shadow-sm'
                       : 'text-text-secondary hover:text-text-primary',
@@ -1063,7 +1194,7 @@ function LocationEditor({
           <input
             id="location-timezone-select"
             value={data.timezone}
-            className="w-full rounded-lg border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+            className="min-h-11 w-full rounded-lg border border-border-light bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
             onChange={(e) => updateField('timezone', e.target.value)}
           />
         </div>
@@ -1076,7 +1207,7 @@ function LocationEditor({
         <input
           id="location-city-input"
           value={data.location}
-          className="w-full rounded-lg border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+          className="min-h-11 w-full rounded-lg border border-border-light bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
           placeholder={localize('com_preferences_editor_location_placeholder')}
           onChange={(e) => updateField('location', e.target.value)}
         />
@@ -1130,7 +1261,7 @@ function AutocompleteTagEditor({
   };
 
   return (
-    <div className="mt-4 space-y-3">
+    <div className="space-y-4">
       <div>
         <h3 className="rekky-meta mb-2 text-text-secondary">
           {localize('com_preferences_editor_active_toggles')}
@@ -1139,12 +1270,13 @@ function AutocompleteTagEditor({
           {tags.map((tag) => (
             <span
               key={tag}
-              className="flex items-center gap-1 rounded-full border border-border-light bg-surface-secondary px-2.5 py-1 text-xs text-text-primary"
+              className="flex min-h-9 items-center gap-1 rounded-full border border-border-light bg-surface-secondary py-1 pl-3 pr-1 text-xs text-text-primary"
             >
               {tag}
               <button
                 type="button"
-                className="text-text-secondary hover:text-text-primary"
+                className="flex size-8 items-center justify-center rounded-full text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                aria-label={`${localize('com_ui_delete')} ${tag}`}
                 onClick={() => removeTag(tag)}
               >
                 <X className="size-3" />
@@ -1162,7 +1294,7 @@ function AutocompleteTagEditor({
       <div className="flex gap-2">
         <input
           value={inputVal}
-          className="min-w-0 flex-1 rounded-md border border-border-light bg-surface-secondary px-2.5 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+          className="min-h-11 min-w-0 flex-1 rounded-lg border border-border-light bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
           placeholder={localize('com_preferences_editor_tag_placeholder').replace(
             '{heading}',
             heading.toLowerCase(),
@@ -1177,7 +1309,7 @@ function AutocompleteTagEditor({
         />
         <button
           type="button"
-          className="rounded-md border border-border-light bg-surface-primary px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+          className="min-h-11 rounded-lg border border-border-light bg-surface-primary px-3 text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary"
           onClick={() => addTag(inputVal)}
         >
           {localize('com_preferences_editor_add')}
@@ -1194,7 +1326,7 @@ function AutocompleteTagEditor({
               <button
                 key={s}
                 type="button"
-                className="rounded-full border border-border-light bg-surface-primary px-2.5 py-1 text-xs text-text-secondary transition-all hover:border-border-medium hover:text-text-primary"
+                className="min-h-9 rounded-full border border-border-light bg-surface-primary px-3 py-1.5 text-xs text-text-secondary transition-colors hover:border-border-medium hover:text-text-primary"
                 onClick={() => addTag(s)}
               >
                 {s}
@@ -1227,7 +1359,7 @@ function PreferenceCard({
     content = <KitchenPreferenceSummary lines={section.lines} localize={localize} />;
   } else if (isComplete) {
     content = (
-      <ul className="mt-2 space-y-1 text-sm leading-5 text-text-secondary">
+      <ul className="mt-2 space-y-1 text-[0.94rem] leading-5 text-text-secondary sm:text-sm">
         {section.lines.map((line) => (
           <li key={`${config.heading}:${line}`} className="break-words">
             {cleanPreferenceLine(line)}
@@ -1237,14 +1369,14 @@ function PreferenceCard({
     );
   } else {
     content = (
-      <p className="mt-2 text-sm italic text-text-secondary">
+      <p className="mt-2 text-[0.94rem] italic leading-5 text-text-secondary sm:text-sm">
         {localize('com_preferences_not_set')}
       </p>
     );
   }
 
   return (
-    <article className="hover:bg-surface-primary/20 group relative w-full min-w-0 rounded-md py-1 transition-colors">
+    <article className="hover:bg-surface-primary/20 group relative w-full min-w-0 rounded-md py-1 transition-colors sm:py-1.5">
       <button
         type="button"
         className="absolute inset-0 z-10 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-heavy"
@@ -1253,11 +1385,14 @@ function PreferenceCard({
       >
         <span className="sr-only">{localize('com_ui_edit')}</span>
       </button>
-      <div className="flex items-start gap-2.5">
-        <Icon className="text-text-secondary/80 mt-1 size-3.5 flex-shrink-0" aria-hidden="true" />
+      <div className="flex items-start gap-2.5 sm:gap-2.5">
+        <Icon
+          className="text-text-secondary/70 mt-0.5 size-3.5 flex-shrink-0 sm:mt-1"
+          aria-hidden="true"
+        />
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-3">
-            <h2 className="text-lg font-medium uppercase leading-none tracking-[0.08em] text-text-primary transition-colors group-hover:text-surface-submit">
+            <h2 className="text-[1rem] font-medium uppercase leading-none tracking-[0.12em] text-text-primary transition-colors group-hover:text-surface-submit sm:text-lg sm:tracking-[0.08em]">
               {config.heading}
             </h2>
           </div>
@@ -1286,10 +1421,60 @@ function PreferenceCardModal({
   onCancelCard: () => void;
 }) {
   const config = atAGlanceHeadings.find((h) => h.heading === heading);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef(onCancelCard);
+  cancelRef.current = onCancelCard;
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        cancelRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') {
+        return;
+      }
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (
+        event.shiftKey &&
+        (document.activeElement === first || document.activeElement === dialogRef.current)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const focusFrame = window.requestAnimationFrame(() => dialogRef.current?.focus());
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, []);
+
   if (!config) {
     return null;
   }
   const Icon = config.icon;
+  const titleId = `preference-editor-${heading.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
   let content: ReactNode;
   if (heading === 'Diet' || heading === 'Safety') {
@@ -1340,71 +1525,69 @@ function PreferenceCardModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-md"
-      onClick={onCancelCard}
+      className="fixed inset-0 z-[70] flex items-stretch justify-center bg-black/60 p-0 backdrop-blur-md sm:z-[100] sm:items-center sm:px-4 sm:py-6"
+      onClick={(event) => {
+        if (
+          event.target === event.currentTarget &&
+          window.matchMedia('(min-width: 640px)').matches
+        ) {
+          onCancelCard();
+        }
+      }}
     >
       <motion.div
+        ref={dialogRef}
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ type: 'spring', duration: 0.3 }}
         className={cn(
-          'w-full rounded-xl border border-border-light bg-surface-primary p-6 shadow-2xl',
+          'flex h-[100dvh] w-full flex-col overflow-hidden bg-surface-primary shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-xl sm:border sm:border-border-light',
           heading === 'Kitchen' ? 'max-w-5xl' : 'max-w-2xl',
         )}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start gap-3">
-          <Icon className="icon-lg mt-1 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+        <header className="flex min-h-14 shrink-0 items-center gap-3 border-b border-border-light pl-14 pr-14 sm:min-h-0 sm:px-6 sm:py-4">
+          <Icon
+            className="hidden size-5 flex-shrink-0 text-text-secondary sm:block"
+            aria-hidden="true"
+          />
           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3 border-b border-border-light pb-2">
-              <div>
-                <h2 className="rekky-section-title text-text-primary">
-                  {localize('com_preferences_editor_edit_section').replace('{heading}', heading)}
-                </h2>
-                <p className="mt-0.5 text-xs text-text-secondary">
-                  {localize('com_preferences_editor_hint')}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="flex size-8 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-                onClick={onCancelCard}
-                aria-label={localize('com_ui_close')}
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-
-            <div
-              className={cn(
-                'mt-4 overflow-y-auto pr-1',
-                heading === 'Kitchen' ? 'max-h-[72vh]' : 'max-h-[60vh]',
-              )}
-            >
-              {content}
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3 border-t border-border-light pt-4">
-              <button
-                type="button"
-                className="rounded-md border border-border-light bg-surface-primary px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-                onClick={onCancelCard}
-              >
-                {localize('com_ui_cancel')}
-              </button>
-              <button
-                type="button"
-                className="flex items-center gap-1.5 rounded-md bg-surface-submit px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-surface-submit-hover disabled:opacity-50"
-                disabled={isSaving}
-                onClick={() => onSaveCard(heading)}
-              >
-                <CheckCircle2 className="size-4 animate-pulse" />
-                {localize('com_preferences_save_changes')}
-              </button>
-            </div>
+            <h2 id={titleId} className="text-base font-semibold text-text-primary sm:text-lg">
+              {localize('com_preferences_editor_edit_section').replace('{heading}', heading)}
+            </h2>
+            <p className="mt-0.5 hidden text-xs text-text-secondary sm:block">
+              {localize('com_preferences_editor_hint')}
+            </p>
           </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
+          {content}
         </div>
+
+        <footer className="flex shrink-0 gap-2 border-t border-border-light bg-surface-primary px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:justify-end sm:gap-3 sm:px-6 sm:pb-4 sm:pt-4">
+          <button
+            type="button"
+            className="min-h-11 flex-1 rounded-lg border border-border-light bg-surface-primary px-4 text-sm font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary sm:flex-none"
+            onClick={onCancelCard}
+          >
+            {localize('com_ui_cancel')}
+          </button>
+          <button
+            type="button"
+            className="flex min-h-11 flex-[1.4] items-center justify-center gap-1.5 rounded-lg bg-surface-submit px-4 text-sm font-medium text-white shadow-sm hover:bg-surface-submit-hover disabled:opacity-50 sm:flex-none"
+            disabled={isSaving}
+            onClick={() => onSaveCard(heading)}
+          >
+            {isSaving ? <Spinner className="size-4" /> : <CheckCircle2 className="size-4" />}
+            {localize('com_preferences_save_changes')}
+          </button>
+        </footer>
       </motion.div>
     </div>
   );
@@ -1435,7 +1618,7 @@ function AtAGlanceGrid({
     <section>
       <div className="columns-1 gap-x-12 [column-fill:balance] md:columns-2 xl:columns-3 2xl:columns-4">
         {atAGlanceHeadings.map((config) => (
-          <div key={config.heading} className="mb-10 break-inside-avoid">
+          <div key={config.heading} className="mb-7 break-inside-avoid sm:mb-10">
             <PreferenceCard
               config={config}
               sections={sections}
@@ -2364,16 +2547,19 @@ export default function PreferencesWorkspace() {
     <main className="rekky-ui rekky-preferences-surface flex h-full min-h-0 flex-col bg-[#f7f1e8] text-text-primary dark:bg-[#141014]">
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="w-full px-5 py-8 sm:px-8 lg:px-16">
-          <section aria-label={localize('com_preferences_document')} className="min-w-0 space-y-12">
+          <section
+            aria-label={localize('com_preferences_document')}
+            className="min-w-0 space-y-8 sm:space-y-12"
+          >
             <header>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <h1 className="max-w-4xl text-5xl font-medium leading-[0.95] tracking-[-0.01em] text-text-primary sm:text-6xl">
+              <div className="flex flex-col gap-4 pt-1 lg:flex-row lg:items-start lg:justify-between lg:pt-0">
+                <h1 className="max-w-[18rem] text-[2.55rem] font-medium leading-[0.92] tracking-[-0.035em] text-text-primary sm:max-w-4xl sm:text-6xl sm:tracking-[-0.01em]">
                   {localize('com_preferences_dashboard_title')}
                 </h1>
                 <div className="flex flex-wrap gap-2 md:justify-end">
                   <button
                     type="button"
-                    className="bg-surface-primary/65 mt-1 flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-text-secondary shadow-none transition-colors hover:bg-surface-hover hover:text-text-primary"
+                    className="border-border-light/60 bg-surface-primary/35 sm:bg-surface-primary/65 inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium text-text-secondary shadow-none transition-colors hover:bg-surface-hover hover:text-text-primary sm:mt-1 sm:rounded-md sm:border-0"
                     onClick={() => setIsAgentOpen(true)}
                   >
                     <Eye className="icon-sm" aria-hidden="true" />

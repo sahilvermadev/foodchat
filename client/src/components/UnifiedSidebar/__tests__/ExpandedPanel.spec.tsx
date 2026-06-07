@@ -76,6 +76,7 @@ const createRouteLink = (onClick: jest.Mock): NavLink => ({
 const createQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 async function renderPanel({
+  collapseOnNavigate = false,
   expanded = true,
   onCollapse = jest.fn(),
   onExpand = jest.fn(),
@@ -84,6 +85,7 @@ async function renderPanel({
   links = createLinks(),
   initialEntry = '/',
 }: {
+  collapseOnNavigate?: boolean;
   expanded?: boolean;
   onCollapse?: jest.Mock;
   onExpand?: jest.Mock;
@@ -107,6 +109,7 @@ async function renderPanel({
             <ActivePanelProvider>
               <ExpandedPanel
                 links={links}
+                collapseOnNavigate={collapseOnNavigate}
                 expanded={expanded}
                 onCollapse={onCollapse}
                 onExpand={onExpand}
@@ -160,12 +163,28 @@ describe('ExpandedPanel', () => {
 
     it('does not store route destinations as content panels', async () => {
       const navigate = jest.fn();
-      await renderPanel({ links: [...createLinks(), createRouteLink(navigate)] });
+      const { onCollapse } = await renderPanel({
+        links: [...createLinks(), createRouteLink(navigate)],
+      });
 
       fireEvent.click(screen.getByRole('button', { name: 'com_ui_bookmarks' }));
 
       expect(navigate).toHaveBeenCalledTimes(1);
+      expect(onCollapse).not.toHaveBeenCalled();
       expect(localStorage.getItem('side:active-panel')).not.toBe('recipes');
+    });
+
+    it('collapses route destinations after navigation when configured for mobile drawers', async () => {
+      const navigate = jest.fn();
+      const { onCollapse } = await renderPanel({
+        collapseOnNavigate: true,
+        links: [...createLinks(), createRouteLink(navigate)],
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'com_ui_bookmarks' }));
+
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(onCollapse).toHaveBeenCalledTimes(1);
     });
 
     it('collapses the rendered history panel while a route destination is active', async () => {
@@ -185,13 +204,27 @@ describe('ExpandedPanel', () => {
 
   describe('NewChatButton panel switch', () => {
     it('switches to chat history panel on new chat click when setting is enabled', async () => {
-      await renderPanel({ expanded: true, initialPanel: 'prompts' });
+      const { onCollapse } = await renderPanel({ expanded: true, initialPanel: 'prompts' });
 
       const newChatLink = screen.getByTestId('new-chat-button');
       fireEvent.click(newChatLink);
 
       expect(mockNewConversation).toHaveBeenCalledWith({ routeBase: '/cook' });
+      expect(onCollapse).not.toHaveBeenCalled();
       expect(localStorage.getItem('side:active-panel')).toBe(DEFAULT_PANEL);
+    });
+
+    it('collapses mobile drawer on new chat click when configured', async () => {
+      const { onCollapse } = await renderPanel({
+        collapseOnNavigate: true,
+        expanded: true,
+        initialPanel: 'prompts',
+      });
+
+      fireEvent.click(screen.getByTestId('new-chat-button'));
+
+      expect(mockNewConversation).toHaveBeenCalledWith({ routeBase: '/cook' });
+      expect(onCollapse).toHaveBeenCalledTimes(1);
     });
 
     it('does not switch panel on new chat click when setting is disabled', async () => {

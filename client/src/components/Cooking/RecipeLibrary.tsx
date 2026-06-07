@@ -314,49 +314,52 @@ export default function RecipeLibrary() {
       : localize('com_recipes_count_short_other', { count: total });
 
   return (
-    <main className="rekky-ui h-full overflow-y-auto bg-surface-primary-alt px-4 py-7 text-text-primary sm:px-8 lg:px-14">
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-7">
-        <header className="pt-2 sm:pt-4">
+    <main className="rekky-ui h-full overflow-y-auto bg-surface-primary-alt px-5 py-8 text-text-primary sm:px-8 sm:py-7 lg:px-14">
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-5 sm:gap-7">
+        <header className="pt-1 sm:pt-4">
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-[clamp(2.75rem,5vw,3.45rem)] font-medium leading-none tracking-[-0.03em] text-text-primary">
+              <h1 className="text-[2.45rem] font-medium leading-[0.95] tracking-[-0.04em] text-text-primary sm:text-[clamp(2.75rem,5vw,3.45rem)] sm:tracking-[-0.03em]">
                 {localize('com_recipes_library')}
               </h1>
-              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-text-secondary">
-                <p className="rekky-body">{localize('com_recipes_library_subtitle')}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-text-secondary sm:mt-4">
+                <p className="rekky-body hidden sm:block">
+                  {localize('com_recipes_library_subtitle')}
+                </p>
                 {recipesQuery.isLoading ? (
                   <SkeletonBlock className="h-4 w-24" />
                 ) : (
-                  <span className="text-text-secondary/90 border-l border-border-light pl-3 text-sm font-medium">
+                  <span className="text-text-secondary/90 text-sm font-medium sm:border-l sm:border-border-light sm:pl-3">
                     {recipeCountLabel}
                   </span>
                 )}
               </div>
             </div>
           </div>
-          <div className="mt-7 flex max-w-[1260px] flex-col gap-3 lg:flex-row">
+          <div className="mt-6 flex max-w-[1260px] gap-2 sm:mt-7 sm:gap-3 lg:flex-row">
             <div className="relative flex-1">
               <Search
-                className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary"
+                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary sm:left-4"
                 aria-hidden="true"
               />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder={localize('com_recipes_search_placeholder')}
+                placeholder={localize('com_recipes_search_placeholder_short')}
                 aria-label={localize('com_recipes_search_placeholder')}
-                className="rekky-library-search-input border-border-light/80 min-h-12 rounded-lg pl-11 text-[0.95rem] shadow-none focus-visible:ring-1 focus-visible:ring-ring-primary"
+                className="rekky-library-search-input border-border-light/70 min-h-11 rounded-lg pl-10 text-[0.92rem] shadow-none focus-visible:ring-1 focus-visible:ring-ring-primary sm:min-h-12 sm:pl-11 sm:text-[0.95rem]"
               />
             </div>
             <button
               type="button"
-              className="border-border-light/80 bg-surface-primary/80 inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border px-5 text-sm text-text-primary transition-colors hover:border-border-heavy hover:bg-surface-hover"
+              aria-label={localize('com_recipes_filters')}
+              className="border-border-light/70 bg-surface-primary/70 relative inline-flex min-h-11 w-12 shrink-0 items-center justify-center gap-2 rounded-lg border px-0 text-sm text-text-primary transition-colors hover:border-border-heavy hover:bg-surface-hover sm:min-h-12 sm:w-auto sm:px-5"
               onClick={() => setFiltersOpen(true)}
             >
               <ListFilter className="h-4 w-4" aria-hidden="true" />
-              <span>{localize('com_recipes_filters')}</span>
+              <span className="hidden sm:inline">{localize('com_recipes_filters')}</span>
               {selectedFilters.length > 0 ? (
-                <span className="rounded-full bg-surface-submit px-2 py-0.5 text-xs text-white">
+                <span className="absolute ml-6 mt-[-1.5rem] rounded-full bg-surface-submit px-1.5 py-0.5 text-[0.65rem] leading-none text-white sm:static sm:ml-0 sm:mt-0 sm:px-2 sm:text-xs">
                   {selectedFilters.length}
                 </span>
               ) : null}
@@ -390,7 +393,7 @@ export default function RecipeLibrary() {
             </div>
           ) : null}
           <div
-            className="mt-5 flex flex-wrap gap-2"
+            className="-mx-5 mt-4 flex flex-nowrap gap-2 overflow-x-auto px-5 sm:mx-0 sm:mt-5 sm:flex-wrap sm:px-0"
             role="tablist"
             aria-label={localize('com_recipes_save_list_filter_label')}
           >
@@ -403,10 +406,10 @@ export default function RecipeLibrary() {
                   role="tab"
                   aria-selected={active}
                   className={cn(
-                    'rounded-full border px-3.5 py-2 text-sm font-medium transition-colors',
+                    'shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors sm:py-2',
                     active
                       ? 'border-surface-submit bg-surface-submit text-white'
-                      : 'border-border-light bg-surface-primary text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+                      : 'border-border-light bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary',
                   )}
                   onClick={() => setSaveListFilter(value)}
                 >
@@ -510,7 +513,7 @@ export default function RecipeLibrary() {
         ) : null}
         {!recipesQuery.isLoading && recipes.length > 0 ? (
           <>
-            <div className="grid auto-rows-[minmax(0,auto)] gap-6 lg:grid-cols-2 2xl:grid-cols-3">
+            <div className="grid auto-rows-[minmax(0,auto)] gap-4 sm:gap-6 lg:grid-cols-2 2xl:grid-cols-3">
               {recipes.map((recipe) => {
                 const description = recipeDescription(recipe);
                 const servings = recipe.servings;
@@ -521,14 +524,14 @@ export default function RecipeLibrary() {
                 return (
                   <article
                     key={recipe._id}
-                    className="border-border-light/60 bg-surface-primary/80 group relative overflow-hidden rounded-lg border shadow-none transition-colors hover:border-border-medium hover:bg-surface-primary"
+                    className="border-border-light/50 bg-surface-primary/75 sm:border-border-light/60 sm:bg-surface-primary/80 group relative overflow-hidden rounded-lg border shadow-none transition-colors hover:border-border-medium hover:bg-surface-primary"
                   >
                     <Link
                       to={`/recipes/${recipe._id}`}
                       aria-label={localize('com_recipes_open_recipe', { 0: recipe.title })}
                       className="absolute inset-0 z-0"
                     />
-                    <div className="pointer-events-none relative aspect-[2.08/1] overflow-hidden bg-surface-hover">
+                    <div className="pointer-events-none relative aspect-[2.45/1] overflow-hidden bg-surface-hover sm:aspect-[2.08/1]">
                       {recipe.illustrationUrl ? (
                         <ProtectedImage
                           src={recipe.illustrationUrl}
@@ -550,9 +553,9 @@ export default function RecipeLibrary() {
                       )}
                       <div className="from-surface-primary/35 absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t to-transparent" />
                     </div>
-                    <div className="pointer-events-none relative flex min-h-[188px] flex-col p-6">
+                    <div className="pointer-events-none relative flex min-h-[164px] flex-col p-5 sm:min-h-[188px] sm:p-6">
                       <div className="flex min-w-0 items-start justify-between gap-3">
-                        <h2 className="line-clamp-2 pr-2 text-[1.45rem] font-medium leading-[1.08] tracking-[-0.02em] text-text-primary">
+                        <h2 className="line-clamp-2 pr-2 text-[1.35rem] font-medium leading-[1.05] tracking-[-0.025em] text-text-primary sm:text-[1.45rem] sm:leading-[1.08] sm:tracking-[-0.02em]">
                           {recipe.title}
                         </h2>
                         <DropdownMenu>
@@ -582,23 +585,24 @@ export default function RecipeLibrary() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                      <span className="text-text-secondary/80 mt-4 text-xs font-semibold uppercase tracking-[0.13em]">
-                        {displayFilter(recipe.documentType)}
-                      </span>
-                      <span className="text-text-secondary/80 mt-2 text-xs font-semibold uppercase tracking-[0.13em]">
-                        {localize(saveListLabelKey(recipeSaveList(recipe)))}
-                      </span>
+                      <div className="text-text-secondary/80 mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.68rem] font-semibold uppercase tracking-[0.13em] sm:mt-4 sm:text-xs">
+                        <span>{displayFilter(recipe.documentType)}</span>
+                        <span className="text-text-tertiary" aria-hidden="true">
+                          /
+                        </span>
+                        <span>{localize(saveListLabelKey(recipeSaveList(recipe)))}</span>
+                      </div>
                       {recipe.categorizationStatus === 'pending' ? (
                         <span className="text-text-secondary/80 mt-2 text-xs font-medium">
                           {localize('com_recipes_categorizing')}
                         </span>
                       ) : null}
                       {description ? (
-                        <p className="mt-4 line-clamp-2 max-w-[31rem] text-[0.96rem] leading-7 text-text-secondary">
+                        <p className="mt-3 line-clamp-2 max-w-[31rem] text-[0.93rem] leading-6 text-text-secondary sm:mt-4 sm:text-[0.96rem] sm:leading-7">
                           {description}
                         </p>
                       ) : null}
-                      <div className="mt-auto flex min-h-[3.4rem] flex-col justify-end gap-3 pt-5">
+                      <div className="mt-auto flex min-h-[2.7rem] flex-col justify-end gap-2 pt-4 sm:min-h-[3.4rem] sm:gap-3 sm:pt-5">
                         <div className="text-text-secondary/90 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-2 text-xs font-semibold uppercase tracking-[0.09em]">
                           {recipe.documentType === 'recipe' &&
                           typeof servings === 'number' &&

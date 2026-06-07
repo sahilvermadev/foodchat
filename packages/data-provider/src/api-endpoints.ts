@@ -198,6 +198,7 @@ export const config = () => `${BASE_URL}/api/config`;
 
 export const preferences = () => `${BASE_URL}/api/preferences`;
 export const preferencesChat = () => `${BASE_URL}/api/preferences/chat`;
+export const generativePrompts = () => `${BASE_URL}/api/preferences/generative-prompts`;
 export const preferenceIngredients = (query?: string) => {
   const search = query?.trim() ? `?query=${encodeURIComponent(query.trim())}` : '';
   return `${BASE_URL}/api/preferences/ingredients${search}`;

@@ -59,15 +59,20 @@ export default function StructuredIngredients({ ingredients }: StructuredIngredi
   }
 
   return (
-    <section className="mb-7 border-b border-border-light pb-7" data-testid="structured-ingredients">
-      <h2 className="rekky-section-title text-text-primary">{localize('com_cooking_ingredients')}</h2>
+    <section
+      className="mb-7 border-b border-border-light pb-7"
+      data-testid="structured-ingredients"
+    >
+      <h2 className="rekky-section-title text-text-primary">
+        {localize('com_cooking_ingredients')}
+      </h2>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {displayIngredients.map((ingredient) => {
           const quantity = quantityLabel(ingredient);
           return (
             <label
               key={ingredient.id}
-              className="grid cursor-pointer grid-cols-[minmax(4.75rem,auto)_minmax(0,1fr)] gap-3 rounded-md border border-border-light bg-surface-primary-alt p-3 transition-colors hover:bg-surface-hover"
+              className="grid cursor-pointer grid-cols-[minmax(3.75rem,auto)_minmax(0,1fr)] gap-2.5 rounded-md border border-border-light bg-surface-primary-alt p-3 transition-colors hover:bg-surface-hover sm:grid-cols-[minmax(4.75rem,auto)_minmax(0,1fr)] sm:gap-3"
             >
               <span className="flex items-start gap-2">
                 <input type="checkbox" className="mt-1" aria-label={ingredient.originalText} />

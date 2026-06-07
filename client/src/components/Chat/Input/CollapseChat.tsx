@@ -35,15 +35,14 @@ const CollapseChat = ({
               setIsCollapsed((prev) => !prev);
             }}
             className={cn(
-              // 'absolute right-1.5 top-1.5',
-              'z-10 size-5 rounded-full transition-colors',
+              'z-10 flex size-11 items-center justify-center rounded-full transition-colors hover:bg-surface-hover',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-opacity-50',
             )}
           >
             {isCollapsed ? (
-              <ChevronUp className="h-full w-full" aria-hidden="true" />
+              <ChevronUp className="size-5" aria-hidden="true" />
             ) : (
-              <ChevronDown className="h-full w-full" aria-hidden="true" />
+              <ChevronDown className="size-5" aria-hidden="true" />
             )}
           </button>
         }

@@ -133,7 +133,10 @@ describe('PreferencesWorkspace', () => {
   it('renders dashboard groups from saved markdown', () => {
     render(<PreferencesWorkspace />);
 
-    expect(screen.getByText('Your cooking profile')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Your cooking profile' })).toHaveClass(
+      'text-[2.55rem]',
+      'sm:text-6xl',
+    );
     expect(screen.queryByText('At a glance')).not.toBeInTheDocument();
     expect(
       screen.queryByText('Teach Rekky how you cook, shop, and improvise.'),
@@ -141,6 +144,10 @@ describe('PreferencesWorkspace', () => {
     expect(screen.getAllByText('Specialty Ingredients').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Kitchen').length).toBeGreaterThan(0);
     expect(screen.getByText('Appliances')).toBeInTheDocument();
+    expect(screen.getByText('Appliances').nextElementSibling).toHaveClass(
+      'space-y-1',
+      'sm:border-l',
+    );
     expect(screen.getByText('Siemens oven')).toBeInTheDocument();
     expect(screen.getByText('Kitchen scale and mandoline')).toBeInTheDocument();
     expect(screen.getByText('No kitchen torch available')).toBeInTheDocument();
@@ -376,6 +383,12 @@ describe('PreferencesWorkspace', () => {
       within(kitchenCard as HTMLElement).getByRole('button', { name: 'Edit Kitchen' }),
     );
 
+    const editorDialog = screen.getByRole('dialog');
+    expect(editorDialog).toHaveAttribute('aria-labelledby', 'preference-editor-kitchen');
+    expect(screen.getByRole('tab', { name: /Appliances/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     expect(screen.getByText('Stand Mixer')).toBeInTheDocument();
     expect(screen.getByText('Rice Cooker')).toBeInTheDocument();
     expect(screen.getByText('Digital Kitchen Scale')).toBeInTheDocument();
@@ -387,6 +400,10 @@ describe('PreferencesWorkspace', () => {
     const customApplianceInput = screen.getByPlaceholderText('Add appliance');
     fireEvent.change(customApplianceInput, { target: { value: 'countertop smoker' } });
     fireEvent.click(within(customApplianceInput.closest('div') as HTMLElement).getByText('Add'));
+    expect(screen.getByRole('button', { name: 'Countertop smoker' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
 
     const customCooktopInput = screen.getByPlaceholderText('Add cooktop');
     fireEvent.change(customCooktopInput, { target: { value: 'portable butane burner' } });
@@ -404,12 +421,16 @@ describe('PreferencesWorkspace', () => {
           '- No peanuts',
           '',
           '## Kitchen',
-          '- Appliances: Rice Cooker, Siemens oven, Electric grill, Portable blender, Countertop smoker',
-          '- Stove with three burners (primary)',
-          '- Portable butane burner',
-          '- Digital Meat Thermometer',
-          '- Owner of Kitchen scale and mandoline.',
-          '- Owner of Carbon steel wok.',
+          '- Appliance: Rice Cooker',
+          '- Appliance: Siemens oven',
+          '- Appliance: Electric grill',
+          '- Appliance: Portable blender',
+          '- Appliance: Countertop smoker',
+          '- Cooktop: Stove with three burners (primary)',
+          '- Cooktop: Portable butane burner',
+          '- Tool: Digital Meat Thermometer',
+          '- Tool: Kitchen scale and mandoline',
+          '- Tool: Carbon steel wok',
           '- No kitchen torch available',
           '',
           '## Specialty Ingredients',
@@ -418,6 +439,46 @@ describe('PreferencesWorkspace', () => {
       },
       expect.any(Object),
     );
+  });
+
+  it('does not render saved kitchen presets again as custom items', () => {
+    mockMarkdown = [
+      '## Kitchen',
+      '- Appliances: Convection Oven',
+      '- Gas Stove',
+      "- Owner of Chef's Knife.",
+      '- Baking Sheet',
+    ].join('\n');
+
+    render(<PreferencesWorkspace />);
+
+    const kitchenCard = screen.getAllByText('Kitchen')[0].closest('article');
+    expect(kitchenCard).not.toBeNull();
+    fireEvent.click(
+      within(kitchenCard as HTMLElement).getByRole('button', { name: 'Edit Kitchen' }),
+    );
+
+    expect(screen.getAllByRole('button', { name: 'Convection Oven' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Gas Stove' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /Chef.*Knife/i })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Baking Sheet' })).toHaveLength(1);
+  });
+
+  it('preserves explicit custom kitchen categories without keyword inference', () => {
+    mockMarkdown = ['## Kitchen', '- Tool: Grill brush', '- Appliance: Washer and dryer'].join(
+      '\n',
+    );
+
+    render(<PreferencesWorkspace />);
+    const kitchenCard = screen.getAllByText('Kitchen')[0].closest('article');
+    fireEvent.click(
+      within(kitchenCard as HTMLElement).getByRole('button', { name: 'Edit Kitchen' }),
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Tools/i }));
+    expect(screen.getByRole('button', { name: 'Grill brush' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /Appliances/i }));
+    expect(screen.getByRole('button', { name: 'Washer and dryer' })).toBeInTheDocument();
   });
 
   it('opens the agent dialog from the profile preview action', () => {

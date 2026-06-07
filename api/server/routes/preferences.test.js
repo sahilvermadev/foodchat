@@ -35,6 +35,7 @@ jest.mock('@librechat/api', () => {
     getSpecialtyIngredientImage: jest.fn(),
     listSpecialtyIngredients: jest.fn(),
     resolveSpecialtyIngredient: jest.fn(),
+    streamGenerativePrompts: jest.fn(),
     updatePreferences: jest.fn(),
     runPreferencesChat: jest.fn(),
   };
@@ -79,6 +80,9 @@ describe('preferences routes', () => {
     preferencesApi.getSpecialtyIngredientImage.mockResolvedValue({
       buffer: Buffer.from('cached-ingredient'),
       contentType: 'image/webp',
+    });
+    preferencesApi.streamGenerativePrompts.mockImplementation(async (_input, writer) => {
+      await writer.write('{"op":"add","path":"/root","value":"suggestions"}\n');
     });
   });
 
@@ -161,6 +165,26 @@ describe('preferences routes', () => {
     });
   });
 
+  test('streams generative prompts with a server-controlled model', async () => {
+    await request(app)
+      .post('/api/preferences/generative-prompts')
+      .send({
+        model: 'untrusted/expensive-model',
+        environmental_context: { current_month: 'June' },
+      })
+      .expect(200)
+      .expect('Content-Type', /application\/x-ndjson/);
+
+    expect(preferencesApi.streamGenerativePrompts).toHaveBeenCalledTimes(1);
+    const [input] = preferencesApi.streamGenerativePrompts.mock.calls[0];
+    expect(input).toMatchObject({
+      user: 'auth-user',
+      environmentalContext: { current_month: 'June' },
+    });
+    expect(input).not.toHaveProperty('model');
+    expect(input.signal).toBeInstanceOf(AbortSignal);
+  });
+
   test('serves ingredient thumbnails with browser caching', async () => {
     const response = await request(app)
       .get('/api/preferences/ingredients/ingredient-1/image?variant=thumbnail&v=1')
@@ -169,9 +193,6 @@ describe('preferences routes', () => {
       .expect('Cache-Control', 'private, max-age=31536000, immutable');
 
     expect(response.body).toEqual(Buffer.from('cached-ingredient'));
-    expect(preferencesApi.getSpecialtyIngredientImage).toHaveBeenCalledWith(
-      'ingredient-1',
-      true,
-    );
+    expect(preferencesApi.getSpecialtyIngredientImage).toHaveBeenCalledWith('ingredient-1', true);
   });
 });

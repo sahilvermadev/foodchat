@@ -162,6 +162,7 @@ function UnifiedSidebar() {
               <ExpandedPanel
                 links={links}
                 transparent={isCookingLandingRoute}
+                collapseOnNavigate
                 onCollapse={handleCollapse}
               />
               <nav className="min-h-0 flex-1 overflow-hidden bg-surface-primary-alt">

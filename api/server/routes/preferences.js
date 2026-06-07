@@ -5,6 +5,7 @@ const {
   listSpecialtyIngredients,
   resolveSpecialtyIngredient,
   SpecialtyIngredientValidationError,
+  streamGenerativePrompts,
   updatePreferences,
   runPreferencesChat,
   PreferencesValidationError,
@@ -114,6 +115,58 @@ router.post('/chat', async (req, res) => {
     });
     res.json(result);
   } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.post('/generative-prompts', async (req, res) => {
+  const controller = new AbortController();
+  let closed = false;
+  res.on('close', () => {
+    closed = true;
+    if (!res.writableEnded) {
+      controller.abort();
+    }
+  });
+
+  try {
+    const environmentalContext =
+      req.body?.environmental_context && typeof req.body.environmental_context === 'object'
+        ? req.body.environmental_context
+        : {};
+    res.set({
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders?.();
+
+    await streamGenerativePrompts(
+      {
+        user: userId(req),
+        environmentalContext,
+        signal: controller.signal,
+      },
+      {
+        write: (line) => {
+          if (!closed) {
+            res.write(line);
+          }
+        },
+      },
+    );
+
+    if (!closed) {
+      res.end();
+    }
+  } catch (error) {
+    if (res.headersSent) {
+      if (!closed) {
+        res.end();
+      }
+      return;
+    }
     handleError(res, error);
   }
 });

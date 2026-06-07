@@ -15,7 +15,7 @@ function Header() {
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
 
   return (
-    <div className="via-presentation/70 md:from-presentation/80 md:via-presentation/50 2xl:from-presentation/0 absolute top-0 z-10 flex h-[52px] w-full items-center justify-end bg-gradient-to-b from-presentation to-transparent p-2 font-semibold text-text-primary 2xl:via-transparent">
+    <div className="via-presentation/70 md:from-presentation/80 md:via-presentation/50 2xl:from-presentation/0 absolute top-0 z-20 flex h-[calc(52px+env(safe-area-inset-top))] w-full items-end justify-between bg-gradient-to-b from-presentation to-transparent px-3 pb-1 font-semibold text-text-primary min-[769px]:items-center min-[769px]:justify-end min-[769px]:p-2 min-[769px]:pt-[env(safe-area-inset-top)] 2xl:via-transparent">
       <div className="hide-scrollbar flex min-w-0 items-center justify-end gap-2 overflow-x-auto">
         {hasAccessToTemporaryChat === true && !isSmallScreen && !isCookingChat ? (
           <TemporaryChat />

@@ -141,15 +141,15 @@ export default function CookingWorkspace({
 
   return (
     <div className="rekky-ui flex h-full min-h-0 w-full flex-col overflow-hidden bg-presentation lg:flex-row">
-      {hasRecipeCanvas && (
-        <div className="flex shrink-0 border-b border-border-light bg-surface-primary-alt lg:hidden">
+      {hasRecipeCanvas ? (
+        <div className="flex h-12 shrink-0 items-stretch border-b border-border-light bg-surface-primary-alt pl-12 pr-14 lg:hidden">
           <button
             type="button"
             onClick={() => setMobileTab('recipe')}
-            className={`flex-1 py-3 text-center text-sm font-semibold border-b-2 ${
+            className={`flex-1 border-b-2 text-center text-sm font-semibold transition-colors ${
               mobileTab === 'recipe'
-                ? 'border-surface-submit text-text-primary bg-surface-primary'
-                : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+                ? 'border-surface-submit bg-surface-primary text-text-primary'
+                : 'border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary'
             }`}
           >
             {localize('com_cooking_document_type_recipe')}
@@ -157,22 +157,22 @@ export default function CookingWorkspace({
           <button
             type="button"
             onClick={() => setMobileTab('chat')}
-            className={`flex-1 py-3 text-center text-sm font-semibold border-b-2 ${
+            className={`flex-1 border-b-2 text-center text-sm font-semibold transition-colors ${
               mobileTab === 'chat'
-                ? 'border-surface-submit text-text-primary bg-surface-primary'
-                : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+                ? 'border-surface-submit bg-surface-primary text-text-primary'
+                : 'border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary'
             }`}
           >
             {localize('com_ui_chat') || 'Assistant'}
           </button>
         </div>
-      )}
+      ) : null}
       <aside
         className={
           hasRecipeCanvas
             ? `order-2 ${
                 mobileTab === 'chat' ? 'flex' : 'hidden lg:flex'
-              } min-h-0 flex-1 lg:flex-none flex-col overflow-hidden bg-surface-primary-alt lg:h-full lg:min-h-0 lg:w-[30rem] lg:border-l lg:border-border-light lg:border-t-0 xl:w-[32rem]`
+              } min-h-0 flex-1 flex-col overflow-hidden bg-surface-primary-alt lg:h-full lg:min-h-0 lg:w-[30rem] lg:flex-none lg:border-l lg:border-t-0 lg:border-border-light xl:w-[32rem]`
             : 'order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-primary-alt'
         }
       >
@@ -193,27 +193,25 @@ export default function CookingWorkspace({
           {visibleDocuments.length > 0 ? (
             <nav
               aria-label={localize('com_cooking_documents')}
-              className="flex shrink-0 gap-2 overflow-x-auto border-b border-border-light bg-surface-primary-alt px-4 py-3"
+              className="flex h-11 shrink-0 items-stretch gap-1 overflow-x-auto border-b border-border-light bg-surface-primary-alt px-3 sm:h-12 sm:px-5"
             >
               {visibleDocuments.map((document) => {
                 const isSelected = document._id === selectedDocument?._id;
                 return (
-                  <div
-                    key={document._id}
-                    className={`flex shrink-0 items-center rounded-md border ${
-                      isSelected
-                        ? 'border-surface-submit bg-surface-primary'
-                        : 'border-border-light bg-surface-primary-alt'
-                    }`}
-                  >
+                  <div key={document._id} className="relative flex shrink-0 items-center">
                     <button
                       type="button"
                       aria-current={isSelected ? 'page' : undefined}
                       onClick={() => !isSelected && selectDocument.mutate(document._id)}
-                      className="max-w-56 truncate px-3 py-2 font-sans text-sm text-text-primary"
+                      className={`relative h-full max-w-52 truncate px-2.5 pr-1 font-sans text-sm transition-colors after:absolute after:inset-x-2.5 after:bottom-0 after:h-0.5 after:rounded-full after:content-[''] sm:max-w-64 sm:px-3 sm:pr-1 sm:after:inset-x-3 ${
+                        isSelected
+                          ? 'text-text-primary after:bg-surface-submit'
+                          : 'text-text-secondary after:bg-transparent hover:text-text-primary'
+                      }`}
                     >
                       {document.recipe.title}
-                      <span className="rekky-meta ml-2 text-text-secondary">
+                      <span className="sr-only">
+                        {' '}
                         {localize(documentTypeKey(document.documentType))}
                       </span>
                     </button>
@@ -223,9 +221,9 @@ export default function CookingWorkspace({
                         0: document.recipe.title,
                       })}
                       onClick={() => setDocumentToDelete(document)}
-                      className="mr-1 rounded p-1 text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-heavy sm:size-8 sm:rounded-md"
                     >
-                      <Trash2 className="size-3.5" aria-hidden="true" />
+                      <Trash2 className="size-4 sm:size-3.5" aria-hidden="true" />
                     </button>
                   </div>
                 );

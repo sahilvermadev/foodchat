@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useRecoilValue } from 'recoil';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { Outlet, useLocation } from 'react-router-dom';
+import { Menu } from 'lucide-react';
 import { useMediaQuery } from '@librechat/client';
-import { useAuthContext, useFileMap } from '~/hooks';
+import { useAuthContext, useFileMap, useLocalize } from '~/hooks';
 import store from '~/store';
 import { SetConvoProvider, FileMapContext } from '~/Providers';
 import { useUserTermsQuery, useGetStartupConfig } from '~/data-provider';
@@ -10,11 +11,14 @@ import { UnifiedSidebar } from '~/components/UnifiedSidebar';
 import { TermsAndConditionsModal } from '~/components/ui';
 import { useHealthCheck } from '~/data-provider';
 import { Banner } from '~/components/Banners';
+import LocationWeather from '~/components/System/LocationWeather';
 
 export default function Root() {
+  const localize = useLocalize();
   const [showTerms, setShowTerms] = useState(false);
   const [bannerHeight, setBannerHeight] = useState(0);
   const sidebarExpanded = useRecoilValue(store.sidebarExpanded);
+  const setSidebarExpanded = useSetRecoilState(store.sidebarExpanded);
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
   const isCookingLandingRoute = location.pathname === '/cook';
@@ -61,6 +65,16 @@ export default function Root() {
             <div className="relative z-10 flex h-full flex-shrink-0">
               <UnifiedSidebar />
             </div>
+            {isSmallScreen && !sidebarExpanded ? (
+              <button
+                type="button"
+                onClick={() => setSidebarExpanded(true)}
+                aria-label={localize('com_nav_open_sidebar')}
+                className="absolute left-0 top-0 z-[80] inline-flex size-12 items-center justify-center text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-heavy"
+              >
+                <Menu className="size-5" aria-hidden="true" />
+              </button>
+            ) : null}
             <div
               className="relative z-10 flex h-full max-w-full flex-1 flex-col overflow-hidden"
               style={{
@@ -70,6 +84,7 @@ export default function Root() {
               }}
               inert={isSmallScreen && sidebarExpanded ? '' : undefined}
             >
+              <LocationWeather />
               <Outlet />
             </div>
           </div>

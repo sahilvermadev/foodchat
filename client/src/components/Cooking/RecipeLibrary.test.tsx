@@ -115,6 +115,12 @@ describe('RecipeLibrary actions', () => {
     );
 
     expect(screen.getByText('com_recipes_count_short_other:31')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('com_recipes_search_placeholder_short')).toBeInTheDocument();
+    expect(screen.getByText('com_recipes_library_subtitle')).toHaveClass('hidden', 'sm:block');
+    expect(screen.getByRole('tablist', { name: 'com_recipes_save_list_filter_label' })).toHaveClass(
+      'flex-nowrap',
+      'overflow-x-auto',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'com_recipes_load_more' }));
     expect(mockFetchNextPage).toHaveBeenCalledTimes(1);
   });

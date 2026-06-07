@@ -18,7 +18,8 @@ import { CodeBlockProvider } from '~/Providers';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { langSubset, preprocessLaTeX } from '~/utils';
 import { unicodeCitation } from '~/components/Web';
-import { code, a, p, img } from './MarkdownComponents';
+import { RekkyJsonMarkdownCode } from '~/components/RekkyJsonRender';
+import { a, p, img, table } from './MarkdownComponents';
 import store from '~/store';
 
 type TContentProps = {
@@ -81,10 +82,11 @@ const Markdown = memo(function Markdown({ content = '', isLatestMessage }: TCont
           rehypePlugins={rehypePlugins}
           components={
             {
-              code,
+              code: RekkyJsonMarkdownCode,
               a,
               p,
               img,
+              table,
               citation: Citation,
               'highlighted-text': HighlightedText,
               'composite-citation': CompositeCitation,

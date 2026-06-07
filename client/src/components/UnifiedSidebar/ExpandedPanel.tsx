@@ -15,8 +15,12 @@ import { resolveRenderedPanel } from '~/components/SidePanel/panelSelection';
 const AccountSettings = lazy(() => import('~/components/Nav/AccountSettings'));
 
 const NewChatButton = memo(function NewChatButton({
+  collapseOnNavigate,
+  onCollapse,
   setActive,
 }: {
+  collapseOnNavigate?: boolean;
+  onCollapse?: () => void;
   setActive: (id: string) => void;
 }) {
   const localize = useLocalize();
@@ -35,9 +39,20 @@ const NewChatButton = memo(function NewChatButton({
         if (switchToHistory) {
           setActive(DEFAULT_PANEL);
         }
+        if (collapseOnNavigate) {
+          onCollapse?.();
+        }
       }
     },
-    [queryClient, conversation?.conversationId, newConversation, switchToHistory, setActive],
+    [
+      collapseOnNavigate,
+      conversation?.conversationId,
+      newConversation,
+      onCollapse,
+      queryClient,
+      setActive,
+      switchToHistory,
+    ],
   );
 
   return (
@@ -66,6 +81,7 @@ const NavIconButton = memo(function NavIconButton({
   setActive,
   onExpand,
   onCollapse,
+  collapseOnNavigate,
 }: {
   link: NavLink;
   isActive: boolean;
@@ -73,6 +89,7 @@ const NavIconButton = memo(function NavIconButton({
   setActive: (id: string) => void;
   onExpand?: () => void;
   onCollapse?: () => void;
+  collapseOnNavigate?: boolean;
 }) {
   const localize = useLocalize();
 
@@ -80,6 +97,9 @@ const NavIconButton = memo(function NavIconButton({
     (e: React.MouseEvent<HTMLButtonElement>) => {
       if (link.onClick) {
         link.onClick(e);
+        if (collapseOnNavigate) {
+          onCollapse?.();
+        }
         return;
       }
       if (isActive && expanded) {
@@ -93,7 +113,7 @@ const NavIconButton = memo(function NavIconButton({
         onExpand?.();
       }
     },
-    [link, isActive, setActive, expanded, onExpand, onCollapse],
+    [collapseOnNavigate, expanded, isActive, link, onCollapse, onExpand, setActive],
   );
 
   return (
@@ -123,12 +143,14 @@ function ExpandedPanel({
   links,
   expanded = true,
   transparent = false,
+  collapseOnNavigate = false,
   onCollapse,
   onExpand,
 }: {
   links: NavLink[];
   expanded?: boolean;
   transparent?: boolean;
+  collapseOnNavigate?: boolean;
   onCollapse?: () => void;
   onExpand?: () => void;
 }) {
@@ -165,7 +187,11 @@ function ExpandedPanel({
 
       <div className="flex min-h-0 flex-1 items-center justify-center py-3">
         <div className="flex max-h-full flex-col items-center gap-2 overflow-y-auto">
-          <NewChatButton setActive={setActive} />
+          <NewChatButton
+            collapseOnNavigate={collapseOnNavigate}
+            onCollapse={onCollapse}
+            setActive={setActive}
+          />
           <div className="my-1 h-px w-7 bg-border-light" />
           {links.map((link) => (
             <NavIconButton
@@ -180,6 +206,7 @@ function ExpandedPanel({
               setActive={setActive}
               onExpand={onExpand}
               onCollapse={onCollapse}
+              collapseOnNavigate={collapseOnNavigate}
             />
           ))}
         </div>

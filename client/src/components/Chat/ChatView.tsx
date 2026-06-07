@@ -77,7 +77,6 @@ function ChatView({
   const centerFormOnLanding = useRecoilValue(store.centerFormOnLanding);
   const localize = useLocalize();
   const { isCookingChat } = useCookingChat();
-
   const methods = useForm<ChatFormValues>({
     defaultValues: { text: '' },
   });
@@ -158,7 +157,7 @@ function ChatView({
                   className={cn(
                     'relative z-10 flex flex-col',
                     isLandingPage
-                      ? 'flex-1 items-center justify-end sm:justify-center'
+                      ? 'min-h-0 flex-1 items-center justify-center overflow-hidden px-5 min-[769px]:overflow-visible min-[769px]:px-0'
                       : 'h-full overflow-y-auto',
                   )}
                 >
@@ -166,7 +165,8 @@ function ChatView({
                   <div
                     className={cn(
                       'w-full',
-                      isLandingPage && 'max-w-3xl transition-all duration-200 xl:max-w-4xl',
+                      isLandingPage &&
+                        'fixed inset-x-0 bottom-0 z-30 mx-auto px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] transition-all duration-200 min-[769px]:static min-[769px]:max-w-3xl min-[769px]:px-0 min-[769px]:pb-0 xl:max-w-4xl',
                     )}
                   >
                     <ChatForm index={index} />

@@ -25,6 +25,7 @@ import PendingManualSkillsChips from './PendingManualSkillsChips';
 import SkillsCommand from './SkillsCommand';
 import AudioRecorder from './AudioRecorder';
 import CollapseChat from './CollapseChat';
+import GenerativePrompts from './GenerativePrompts';
 import StreamAudio from './StreamAudio';
 import StopButton from './StopButton';
 import SendButton from './SendButton';
@@ -195,33 +196,51 @@ const ChatForm = memo(function ChatForm({
   }, [backupBadges, setBadges, setIsEditingBadges]);
 
   const isMoreThanThreeRows = visualRowCount > 3;
+  const messageCount = conversation?.messages?.length ?? 0;
+  const isFreshLanding =
+    centerFormOnLanding &&
+    (conversationId == null || conversationId === Constants.NEW_CONVO) &&
+    !isSubmitting &&
+    messageCount === 0;
 
   const baseClasses = useMemo(
     () =>
       cn(
-        'md:py-3.5 m-0 w-full resize-none py-[13px] placeholder-black/60 bg-transparent dark:placeholder-white/60 [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.05)]',
+        'm-0 w-full resize-none placeholder-black/60 bg-transparent dark:placeholder-white/60 md:py-3.5 [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.05)]',
+        isFreshLanding ? 'py-3 min-[769px]:py-[13px]' : 'py-[13px]',
+        'text-base',
         isCollapsed ? 'max-h-[52px]' : 'max-h-[45vh] md:max-h-[55vh]',
         isMoreThanThreeRows ? 'pl-5' : 'px-5',
       ),
-    [isCollapsed, isMoreThanThreeRows],
+    [isCollapsed, isFreshLanding, isMoreThanThreeRows],
+  );
+
+  const submitGeneratedPrompt = useCallback(
+    (prompt: string) => {
+      methods.setValue('text', prompt, { shouldValidate: true });
+      submitMessage({ text: prompt });
+    },
+    [methods, submitMessage],
   );
 
   return (
     <form
       onSubmit={methods.handleSubmit(submitMessage)}
       className={cn(
-        'mx-auto flex w-full flex-row gap-3 transition-[max-width] duration-300 sm:px-2',
+        'mx-auto flex w-full flex-row gap-3 transition-[max-width] duration-300',
         maximizeChatSpace ? 'max-w-full' : 'md:max-w-3xl xl:max-w-4xl',
-        centerFormOnLanding &&
-          (conversationId == null || conversationId === Constants.NEW_CONVO) &&
-          !isSubmitting &&
-          conversation?.messages?.length === 0
-          ? 'transition-all duration-200 sm:mb-28'
-          : 'sm:mb-10',
+        isFreshLanding
+          ? 'px-0 transition-all duration-200 min-[769px]:mb-28 min-[769px]:px-2'
+          : 'sm:mb-10 sm:px-2',
       )}
     >
-      <div className="relative flex h-full flex-1 items-stretch md:flex-col">
-        <div className={cn('flex w-full items-center', isRTL && 'flex-row-reverse')}>
+      <div className="relative flex min-w-0 flex-1 flex-col items-stretch">
+        <div
+          className={cn(
+            'order-2 flex w-full items-center min-[769px]:order-1',
+            isRTL && 'flex-row-reverse',
+          )}
+        >
           <Mention
             index={index}
             popoverAtom={plusPopoverAtom}
@@ -245,7 +264,10 @@ const ChatForm = memo(function ChatForm({
           <div
             onClick={handleContainerClick}
             className={cn(
-              'relative flex w-full flex-grow flex-col overflow-hidden rounded-t-3xl border pb-4 text-text-primary transition-all duration-200 sm:rounded-3xl sm:pb-0',
+              'relative flex w-full flex-grow flex-col overflow-hidden border text-text-primary transition-all duration-200',
+              isFreshLanding
+                ? 'rounded-[1.35rem] pb-0 min-[769px]:rounded-3xl'
+                : 'rounded-t-3xl pb-4 sm:rounded-3xl sm:pb-0',
               isTextAreaFocused ? 'shadow-lg' : 'shadow-md',
               isTemporary
                 ? 'border-violet-800/60 bg-violet-950/10'
@@ -369,6 +391,13 @@ const ChatForm = memo(function ChatForm({
             </div>
             {TextToSpeech && automaticPlayback && <StreamAudio index={index} />}
           </div>
+        </div>
+        <div className="order-1 min-[769px]:order-2">
+          <GenerativePrompts
+            enabled={isFreshLanding}
+            disabled={disableInputs || filesLoading || isSubmitting || isNotAppendable}
+            onSubmitPrompt={submitGeneratedPrompt}
+          />
         </div>
       </div>
     </form>

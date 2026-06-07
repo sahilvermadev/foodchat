@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useRecoilValue } from 'recoil';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { useParams } from 'react-router-dom';
 import { Constants } from 'librechat-data-provider';
 import { useToastContext, useMediaQuery } from '@librechat/client';
@@ -36,6 +36,7 @@ export default function Conversation({
   const currentConvoId = useMemo(() => params.conversationId, [params.conversationId]);
   const updateConvoMutation = useUpdateConversationMutation(currentConvoId ?? '');
   const activeConvos = useRecoilValue(store.allConversationsSelector);
+  const setSidebarExpanded = useSetRecoilState(store.sidebarExpanded);
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const isShiftHeld = useShiftKey();
   const { conversationId, title = '' } = conversation;
@@ -151,10 +152,16 @@ export default function Conversation({
     }
 
     if (currentConvoId === conversationId || isPopoverActive) {
+      if (isSmallScreen && !isPopoverActive) {
+        setSidebarExpanded(false);
+      }
       return;
     }
 
     toggleNav();
+    if (isSmallScreen) {
+      setSidebarExpanded(false);
+    }
 
     if (typeof title === 'string' && title.length > 0) {
       document.title = title;

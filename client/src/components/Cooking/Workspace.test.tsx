@@ -217,6 +217,11 @@ describe('CookingWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: /Starter Guide/ }));
     expect(mockSelectDocument).toHaveBeenCalledWith('guide-1');
 
+    const selectedDocumentTab = screen.getByRole('button', { name: /Recipe/ });
+    expect(selectedDocumentTab).toHaveAttribute('aria-current', 'page');
+    expect(selectedDocumentTab).toHaveClass('after:bg-surface-submit');
+    expect(selectedDocumentTab.closest('div')).not.toHaveClass('border-surface-submit');
+
     fireEvent.click(screen.getAllByRole('button', { name: 'com_cooking_delete_document' })[0]);
     expect(mockDeleteDocument).not.toHaveBeenCalled();
     expect(screen.getByText('com_cooking_delete_document_title')).toBeInTheDocument();

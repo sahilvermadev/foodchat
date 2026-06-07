@@ -1,8 +1,8 @@
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom/extend-expect';
 import type { CookingDraft } from 'librechat-data-provider';
-import RecipeCanvas from './RecipeCanvas';
+import RecipeCanvas, { KitchenTimer } from './RecipeCanvas';
 
 const mockSaveRecipe = jest.fn();
 
@@ -52,7 +52,18 @@ jest.mock('~/data-provider', () => ({
 }));
 
 jest.mock('~/hooks', () => ({
-  useLocalize: () => (key: string) => key,
+  useLocalize: () => (key: string, values?: Record<number, string>) => {
+    const translations: Record<string, string> = {
+      com_cooking_timer: 'Timer',
+      com_cooking_named_timer: '{{0}} timer',
+      com_cooking_start_named_timer: 'Start {{0}}',
+      com_cooking_pause_named_timer: 'Pause {{0}}',
+      com_cooking_restart_named_timer: 'Restart {{0}}',
+      com_cooking_reset_named_timer: 'Reset {{0}}',
+      com_cooking_reset_timer: 'Reset',
+    };
+    return (translations[key] ?? key).replace('{{0}}', values?.[0] ?? '');
+  },
 }));
 
 jest.mock('@librechat/client', () => ({
@@ -129,8 +140,10 @@ describe('RecipeCanvas recipe data display', () => {
 ## Ingredients
 - lentils`);
 
-    const metrics = within(screen.getByTestId('recipe-metrics'));
+    const metricsElement = screen.getByTestId('recipe-metrics');
+    const metrics = within(metricsElement);
 
+    expect(metricsElement).toHaveClass('grid-cols-2');
     expect(metrics.getByText('Servings')).toBeInTheDocument();
     expect(metrics.getByText('4')).toBeInTheDocument();
     expect(metrics.getByText('Prep time')).toBeInTheDocument();
@@ -245,6 +258,9 @@ describe('RecipeCanvas recipe data display', () => {
     );
 
     expect(screen.getByTestId('structured-ingredients')).toHaveTextContent('chicken');
+    expect(screen.getByLabelText('500g chicken').closest('label')).toHaveClass(
+      'grid-cols-[minmax(3.75rem,auto)_minmax(0,1fr)]',
+    );
     expect(screen.getByTestId('markdown-body')).not.toHaveTextContent('stale markdown chicken');
     expect(screen.getByTestId('markdown-body')).toHaveTextContent('## Instructions');
   });
@@ -265,6 +281,20 @@ describe('RecipeCanvas recipe data display', () => {
       />,
     );
 
+    const saveButton = screen.getByRole('button', { name: 'com_recipes_save_recipe' });
+    const copyButton = screen.getByRole('button', { name: 'com_cooking_copy_markdown' });
+
+    expect(saveButton).toHaveClass('size-11', 'bg-transparent', 'text-surface-submit');
+    expect(within(saveButton).getByText('com_recipes_save_recipe')).toHaveClass(
+      'hidden',
+      'sm:inline',
+    );
+    expect(copyButton).toHaveClass('size-11');
+    expect(
+      screen
+        .getByRole('heading', { name: 'Changezi Chicken' })
+        .compareDocumentPosition(copyButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('menuitem', { name: /com_recipes_save_list_cooked_already/ }));
 
@@ -274,5 +304,37 @@ describe('RecipeCanvas recipe data display', () => {
         saveList: 'cooked_already',
       }),
     );
+  });
+});
+
+describe('KitchenTimer', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-06-07T10:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('uses elapsed wall-clock time after a delayed browser tick', () => {
+    render(<KitchenTimer seconds={10} label="Sear" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Sear timer' }));
+
+    act(() => {
+      jest.setSystemTime(new Date('2026-06-07T10:00:09.100Z'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(screen.getByText('0:01')).toBeInTheDocument();
+
+    act(() => {
+      jest.setSystemTime(new Date('2026-06-07T10:00:10.100Z'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(screen.getByText('0:00')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Restart Sear timer' })).toBeInTheDocument();
   });
 });

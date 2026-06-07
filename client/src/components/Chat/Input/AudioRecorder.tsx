@@ -117,7 +117,7 @@ export default memo(function AudioRecorder({
           onClick={isListening === true ? handleStopRecording : handleStartRecording}
           disabled={disabled}
           className={cn(
-            'flex size-9 items-center justify-center rounded-full p-1 transition-colors hover:bg-surface-hover',
+            'flex size-11 items-center justify-center rounded-full p-1 transition-colors hover:bg-surface-hover',
           )}
           title={localize('com_ui_use_micrphone')}
           aria-pressed={isListening}

@@ -173,6 +173,24 @@ export const p: React.ElementType = memo(function MarkdownParagraph({ children }
 });
 p.displayName = 'MarkdownParagraph';
 
+type TTableProps = React.TableHTMLAttributes<HTMLTableElement> & {
+  children: React.ReactNode;
+  node?: { type?: string };
+};
+
+export const table: React.ElementType = memo(function MarkdownTable({
+  children,
+  node: _node,
+  ...props
+}: TTableProps) {
+  return (
+    <div className="recipe-table-scroll -mx-1 max-w-[calc(100%+0.5rem)] overflow-x-auto px-1">
+      <table {...props}>{children}</table>
+    </div>
+  );
+});
+table.displayName = 'MarkdownTable';
+
 type TImageProps = {
   src?: string;
   alt?: string;

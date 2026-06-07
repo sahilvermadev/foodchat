@@ -470,8 +470,19 @@ html {
   line-height: 1.6;
   margin-bottom: 2rem;
   margin-top: 1rem;
-  overflow: hidden;
   width: 100%;
+}
+
+.prose.cooking-recipe-markdown :where(.recipe-table-scroll) {
+  margin-bottom: 2rem;
+  margin-top: 1rem;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.prose.cooking-recipe-markdown :where(.recipe-table-scroll table) {
+  margin-bottom: 0;
+  margin-top: 0;
 }
 
 .prose.cooking-recipe-markdown :where(th, td) {
@@ -502,6 +513,32 @@ html {
 
 .prose.cooking-recipe-markdown :where(tbody tr:nth-child(even)) {
   background: rgba(255, 255, 255, 0.025);
+}
+
+@media (max-width: 640px) {
+  .rekky-recipe-surface .rekky-title {
+    font-size: 1.75rem;
+    line-height: 1.05;
+  }
+
+  .prose.cooking-recipe-markdown :where(table) {
+    font-size: 0.85rem;
+    min-width: 32rem;
+  }
+
+  .prose.cooking-recipe-markdown :where(th, td) {
+    padding: 0.7rem 0.75rem;
+  }
+
+  .prose.cooking-recipe-markdown :where(blockquote) {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .prose.cooking-recipe-markdown :where(img) {
+    height: auto;
+    max-width: 100%;
+  }
 }
 
 .icon-xs {
