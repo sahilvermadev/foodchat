@@ -1,7 +1,6 @@
 import { memo, useCallback } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';
-import { Spinner } from '@librechat/client';
 import { useParams } from 'react-router-dom';
 import { Constants, ContentTypes, buildTree } from 'librechat-data-provider';
 import type { TMessage } from 'librechat-data-provider';
@@ -27,11 +26,25 @@ import { cn } from '~/utils';
 import { useCookingChat } from '~/components/Cooking/CookingChatContext';
 import store from '~/store';
 
-function LoadingSpinner() {
+function LoadingMessagesSkeleton() {
   return (
-    <div className="relative flex-1 overflow-hidden overflow-y-auto">
-      <div className="relative flex h-full items-center justify-center">
-        <Spinner className="text-text-primary" />
+    <div className="relative flex-1 overflow-hidden overflow-y-auto" aria-hidden="true">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-5 py-10 sm:px-8">
+        <div className="flex gap-4">
+          <div className="size-8 shrink-0 animate-pulse rounded-full bg-white/10" />
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="h-4 w-2/3 animate-pulse rounded bg-white/10" />
+            <div className="h-4 w-4/5 animate-pulse rounded bg-white/5" />
+          </div>
+        </div>
+        <div className="flex gap-4">
+          <div className="size-8 shrink-0 animate-pulse rounded-full bg-white/10" />
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="h-4 w-full animate-pulse rounded bg-white/10" />
+            <div className="h-4 w-5/6 animate-pulse rounded bg-white/5" />
+            <div className="h-4 w-3/5 animate-pulse rounded bg-white/5" />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -129,9 +142,9 @@ function ChatView({
     !isCookingChat && (!messagesTree || messagesTree.length === 0) && conversationId != null;
 
   if (isLoading && conversationId !== Constants.NEW_CONVO) {
-    content = <LoadingSpinner />;
+    content = <LoadingMessagesSkeleton />;
   } else if ((isLoading || isNavigating) && !isLandingPage) {
-    content = <LoadingSpinner />;
+    content = <LoadingMessagesSkeleton />;
   } else if (!isLandingPage) {
     content = <MessagesView messagesTree={messagesTree} />;
   } else {

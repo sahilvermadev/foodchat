@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useRecoilCallback, useRecoilValue } from 'recoil';
-import { Spinner, useToastContext } from '@librechat/client';
+import { useToastContext } from '@librechat/client';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Constants } from 'librechat-data-provider';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
@@ -36,6 +36,58 @@ import {
 import useAuthRedirect from './useAuthRedirect';
 import temporaryStore from '~/store/temporary';
 import store from '~/store';
+
+function ChatRouteSkeleton({ isCookingMode }: { isCookingMode: boolean }) {
+  const localize = useLocalize();
+  const title = isCookingMode ? localize('com_cooking_chat_landing') : localize('com_ui_loading');
+
+  return (
+    <div className="relative flex h-full w-full overflow-hidden bg-presentation">
+      <div className="flex min-w-0 flex-1 items-center justify-center px-5">
+        <div className="flex w-full max-w-[880px] flex-col items-center gap-8">
+          <h1 className="text-center text-2xl font-semibold tracking-wide text-text-primary sm:text-4xl">
+            {title}
+          </h1>
+          <div
+            className="bg-surface-primary/55 h-28 w-full max-w-3xl rounded-3xl border border-border-light"
+            aria-hidden="true"
+          >
+            <div className="h-full animate-pulse rounded-3xl bg-white/5" />
+          </div>
+          <div className="hidden w-full max-w-xl flex-wrap justify-center gap-3 sm:flex">
+            <div className="h-8 w-36 animate-pulse rounded-full border border-border-light bg-white/5" />
+            <div className="h-8 w-44 animate-pulse rounded-full border border-border-light bg-white/5" />
+            <div className="h-8 w-32 animate-pulse rounded-full border border-border-light bg-white/5" />
+          </div>
+        </div>
+      </div>
+      {isCookingMode ? (
+        <aside
+          className="hidden w-[300px] shrink-0 items-start border-l border-border-light px-8 py-[34vh] xl:flex"
+          aria-hidden="true"
+        >
+          <div className="w-full space-y-8">
+            <div className="space-y-3">
+              <div className="h-2 w-12 animate-pulse rounded bg-white/5" />
+              <div className="h-3 w-full animate-pulse rounded bg-white/5" />
+              <div className="h-3 w-4/5 animate-pulse rounded bg-white/5" />
+            </div>
+            <div className="space-y-3">
+              <div className="h-2 w-16 animate-pulse rounded bg-white/5" />
+              <div className="h-3 w-full animate-pulse rounded bg-white/5" />
+              <div className="h-3 w-3/4 animate-pulse rounded bg-white/5" />
+            </div>
+            <div className="space-y-3">
+              <div className="h-2 w-14 animate-pulse rounded bg-white/5" />
+              <div className="h-3 w-full animate-pulse rounded bg-white/5" />
+              <div className="h-3 w-5/6 animate-pulse rounded bg-white/5" />
+            </div>
+          </div>
+        </aside>
+      ) : null}
+    </div>
+  );
+}
 
 export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking' }) {
   const { data: startupConfig } = useGetStartupConfig();
@@ -238,11 +290,7 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
   ]);
 
   if (endpointsQuery.isLoading || modelsQuery.isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center" aria-live="polite" role="status">
-        <Spinner className="text-text-primary" />
-      </div>
-    );
+    return <ChatRouteSkeleton isCookingMode={isCookingMode} />;
   }
 
   if (!isAuthenticated) {
