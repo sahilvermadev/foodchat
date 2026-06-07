@@ -104,6 +104,7 @@ const ChatForm = memo(function ChatForm({
     [chatDirection],
   );
   const disableInputs = requiresKey === true;
+  const isInputUnavailable = disableInputs || !endpoint;
 
   const handleContainerClick = useCallback(() => {
     /** Check if the device is a touchscreen */
@@ -289,57 +290,54 @@ const ChatForm = memo(function ChatForm({
               setFiles={setFiles}
               setFilesLoading={setFilesLoading}
             />
-            {endpoint && (
-              <div className={cn('flex', isRTL ? 'flex-row-reverse' : 'flex-row')}>
-                <div
-                  className="relative flex-1"
-                  style={
-                    isCollapsed
-                      ? {
-                          WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 90%)',
-                          maskImage: 'linear-gradient(to bottom, black 60%, transparent 90%)',
-                        }
-                      : undefined
-                  }
-                >
-                  <TextareaAutosize
-                    {...registerProps}
-                    ref={(e) => {
-                      ref(e);
-                      (textAreaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current =
-                        e;
-                    }}
-                    disabled={disableInputs || isNotAppendable}
-                    onPaste={handlePaste}
-                    onKeyDown={handleKeyDown}
-                    onKeyUp={handleKeyUp}
-                    onCompositionStart={handleCompositionStart}
-                    onCompositionEnd={handleCompositionEnd}
-                    id={mainTextareaId}
-                    tabIndex={0}
-                    data-testid="text-input"
-                    rows={1}
-                    onFocus={handleTextareaFocus}
-                    onBlur={handleTextareaBlur}
-                    aria-label={localize('com_ui_message_input')}
-                    onClick={handleFocusOrClick}
-                    style={{ height: 44, overflowY: 'auto' }}
-                    className={cn(
-                      baseClasses,
-                      removeFocusRings,
-                      'scrollbar-hover transition-[max-height] duration-200 disabled:cursor-not-allowed',
-                    )}
-                  />
-                </div>
-                <div className="flex flex-col items-start justify-start pr-2.5 pt-1.5">
-                  <CollapseChat
-                    isCollapsed={isCollapsed}
-                    isScrollable={isMoreThanThreeRows}
-                    setIsCollapsed={setIsCollapsed}
-                  />
-                </div>
+            <div className={cn('flex', isRTL ? 'flex-row-reverse' : 'flex-row')}>
+              <div
+                className="relative flex-1"
+                style={
+                  isCollapsed
+                    ? {
+                        WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 90%)',
+                        maskImage: 'linear-gradient(to bottom, black 60%, transparent 90%)',
+                      }
+                    : undefined
+                }
+              >
+                <TextareaAutosize
+                  {...registerProps}
+                  ref={(e) => {
+                    ref(e);
+                    (textAreaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = e;
+                  }}
+                  disabled={isInputUnavailable || isNotAppendable}
+                  onPaste={handlePaste}
+                  onKeyDown={handleKeyDown}
+                  onKeyUp={handleKeyUp}
+                  onCompositionStart={handleCompositionStart}
+                  onCompositionEnd={handleCompositionEnd}
+                  id={mainTextareaId}
+                  tabIndex={0}
+                  data-testid="text-input"
+                  rows={1}
+                  onFocus={handleTextareaFocus}
+                  onBlur={handleTextareaBlur}
+                  aria-label={localize('com_ui_message_input')}
+                  onClick={handleFocusOrClick}
+                  style={{ height: 44, overflowY: 'auto' }}
+                  className={cn(
+                    baseClasses,
+                    removeFocusRings,
+                    'scrollbar-hover transition-[max-height] duration-200 disabled:cursor-not-allowed',
+                  )}
+                />
               </div>
-            )}
+              <div className="flex flex-col items-start justify-start pr-2.5 pt-1.5">
+                <CollapseChat
+                  isCollapsed={isCollapsed}
+                  isScrollable={isMoreThanThreeRows}
+                  setIsCollapsed={setIsCollapsed}
+                />
+              </div>
+            </div>
             <div
               className={cn(
                 '@container items-between flex gap-2 pb-2',
@@ -349,7 +347,7 @@ const ChatForm = memo(function ChatForm({
               <div className={`${isRTL ? 'mr-2' : 'ml-2'}`}>
                 <AttachFileChat
                   conversation={conversation}
-                  disableInputs={disableInputs}
+                  disableInputs={isInputUnavailable}
                   files={files}
                   setFiles={setFiles}
                   setFilesLoading={setFilesLoading}
@@ -395,7 +393,7 @@ const ChatForm = memo(function ChatForm({
         <div className="order-1 min-[769px]:order-2">
           <GenerativePrompts
             enabled={isFreshLanding}
-            disabled={disableInputs || filesLoading || isSubmitting || isNotAppendable}
+            disabled={isInputUnavailable || filesLoading || isSubmitting || isNotAppendable}
             onSubmitPrompt={submitGeneratedPrompt}
           />
         </div>
