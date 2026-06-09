@@ -9,6 +9,7 @@ import PromptSuggestions, {
   getCookingPromptSuggestions,
 } from '~/components/Cooking/PromptSuggestions';
 import WebSources, { getCookingWebSources } from '~/components/Cooking/WebSources';
+import Hood from '~/components/Cooking/Hood';
 import { useLocalize, useMessageActions, useContentMetadata } from '~/hooks';
 import PlaceholderRow from '~/components/Chat/Messages/ui/PlaceholderRow';
 import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
@@ -229,6 +230,7 @@ const MessageRender = memo(function MessageRender({
 
         <div className="flex flex-col gap-1">
           <div className="flex min-h-[20px] max-w-full flex-grow flex-col gap-0">
+            <Hood message={msg} isSubmitting={isSubmitting} />
             <MessageContext.Provider value={messageContextValue}>
               <MessageContent
                 ask={ask}

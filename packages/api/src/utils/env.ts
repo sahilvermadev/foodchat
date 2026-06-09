@@ -345,6 +345,17 @@ export function processMCPEnv(params: {
     newObj.env = processedEnv;
   }
 
+  if ('command' in newObj && newObj.command) {
+    newObj.command = processSingleValue({
+      originalValue: newObj.command,
+      customUserVars,
+      user,
+      body,
+      dbSourced,
+    });
+  }
+
+
   if ('args' in newObj && newObj.args) {
     const processedArgs: string[] = [];
     for (const originalValue of newObj.args) {

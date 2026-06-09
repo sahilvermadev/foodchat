@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { v4 } from 'uuid';
 import { SSE } from 'sse.js';
-import { useSetRecoilState } from 'recoil';
+import { useSetRecoilState, useRecoilCallback } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   request,
@@ -91,6 +91,14 @@ export default function useResumableSSE(
   const [streamId, setStreamId] = useState<string | null>(null);
   const setAbortScroll = useSetRecoilState(store.abortScrollFamily(runIndex));
   const setShowStopButton = useSetRecoilState(store.showStopButtonByIndex(runIndex));
+
+  const appendStep = useRecoilCallback(
+    ({ set }) =>
+      (messageId: string, step: any) => {
+        set(store.stepsByMessageId(messageId), (prevSteps) => [...prevSteps, step]);
+      },
+    [],
+  );
 
   const sseRef = useRef<SSE | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -312,6 +320,12 @@ export default function useResumableSSE(
 
             setIsSubmitting(true);
             setShowStopButton(true);
+            return;
+          }
+
+          if (data.type === 'step') {
+            const { step, messageId } = data;
+            appendStep(messageId, step);
             return;
           }
 

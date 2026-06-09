@@ -429,7 +429,7 @@ describe('cooking routes', () => {
       .expect(200);
 
     expect(response.text).toContain('"text":"Use a wide "');
-    expect(response.text).toContain('"text":"pan."');
+    expect(response.text).toContain('"text":"Use a wide pan."');
     expect(response.text).not.toContain('"text":"Use a wide pan.","messageId":"message-2"');
   });
 

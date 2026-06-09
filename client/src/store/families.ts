@@ -464,7 +464,18 @@ const updateConversationSelector = selectorFamily({
     },
 });
 
+export type StepEvent = {
+  type: string;
+  payload: Record<string, any>;
+};
+
+const stepsByMessageId = atomFamily<StepEvent[], string>({
+  key: 'stepsByMessageId',
+  default: [],
+});
+
 export default {
+  stepsByMessageId,
   conversationKeysAtom,
   conversationByIndex,
   filesByIndex,

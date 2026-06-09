@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { v4 } from 'uuid';
 import { SSE } from 'sse.js';
-import { useSetRecoilState } from 'recoil';
+import { useSetRecoilState, useRecoilCallback } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
 import { request, createPayload, removeNullishValues } from 'librechat-data-provider';
 import { QueryKeys } from 'librechat-data-provider';
@@ -33,6 +33,14 @@ export default function useSSE(
 ) {
   const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
   const queryClient = useQueryClient();
+
+  const appendStep = useRecoilCallback(
+    ({ set }) =>
+      (messageId: string, step: any) => {
+        set(store.stepsByMessageId(messageId), (prevSteps) => [...prevSteps, step]);
+      },
+    [],
+  );
 
   const { token, isAuthenticated } = useAuthContext();
   const [completed, setCompleted] = useState(new Set());
@@ -108,6 +116,12 @@ export default function useSSE(
 
     sse.addEventListener('message', (e: MessageEvent) => {
       const data = JSON.parse(e.data);
+      if (data.type === 'step') {
+        const { step, messageId } = data;
+        appendStep(messageId, step);
+        return;
+      }
+
       if (data.preferencesUpdated) {
         queryClient.invalidateQueries([QueryKeys.preferences]);
       }

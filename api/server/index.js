@@ -260,6 +260,12 @@ const startServer = async () => {
       GenerationJobManager.configure(streamServices);
       GenerationJobManager.initialize();
 
+      // Initialize MCP servers
+      const { createMCPServersRegistry, createMCPManager } = require('~/config');
+      createMCPServersRegistry(mongoose);
+      await createMCPManager(appConfig.config?.mcpServers || {});
+
+
       const inspectFlags = process.execArgv.some((arg) => arg.startsWith('--inspect'));
       if (inspectFlags || isEnabled(process.env.MEM_DIAG)) {
         memoryDiagnostics.start();

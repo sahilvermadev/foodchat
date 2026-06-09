@@ -2390,6 +2390,13 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       'create_cooking_document',
       'read_cooking_document',
       'revise_cooking_document',
+      'find_pairings',
+      'neighbors',
+      'closest_mode',
+      'compare_on_axis',
+      'morph',
+      'pairing_score',
+      'cultural_profile',
     ]);
     expect(body.messages[0].content).toContain('Selected cooking document: yes');
     expect(body.messages[0].content).toContain('Selected document markdown:');
@@ -2440,7 +2447,16 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     const toolNames = body.tools.map((tool: { function: { name: string } }) => tool.function.name);
 
-    expect(toolNames).toEqual(['create_cooking_document']);
+    expect(toolNames).toEqual([
+      'create_cooking_document',
+      'find_pairings',
+      'neighbors',
+      'closest_mode',
+      'compare_on_axis',
+      'morph',
+      'pairing_score',
+      'cultural_profile',
+    ]);
     expect(toolNames).not.toContain('revise_cooking_document');
   });
 
@@ -2559,6 +2575,13 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       'create_cooking_document',
       'read_cooking_document',
       'revise_cooking_document',
+      'find_pairings',
+      'neighbors',
+      'closest_mode',
+      'compare_on_axis',
+      'morph',
+      'pairing_score',
+      'cultural_profile',
     ]);
     expect(result).toMatchObject({
       draftChanged: true,
@@ -4003,4 +4026,71 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(toolResult.error).toBe('private_url_blocked');
     expect(toolResult.message).toContain('I cannot access that website');
   });
+
+  test('gracefully handles Epicure tool execution failure and returns fallback instructions to the model', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'epicure-fail-1',
+                    type: 'function',
+                    function: {
+                      name: 'neighbors',
+                      arguments: JSON.stringify({ ingredient: 'guanciale', top_k: 5 }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'The database is offline, but pancetta is generally a great substitute for guanciale.',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(fetchMock);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'what is a good substitute for guanciale?',
+    });
+
+    expect(result.text).toContain('pancetta is generally a great substitute');
+
+    // Check that the tool execution call passed the fallback error message in the history
+    const globalFetch = global.fetch as jest.Mock;
+    const toolCallBody = globalFetch.mock.calls.find((call) => {
+      if (!call[1]?.body) return false;
+      const body = JSON.parse(call[1].body);
+      return body.messages?.some(
+        (m: { role: string; tool_call_id?: string }) =>
+          m.role === 'tool' && m.tool_call_id === 'epicure-fail-1',
+      );
+    });
+    expect(toolCallBody).toBeDefined();
+    const messages = JSON.parse(toolCallBody[1].body).messages;
+    const toolMsg = messages.find((m: { role: string }) => m.role === 'tool');
+    expect(toolMsg.content).toContain('The flavor database is temporarily unavailable');
+  });
 });
+

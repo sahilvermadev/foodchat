@@ -1,4 +1,7 @@
 import { logger } from '@librechat/data-schemas';
+import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
+
+import { MCPManager } from '~/mcp/MCPManager';
 
 import type {
   CookingDocumentType,
@@ -23,6 +26,7 @@ import type { CookingQualityFailureLabel } from './quality';
 import { routeCookingModels, routeCookingPlanner } from './routing';
 import type { CookingModelPurpose, CookingModelRoutingReason } from './routing';
 import { ensureInlineSourceCitations } from './citations';
+import type { AvailableCookingTool as CitationCookingTool } from './citations';
 import {
   defaultSuggestionsForIntent,
   extractTextPromptSuggestions,
@@ -46,7 +50,7 @@ type ToolCall = {
   id: string;
   type: 'function';
   function: {
-    name: CookingToolName;
+    name: string;
     arguments: string;
   };
 };
@@ -59,7 +63,23 @@ type CookingToolName =
   | 'request_external_research'
   | 'search_web'
   | 'read_web_page'
-  | 'read_recipe_source';
+  | 'read_recipe_source'
+  | 'find_pairings'
+  | 'neighbors'
+  | 'closest_mode'
+  | 'compare_on_axis'
+  | 'morph'
+  | 'pairing_score'
+  | 'cultural_profile';
+
+type CookingToolDefinition = {
+  type: 'function';
+  function: {
+    name: CookingToolName;
+    description: string;
+    parameters?: Record<string, unknown>;
+  };
+};
 
 type RevisionType =
   | 'structure'
@@ -86,7 +106,7 @@ type ToolChoice =
   | 'auto'
   | {
       type: 'function';
-      function: { name: 'set_prompt_suggestions' };
+      function: { name: string };
     };
 
 type StreamingCompletionChoice = {
@@ -132,7 +152,8 @@ type CookingChatInput = {
   locale?: string;
   timeZone?: string;
   onTiming?: (event: CookingChatTimingEvent) => void;
-  onTextDelta?: (delta: string) => void | Promise<void>;
+  onTextDelta?: (delta: string, isFinal?: boolean) => void | Promise<void>;
+  onStep?: (event: { type: string; payload: any }) => void | Promise<void>;
 };
 
 export type CookingChatResult = {
@@ -154,7 +175,7 @@ export type CookingChatTimingEvent = {
     | 'quality_validated';
   durationMs?: number;
   turn?: number;
-  toolName?: CookingToolName;
+  toolName?: string;
   model?: string;
   messageCount?: number;
   toolCount?: number;
@@ -230,7 +251,7 @@ function logCookingSource(event: string, payload: Record<string, unknown>): void
   logger.info(`[CookingSource] ${event}`, payload);
 }
 
-function logCookingAgent(event: string, payload: Record<string, unknown>): void {
+function globalLogCookingAgent(event: string, payload: Record<string, unknown>): void {
   if (process.env.NODE_ENV === 'test') {
     return;
   }
@@ -277,7 +298,8 @@ External recipe sources:
 Using user context:
 - Treat Safety, Diet, and Religious & Cultural Rules as hard constraints that silently filter suggestions.
 - Do not open with or volunteer phrases like "since we're avoiding..." or "skipping..." saved restrictions. Mention a restriction only when the user asks about it, when explaining why a requested food cannot be suggested, or when a substitution is directly necessary.
-- If the user asks for a dish, style, or recipe containing or resembling a restricted ingredient (e.g., a "beefy" dish when "beef-free" is a saved constraint), immediately resolve this conflict by substituting the restricted ingredient with a compliant alternative (e.g., mushrooms, soy sauce, or lentils to mimic "beefy" flavor). Clearly and briefly explain the substitution in your response (or in your canvas tool's user_message), confirming that you are keeping their meal compliant with their saved restrictions while still satisfying their flavor request.
+- If the user asks for a dish, style, or recipe containing or resembling a restricted ingredient (e.g., a "beefy" dish when "beef-free" is a saved constraint), immediately resolve this conflict by substituting the restricted ingredient with a compliant alternative. Proactively call the neighbors tool in the background to discover scientifically compatible, flavor-space substitutes before finalizing your recommendation. Clearly and briefly explain the substitution in your response (or in your canvas tool's user_message), confirming that you are keeping their meal compliant with their saved restrictions while still satisfying their flavor request.
+- When an ingredient in a recipe is likely hard to procure or rare in the user's country (determined via their locale context), proactively call the neighbors tool to find accessible substitutions. Do not mention tool names or technical details (like vector spaces or nearest neighbors) to the user; present the substitution choices as a natural, helpful part of your culinary advice.
 - Treat Kitchen, Household, Taste, Goals, Location, Cooking Level, and Personal Context as helpful context, not commands.
 - Do not force saved equipment, cuisines, or preferences into a reply just because they exist.
 - If the user states a clear lasting preference or personal detail relevant to future cooking, use it naturally; a backend batch curator may later fold durable facts into the saved profile.
@@ -330,6 +352,14 @@ Recipe canvas markdown requirements:
 - Variations should be constrained and meaningful. Provide a canonical path first, then only a few purposeful variations.
 - Keep tone warm, direct, and trustworthy. The cook should feel that someone competent is beside them.
 
+Epicure Flavor Science Tools:
+- Use find_pairings when designing a recipe or suggesting pairing profiles for ingredients. The model outputs clusters and "bridges" that represent interesting connectors. Compose the recipe using those surfaced ingredients.
+- Use neighbors to find substitutions (culinary and chemical) for a single ingredient, especially when an ingredient is restricted by user safety/diet constraints, or is likely hard to procure or scarce based on their locale.
+- Use closest_mode to describe the flavor profile or flavor family of an ingredient.
+- Use pairing_score to calculate compatibility between two ingredients.
+- Use compare_on_axis to compare two ingredients along a specific sensory axis (e.g. sweet, sour, spicy).
+- Use morph to discover fusion pairings by rotating an ingredient vector toward a cuisine direction (e.g. "cuisine:Italian") or another ingredient.
+
 Prompt suggestions inline format:
 - At the very end of your response, if the response is complete and offers meaningful next steps or asks the user to make a decision, append a single trailing line formatted exactly as: set_prompt_suggestions(suggestions=["concise suggestion 1", "concise suggestion 2", "concise suggestion 3"]);
 - Limit suggestions to a maximum of 3 highly contextual, concise follow-up prompts. If the reply is rhetorical or informational, do not append suggestions.`;
@@ -354,7 +384,7 @@ function cookingSystemInstructionsForProfile(profile: CookingPromptProfile): str
   return withoutSection(withoutCanvasRequirements, 'Cooking document contract');
 }
 
-const tools = [
+const tools: CookingToolDefinition[] = [
   {
     type: 'function',
     function: {
@@ -473,9 +503,129 @@ const tools = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'find_pairings',
+      description:
+        'Find pairings and flavor matches for one or more ingredients. Crucial for dish design, pairing exploration, and finding interesting cross-cluster connections.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ingredients: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of seed ingredients.',
+          },
+          is_vegan: { type: 'boolean', description: 'Filter out non-vegan pairings.' },
+          is_vegetarian: { type: 'boolean', description: 'Filter out non-vegetarian pairings.' },
+        },
+        required: ['ingredients'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'neighbors',
+      description:
+        'Find standard culinary and chemical substitutions (nearest neighbors) for a single ingredient in the flavor space.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ingredient: { type: 'string', description: 'The ingredient to substitute.' },
+          top_k: { type: 'integer', description: 'Number of substitutions to return. Default is 5.' },
+        },
+        required: ['ingredient'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'pairing_score',
+      description:
+        'Calculate the compatibility/similarity score between two ingredients.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ingredient_a: { type: 'string' },
+          ingredient_b: { type: 'string' },
+        },
+        required: ['ingredient_a', 'ingredient_b'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'closest_mode',
+      description: 'Get the flavor family cluster/mode that an ingredient belongs to.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ingredient: { type: 'string' },
+          property: { type: 'string', description: 'Optional property context.' },
+          top_k: { type: 'integer' },
+        },
+        required: ['ingredient'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'compare_on_axis',
+      description: 'Compare two ingredients along a specific sensory or culinary axis (e.g. sweet, spicy, sour).',
+      parameters: {
+        type: 'object',
+        properties: {
+          ingredient_a: { type: 'string' },
+          ingredient_b: { type: 'string' },
+          axis: { type: 'string' },
+        },
+        required: ['ingredient_a', 'ingredient_b', 'axis'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'morph',
+      description:
+        'Rotate/transform a flavor vector toward a specific target (cuisine region, sensory axis, or another ingredient) to create fusion combinations.',
+      parameters: {
+        type: 'object',
+        properties: {
+          seed: { type: 'string', description: 'The starting ingredient.' },
+          target: {
+            type: 'string',
+            description: 'The target flavor axis, cuisine (e.g. "cuisine:Italian"), or another ingredient.',
+          },
+          angle_deg: { type: 'number', description: 'Rotation angle in degrees. Default is 30.' },
+          top_k: { type: 'integer', description: 'Number of neighbors to return. Default is 5.' },
+        },
+        required: ['seed', 'target'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cultural_profile',
+      description: 'Analyze an ingredient against all cuisine regions to see its cultural alignment.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ingredient: { type: 'string' },
+        },
+        required: ['ingredient'],
+      },
+    },
+  },
 ];
 
-type CookingToolDefinition = (typeof tools)[number];
+// CookingToolDefinition is declared above
 type CookingWebToolDefinition = Awaited<
   ReturnType<typeof createCookingWebContext>
 >['tools'][number];
@@ -698,6 +848,15 @@ function selectCookingToolsForState(
       ? ['create_cooking_document', 'read_cooking_document', 'revise_cooking_document']
       : ['create_cooking_document'];
   }
+  localToolNames.push(
+    'find_pairings',
+    'neighbors',
+    'closest_mode',
+    'compare_on_axis',
+    'morph',
+    'pairing_score',
+    'cultural_profile'
+  );
   const selected = localToolNames
     .map(cookingTool)
     .filter((tool): tool is CookingToolDefinition => Boolean(tool));
@@ -722,8 +881,8 @@ function webToolsForProvider(
 
 type AvailableToolState = {
   availableTools: AvailableCookingTool[];
-  availableToolNames: CookingToolName[];
-  availableToolNameSet: Set<CookingToolName>;
+  availableToolNames: string[];
+  availableToolNameSet: Set<string>;
 };
 
 function buildAvailableToolState({
@@ -815,7 +974,14 @@ function normalizeToolName(name: string | undefined): CookingToolName | undefine
     name === 'request_external_research' ||
     name === 'search_web' ||
     name === 'read_web_page' ||
-    name === 'read_recipe_source'
+    name === 'read_recipe_source' ||
+    name === 'find_pairings' ||
+    name === 'neighbors' ||
+    name === 'closest_mode' ||
+    name === 'compare_on_axis' ||
+    name === 'morph' ||
+    name === 'pairing_score' ||
+    name === 'cultural_profile'
   ) {
     return name;
   }
@@ -1047,7 +1213,7 @@ function assertExternalResearchRequest(args: Record<string, unknown>): {
   return { reason, researchType };
 }
 
-function assertToolAllowedForState(input: CookingChatInput, toolName: CookingToolName): void {
+function assertToolAllowedForState(input: CookingChatInput, toolName: string): void {
   if (
     (toolName === 'read_cooking_document' || toolName === 'revise_cooking_document') &&
     !input.activeDraft
@@ -1074,6 +1240,61 @@ async function executeTool(
 }> {
   const args = parseArguments(toolCall.function.arguments);
   assertToolAllowedForState(input, toolCall.function.name);
+
+  if (
+    [
+      'find_pairings',
+      'neighbors',
+      'closest_mode',
+      'compare_on_axis',
+      'morph',
+      'pairing_score',
+      'cultural_profile',
+    ].includes(toolCall.function.name)
+  ) {
+    try {
+      const mcpManager = MCPManager.getInstance();
+      const connection = await mcpManager.getConnection({ serverName: 'epicure' });
+      if (!(await connection.isConnected())) {
+        throw new Error('Epicure MCP connection is not active.');
+      }
+      const result = await connection.client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: toolCall.function.name,
+            arguments: args,
+          },
+        },
+        CallToolResultSchema,
+        { timeout: 30000 },
+      );
+      const content = result.content
+        ?.map((c: any) => c.text)
+        .filter(Boolean)
+        .join('\n') || '';
+      logger.info(
+        `[CookingAgent] Called Epicure tool ${toolCall.function.name} with args: ${JSON.stringify(
+          args,
+        )} - result length: ${content.length} chars.`,
+      );
+      return {
+        content,
+        draftChanged: false,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[CookingAgent] Failed to call Epicure tool ${toolCall.function.name}: ${msg}`);
+      const fallbackPrompt = [
+        `Error: The flavor database is temporarily unavailable (reason: ${msg}).`,
+        'Please answer the user using your general culinary knowledge, or if needed, call request_external_research to search the web for reliable pairings or substitutions.'
+      ].join('\n');
+      return {
+        content: fallbackPrompt,
+        draftChanged: false,
+      };
+    }
+  }
 
   if (toolCall.function.name === 'request_external_research') {
     if (!webContext?.tools.length) {
@@ -1246,7 +1467,7 @@ async function executeTool(
 async function complete(
   messages: ChatMessage[],
   model: string,
-  availableTools: AvailableCookingTool[],
+  availableTools: CitationCookingTool[],
   onTextDelta?: (delta: string) => void | Promise<void>,
   toolChoice: ToolChoice = 'auto',
   temperature?: number,
@@ -1618,12 +1839,23 @@ function planNeedsBroaderSourceSet(turnPlan: CookingTurnPlan): boolean {
 }
 
 function isCanvasMutationTool(
-  toolName: CookingToolName,
+  toolName: string | undefined,
 ): toolName is 'create_cooking_document' | 'revise_cooking_document' {
   return toolName === 'create_cooking_document' || toolName === 'revise_cooking_document';
 }
 
 export async function runCookingChat(input: CookingChatInput): Promise<CookingChatResult> {
+  const logCookingAgent = (event: string, payload: Record<string, any>) => {
+    globalLogCookingAgent(event, payload);
+    if (input.onStep) {
+      try {
+        input.onStep({ type: event, payload });
+      } catch (err) {
+        logger.error(`[CookingAgent] Failed to invoke onStep callback: ${err}`);
+      }
+    }
+  };
+
   const turnStartedAt = Date.now();
   const sourceState = linkedSourceState(input.text);
   const requestedModel = selectedModel(input.model);
@@ -2339,7 +2571,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           ? 'I updated the cooking canvas.'
           : 'I could not generate a cooking response just now. Please try again.');
       if (!isLowRiskTurn) {
-        await input.onTextDelta?.(text);
+        await input.onTextDelta?.(text, true);
       }
       let responseSuggestions = extracted.promptSuggestions;
       if (responseSuggestions.length === 0) {
@@ -2354,7 +2586,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
               messages,
               validatedResponse.text,
               selectedAttemptModel,
-              cookingTool('set_prompt_suggestions'),
+              cookingTool('set_prompt_suggestions')!,
               complete,
             );
             if (generated && generated.length > 0) {
@@ -2443,6 +2675,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           unlockWebTools: Boolean(result.unlockWebTools),
           usedFastCanvasReturn: result.draftChanged && isCanvasMutationTool(toolCall.function.name),
           linkedSourceReadSucceeded: sourceState.readSucceeded,
+          args: parseArguments(toolCall.function.arguments),
+          result: result.content?.length > 2000 ? `${result.content.slice(0, 2000)}...` : result.content,
         });
         draft = result.draft ?? draft;
         draftChanged = draftChanged || result.draftChanged;
@@ -2493,6 +2727,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           ok: false,
           canvasMutationValidated: false,
           error: errorMessage,
+          args: parseArguments(toolCall.function.arguments),
         });
         messages.push({
           role: 'tool',
@@ -2548,7 +2783,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
       ? 'I updated the cooking canvas.'
       : 'I could not generate a cooking response just now. Please try again.');
   if (!isLowRiskTurn) {
-    await input.onTextDelta?.(text);
+    await input.onTextDelta?.(text, true);
   }
   const existingSuggestions = extracted.promptSuggestions;
   let promptSuggestions: string[] = [];
@@ -2566,7 +2801,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         messages,
         validatedResponse.text,
         resolvedModel,
-        cookingTool('set_prompt_suggestions'),
+        cookingTool('set_prompt_suggestions')!,
         complete,
       );
       if (generated && generated.length > 0) {

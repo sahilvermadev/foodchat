@@ -1805,6 +1805,7 @@
   "com_cooking_finish": "Finish",
   "com_cooking_finish_note": "Post-cook Review",
   "com_cooking_ingredients": "Ingredients",
+  "com_cooking_look_under_hood": "Look under the hood",
   "com_cooking_minutes_short": "{{0}}m",
   "com_cooking_preparing_recipe": "Preparing recipe",
   "com_cooking_copy_markdown": "Copy Markdown",

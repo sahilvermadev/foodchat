@@ -196,17 +196,20 @@ async function streamAssistantText(
   let firstChunkSent = false;
   while (cursor < chars.length) {
     const remaining = chars.length - cursor;
-    let chunkSize = 12;
-    if (remaining > 240) {
-      chunkSize = 32;
-    } else if (remaining > 80) {
-      chunkSize = 20;
+    let chunkSize = 6;
+    let delayMs = 25;
+    if (remaining > 600) {
+      chunkSize = 16;
+      delayMs = 20;
+    } else if (remaining > 200) {
+      chunkSize = 10;
+      delayMs = 25;
     }
+
     cursor += chunkSize;
     sendEvent(res, {
-      type: 'text',
+      message: true,
       text: chars.slice(0, cursor).join(''),
-      index: 0,
       messageId,
       parentMessageId,
       conversationId,
@@ -215,7 +218,7 @@ async function streamAssistantText(
       firstChunkSent = true;
       onFirstChunk?.();
     }
-    await delay(16);
+    await delay(delayMs);
   }
 }
 
@@ -305,6 +308,7 @@ router.post('/chat', async (req, res) => {
     const agentTiming = [];
     const agentStartedAt = Date.now();
     let assistantTextStreamed = false;
+    let cumulativeText = '';
     const result = await runCookingChat({
       user: userId(req),
       conversationId,
@@ -319,17 +323,37 @@ router.post('/chat', async (req, res) => {
       loadAuthValues,
       conversationCreatedAt: req.body?.createdAt || new Date(),
       onTiming: (event) => agentTiming.push(event),
-      onTextDelta: (delta) => {
-        if (!assistantTextStreamed) {
-          assistantTextStreamed = true;
-          perf.mark('assistant_first_text_event_sent');
-        }
+      onStep: (step) => {
         sendEvent(res, {
-          text: delta,
+          type: 'step',
+          step,
           messageId: responseMessageId,
           parentMessageId: userMessageId,
           conversationId,
         });
+      },
+      onTextDelta: async (delta, isFinal) => {
+        if (!assistantTextStreamed) {
+          assistantTextStreamed = true;
+          perf.mark('assistant_first_text_event_sent');
+        }
+        if (isFinal) {
+          await streamAssistantText(res, {
+            text: delta,
+            messageId: responseMessageId,
+            parentMessageId: userMessageId,
+            conversationId,
+          });
+        } else {
+          cumulativeText += delta;
+          sendEvent(res, {
+            message: true,
+            text: cumulativeText,
+            messageId: responseMessageId,
+            parentMessageId: userMessageId,
+            conversationId,
+          });
+        }
       },
     });
     perf.mark('cooking_agent_completed', {

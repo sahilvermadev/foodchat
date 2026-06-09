@@ -32,3 +32,12 @@ webSearch:
   tavilyScraperOptions:
     extractDepth: advanced
     format: markdown
+
+mcpServers:
+  epicure:
+    type: stdio
+    command: ${EPICURE_PYTHON_PATH}
+    args:
+      - ${EPICURE_SERVER_PATH}
+    timeout: 60000
+
