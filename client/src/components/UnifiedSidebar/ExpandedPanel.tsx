@@ -122,6 +122,8 @@ const NavIconButton = memo(function NavIconButton({
       side="right"
       render={
         <Button
+          id={`side-nav-${link.id}`}
+          data-testid={`side-nav-${link.id}`}
           size="icon"
           variant="ghost"
           aria-label={localize(link.title)}

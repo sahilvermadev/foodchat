@@ -108,7 +108,7 @@ afterEach(async () => {
   }
 });
 
-const { deleteUserController } = require('./UserController');
+const { deleteUserController, dismissTourController } = require('./UserController');
 const { Group } = require('~/db/models');
 const { deleteConvos } = require('~/models');
 
@@ -222,5 +222,57 @@ describe('deleteUserController', () => {
     const group = await Group.findOne({ name: 'StringCheck' }).lean();
     expect(group.memberIds).toEqual([otherUser]);
     expect(group.memberIds).not.toContain(userIdStr);
+  });
+});
+
+describe('dismissTourController', () => {
+  const mockRes = {
+    status: jest.fn().mockReturnThis(),
+    send: jest.fn().mockReturnThis(),
+    json: jest.fn().mockReturnThis(),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should update user showTour to false and return 200', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const req = { user: { id: userId } };
+    const { updateUser } = require('~/models');
+    updateUser.mockResolvedValue({ id: userId, showTour: false });
+
+    await dismissTourController(req, mockRes);
+
+    expect(updateUser).toHaveBeenCalledWith(userId, { showTour: false });
+    expect(mockRes.status).toHaveBeenCalledWith(200);
+    expect(mockRes.json).toHaveBeenCalledWith({
+      message: 'Tour dismissed successfully',
+      showTour: false,
+    });
+  });
+
+  it('should return 404 if user not found', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const req = { user: { id: userId } };
+    const { updateUser } = require('~/models');
+    updateUser.mockResolvedValue(null);
+
+    await dismissTourController(req, mockRes);
+
+    expect(mockRes.status).toHaveBeenCalledWith(404);
+    expect(mockRes.json).toHaveBeenCalledWith({ message: 'User not found' });
+  });
+
+  it('should return 500 on database error', async () => {
+    const userId = new mongoose.Types.ObjectId().toString();
+    const req = { user: { id: userId } };
+    const { updateUser } = require('~/models');
+    updateUser.mockRejectedValue(new Error('db error'));
+
+    await dismissTourController(req, mockRes);
+
+    expect(mockRes.status).toHaveBeenCalledWith(500);
+    expect(mockRes.json).toHaveBeenCalledWith({ message: 'Error dismissing tour' });
   });
 });

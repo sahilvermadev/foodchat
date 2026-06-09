@@ -219,6 +219,7 @@ export type TUser = {
   personalization?: {
     memories?: boolean;
   };
+  showTour?: boolean;
   createdAt: string;
   updatedAt: string;
 };

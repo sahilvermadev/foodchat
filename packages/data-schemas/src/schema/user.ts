@@ -127,6 +127,10 @@ const userSchema = new Schema<IUser>(
       type: Boolean,
       default: false,
     },
+    showTour: {
+      type: Boolean,
+      default: true,
+    },
     personalization: {
       type: {
         memories: {

@@ -229,6 +229,19 @@ const resendVerificationController = async (req, res) => {
   }
 };
 
+const dismissTourController = async (req, res) => {
+  try {
+    const user = await db.updateUser(req.user.id, { showTour: false });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.status(200).json({ message: 'Tour dismissed successfully', showTour: false });
+  } catch (error) {
+    logger.error('Error dismissing tour:', error);
+    res.status(500).json({ message: 'Error dismissing tour' });
+  }
+};
+
 module.exports = {
   getUserController,
   getTermsStatusController,
@@ -237,4 +250,5 @@ module.exports = {
   verifyEmailController,
   updateUserPluginsController,
   resendVerificationController,
+  dismissTourController,
 };
