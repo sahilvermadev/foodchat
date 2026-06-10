@@ -253,7 +253,7 @@ export default function Tour() {
 
       <div
         style={tooltipStyle}
-        className="animate-slide-down pointer-events-auto rounded-2xl border border-white/10 bg-white/85 p-6 shadow-2xl backdrop-blur-xl transition-all dark:border-white/5 dark:bg-zinc-900/85"
+        className="rekky-ui animate-slide-down pointer-events-auto rounded-2xl border border-white/10 bg-white/85 p-6 shadow-2xl backdrop-blur-xl transition-all dark:border-white/5 dark:bg-zinc-900/85"
       >
         {renderArrow()}
         <div className="mb-3 flex items-center justify-between">
@@ -282,7 +282,7 @@ export default function Tour() {
           <button
             disabled={currentStepIdx === 0}
             onClick={handleBack}
-            className="border-border-medium/30 rounded-lg border px-3.5 py-1.5 text-xs font-medium transition-all hover:bg-surface-secondary disabled:opacity-40 disabled:hover:bg-transparent"
+            className="border-border-medium/30 rounded-lg border px-3.5 py-1.5 text-xs font-medium text-text-primary transition-all hover:bg-surface-secondary disabled:opacity-40 disabled:hover:bg-transparent"
           >
             {localize('com_ui_back')}
           </button>
