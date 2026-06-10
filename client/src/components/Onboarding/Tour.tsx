@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRecoilState } from 'recoil';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
+
+const TOOLTIP_WIDTH = 400;
 
 interface TourStep {
   target: string;
@@ -54,6 +56,8 @@ export default function Tour() {
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
   const [visible, setVisible] = useState(false);
 
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+
   const step = TOUR_STEPS[currentStepIdx];
 
   useEffect(() => {
@@ -90,6 +94,8 @@ export default function Tour() {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
+          width: TOOLTIP_WIDTH,
+          maxWidth: 'calc(100vw - 32px)',
           zIndex: 100,
         });
         return;
@@ -116,9 +122,9 @@ export default function Tour() {
           });
 
           const gap = 14;
-          const tooltipWidth = 320;
-          // Approximate height of the card to do bound positioning
-          const tooltipHeight = 180;
+          const tooltipWidth = TOOLTIP_WIDTH;
+          // Dynamically measure actual tooltip height if rendered, fallback to 220
+          const tooltipHeight = tooltipRef.current ? tooltipRef.current.offsetHeight : 220;
 
           let top = 0;
           let left = 0;
@@ -155,6 +161,7 @@ export default function Tour() {
             top,
             left,
             width: tooltipWidth,
+            maxWidth: 'calc(100vw - 32px)',
             zIndex: 100,
             transition: 'all 0.2s ease-out',
           });
@@ -170,6 +177,8 @@ export default function Tour() {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
+          width: TOOLTIP_WIDTH,
+          maxWidth: 'calc(100vw - 32px)',
           zIndex: 100,
         });
       }
@@ -252,6 +261,7 @@ export default function Tour() {
       )}
 
       <div
+        ref={tooltipRef}
         style={tooltipStyle}
         className="rekky-ui animate-slide-down pointer-events-auto rounded-2xl border border-white/10 bg-white/85 p-6 shadow-2xl backdrop-blur-xl transition-all dark:border-white/5 dark:bg-zinc-900/85"
       >
