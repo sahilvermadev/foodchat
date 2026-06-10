@@ -25,7 +25,6 @@ import Footer from './Footer';
 import { cn } from '~/utils';
 import { useCookingChat } from '~/components/Cooking/CookingChatContext';
 import store from '~/store';
-import Tour from '~/components/Onboarding/Tour';
 
 function LoadingMessagesSkeleton() {
   return (
@@ -195,7 +194,6 @@ function ChatView({
               </>
             </div>
           </Presentation>
-          <Tour />
         </AddedChatContext.Provider>
       </ChatContext.Provider>
     </ChatFormProvider>

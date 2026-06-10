@@ -2553,7 +2553,10 @@ export default function PreferencesWorkspace() {
           >
             <header>
               <div className="flex flex-col gap-4 pt-1 lg:flex-row lg:items-start lg:justify-between lg:pt-0">
-                <h1 className="max-w-[18rem] text-[2.55rem] font-medium leading-[0.92] tracking-[-0.035em] text-text-primary sm:max-w-4xl sm:text-6xl sm:tracking-[-0.01em]">
+                <h1
+                  id="preferences-title"
+                  className="max-w-[18rem] text-[2.55rem] font-medium leading-[0.92] tracking-[-0.035em] text-text-primary sm:max-w-4xl sm:text-6xl sm:tracking-[-0.01em]"
+                >
                   {localize('com_preferences_dashboard_title')}
                 </h1>
                 <div className="flex flex-wrap gap-2 md:justify-end">

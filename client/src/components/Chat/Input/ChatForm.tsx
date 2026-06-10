@@ -263,6 +263,7 @@ const ChatForm = memo(function ChatForm({
             agentId={conversation?.agent_id}
           />
           <div
+            id="chat-input-container"
             onClick={handleContainerClick}
             className={cn(
               'relative flex w-full flex-grow flex-col overflow-hidden border text-text-primary transition-all duration-200',

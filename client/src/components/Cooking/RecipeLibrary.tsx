@@ -319,7 +319,10 @@ export default function RecipeLibrary() {
         <header className="pt-1 sm:pt-4">
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-[2.45rem] font-medium leading-[0.95] tracking-[-0.04em] text-text-primary sm:text-[clamp(2.75rem,5vw,3.45rem)] sm:tracking-[-0.03em]">
+              <h1
+                id="recipe-library-title"
+                className="text-[2.45rem] font-medium leading-[0.95] tracking-[-0.04em] text-text-primary sm:text-[clamp(2.75rem,5vw,3.45rem)] sm:tracking-[-0.03em]"
+              >
                 {localize('com_recipes_library')}
               </h1>
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-text-secondary sm:mt-4">

@@ -12,6 +12,7 @@ import { TermsAndConditionsModal } from '~/components/ui';
 import { useHealthCheck } from '~/data-provider';
 import { Banner } from '~/components/Banners';
 import LocationWeather from '~/components/System/LocationWeather';
+import Tour from '~/components/Onboarding/Tour';
 
 export default function Root() {
   const localize = useLocalize();
@@ -99,6 +100,7 @@ export default function Root() {
             modalContent={config.interface.termsOfService.modalContent}
           />
         )}
+        <Tour />
       </FileMapContext.Provider>
     </SetConvoProvider>
   );
