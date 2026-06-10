@@ -1,12 +1,14 @@
 import { useState, memo, useRef } from 'react';
 import * as Menu from '@ariakit/react/menu';
-import { FileText, LogOut, ScrollText, SlidersHorizontal } from 'lucide-react';
+import { Compass, FileText, LogOut, ScrollText, SlidersHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useSetRecoilState } from 'recoil';
 import { LinkIcon, GearIcon, DropdownMenuSeparator, Avatar } from '@librechat/client';
 import { MyFilesModal } from '~/components/Chat/Input/Files/MyFilesModal';
 import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useLocalize } from '~/hooks';
+import store from '~/store';
 import Settings from './Settings';
 
 function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
@@ -17,9 +19,17 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
   const balanceQuery = useGetUserBalance({
     enabled: !!isAuthenticated && startupConfig?.balance?.enabled,
   });
+  const setUser = useSetRecoilState(store.user);
   const [showSettings, setShowSettings] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
   const accountSettingsButtonRef = useRef<HTMLButtonElement>(null);
+
+  const handleStartTour = () => {
+    if (window.location.pathname !== '/cook') {
+      navigate('/cook');
+    }
+    setUser((prevUser) => (prevUser ? { ...prevUser, showTour: true } : prevUser));
+  };
 
   return (
     <Menu.MenuProvider>
@@ -81,6 +91,10 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
         <Menu.MenuItem onClick={() => navigate('/skills')} className="select-item text-sm">
           <ScrollText className="icon-md" aria-hidden="true" />
           {localize('com_ui_skills')}
+        </Menu.MenuItem>
+        <Menu.MenuItem onClick={handleStartTour} className="select-item text-sm">
+          <Compass className="icon-md" aria-hidden="true" />
+          {localize('com_nav_guided_tour')}
         </Menu.MenuItem>
         {startupConfig?.helpAndFaqURL !== '/' && (
           <Menu.MenuItem

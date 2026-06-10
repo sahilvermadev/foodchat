@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useAuthContext, useLocalize } from '~/hooks';
+import { useRecoilState } from 'recoil';
+import { useLocalize } from '~/hooks';
+import store from '~/store';
 
 interface TourStep {
   target: string;
@@ -36,7 +38,7 @@ const TOUR_STEPS: TourStep[] = [
 ];
 
 export default function Tour() {
-  const { user } = useAuthContext();
+  const [user, setUser] = useRecoilState(store.user);
   const localize = useLocalize();
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [highlightStyle, setHighlightStyle] = useState<React.CSSProperties>({});
@@ -46,8 +48,11 @@ export default function Tour() {
 
   useEffect(() => {
     if (user && user.showTour) {
+      setCurrentStepIdx(0);
       const timer = setTimeout(() => setVisible(true), 1500);
       return () => clearTimeout(timer);
+    } else {
+      setVisible(false);
     }
   }, [user]);
 
@@ -98,6 +103,9 @@ export default function Tour() {
 
   const handleComplete = async () => {
     setVisible(false);
+    if (user) {
+      setUser({ ...user, showTour: false });
+    }
     try {
       await fetch('/api/user/tour-complete', {
         method: 'POST',
