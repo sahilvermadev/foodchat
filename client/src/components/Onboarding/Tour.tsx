@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useRecoilState } from 'recoil';
+import { useRecoilState, useSetRecoilState } from 'recoil';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
@@ -47,6 +47,7 @@ const TOUR_STEPS: TourStep[] = [
 
 export default function Tour() {
   const [user, setUser] = useRecoilState(store.user);
+  const setSidebarExpanded = useSetRecoilState(store.sidebarExpanded);
   const localize = useLocalize();
   const navigate = useNavigate();
   const location = useLocation();
@@ -55,6 +56,9 @@ export default function Tour() {
   const [highlightStyle, setHighlightStyle] = useState<React.CSSProperties>({});
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
   const [visible, setVisible] = useState(false);
+  const [activePosition, setActivePosition] = useState<
+    'top' | 'bottom' | 'left' | 'right' | 'center'
+  >('center');
 
   const tooltipRef = useRef<HTMLDivElement | null>(null);
 
@@ -63,12 +67,23 @@ export default function Tour() {
   useEffect(() => {
     if (user && user.showTour) {
       setCurrentStepIdx(0);
+      setSidebarExpanded(false); // Close sidebar initially when starting tour
       const timer = setTimeout(() => setVisible(true), 1500);
       return () => clearTimeout(timer);
     } else {
       setVisible(false);
     }
-  }, [user]);
+  }, [user, setSidebarExpanded]);
+
+  // Manage sidebar open/closed states dynamically for different steps
+  useEffect(() => {
+    if (!visible) return;
+    if (currentStepIdx === 2 || currentStepIdx === 3) {
+      setSidebarExpanded(true);
+    } else {
+      setSidebarExpanded(false);
+    }
+  }, [currentStepIdx, visible, setSidebarExpanded]);
 
   useEffect(() => {
     if (!visible || !step) return;
@@ -88,6 +103,7 @@ export default function Tour() {
       const element = document.querySelector(step.target);
 
       if (step.position === 'center' || step.target === 'body') {
+        setActivePosition('center');
         setHighlightStyle({ display: 'none' });
         setTooltipStyle({
           position: 'fixed',
@@ -104,7 +120,7 @@ export default function Tour() {
       if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-        setTimeout(() => {
+        const updatePosition = () => {
           if (!active) return;
           const rect = element.getBoundingClientRect();
 
@@ -122,39 +138,47 @@ export default function Tour() {
           });
 
           const gap = 14;
-          const tooltipWidth = TOOLTIP_WIDTH;
-          // Dynamically measure actual tooltip height if rendered, fallback to 220
+          const tooltipWidth = tooltipRef.current ? tooltipRef.current.offsetWidth : TOOLTIP_WIDTH;
           const tooltipHeight = tooltipRef.current ? tooltipRef.current.offsetHeight : 220;
+
+          let position = step.position;
+          // In mobile viewport, override side positions to bottom to fit layout & avoid overlap
+          if (window.innerWidth < 768) {
+            if (position === 'right' || position === 'left') {
+              position = 'bottom';
+            }
+          }
+          setActivePosition(position);
 
           let top = 0;
           let left = 0;
 
-          if (step.position === 'right') {
+          if (position === 'right') {
             top = rect.top + rect.height / 2 - tooltipHeight / 2;
             left = rect.right + gap;
-          } else if (step.position === 'left') {
+          } else if (position === 'left') {
             top = rect.top + rect.height / 2 - tooltipHeight / 2;
             left = rect.left - tooltipWidth - gap;
-          } else if (step.position === 'top') {
+          } else if (position === 'top') {
             top = rect.top - tooltipHeight - gap;
             left = rect.left + rect.width / 2 - tooltipWidth / 2;
-          } else if (step.position === 'bottom') {
+          } else if (position === 'bottom') {
             top = rect.bottom + gap;
             left = rect.left + rect.width / 2 - tooltipWidth / 2;
           }
 
-          // Bound checking inside viewport
           const viewportWidth = window.innerWidth;
           const viewportHeight = window.innerHeight;
 
-          if (left < 16) left = 16;
           if (left + tooltipWidth > viewportWidth - 16) {
             left = viewportWidth - tooltipWidth - 16;
           }
-          if (top < 16) top = 16;
+          if (left < 16) left = 16;
+
           if (top + tooltipHeight > viewportHeight - 16) {
             top = Math.max(16, viewportHeight - tooltipHeight - 16);
           }
+          if (top < 16) top = 16;
 
           setTooltipStyle({
             position: 'fixed',
@@ -165,12 +189,17 @@ export default function Tour() {
             zIndex: 100,
             transition: 'all 0.2s ease-out',
           });
-        }, 150);
+        };
+
+        // Trigger two passes to handle positions settling during active transition (like sidebar sliding open/close)
+        setTimeout(updatePosition, 150);
+        setTimeout(updatePosition, 400);
       } else if (retries < maxRetries) {
         retries++;
         setTimeout(findAndPosition, 100);
       } else {
         // Fallback to center
+        setActivePosition('center');
         setHighlightStyle({ display: 'none' });
         setTooltipStyle({
           position: 'fixed',
@@ -210,6 +239,7 @@ export default function Tour() {
 
   const handleComplete = async () => {
     setVisible(false);
+    setSidebarExpanded(false); // Collapse sidebar on skip/complete
     if (user) {
       setUser({ ...user, showTour: false });
     }
@@ -226,7 +256,7 @@ export default function Tour() {
   };
 
   const renderArrow = () => {
-    if (step.position === 'center' || step.target === 'body') {
+    if (activePosition === 'center' || step.target === 'body') {
       return null;
     }
 
@@ -240,7 +270,7 @@ export default function Tour() {
     return (
       <div
         className={`absolute h-3 w-3 border-white/10 bg-white/85 backdrop-blur-xl dark:border-white/5 dark:bg-zinc-900/85 ${
-          arrowClasses[step.position]
+          arrowClasses[activePosition]
         }`}
       />
     );
