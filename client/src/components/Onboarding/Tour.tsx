@@ -28,18 +28,18 @@ const TOUR_STEPS: TourStep[] = [
     route: '/cook',
   },
   {
-    target: '#recipe-library-title',
+    target: '#side-nav-recipes',
     titleKey: 'com_tour_library_title',
     descKey: 'com_tour_library_desc',
-    position: 'bottom',
-    route: '/recipes',
+    position: 'right',
+    route: '/cook',
   },
   {
-    target: '#preferences-title',
+    target: '#side-nav-preferences',
     titleKey: 'com_tour_preferences_title',
     descKey: 'com_tour_preferences_desc',
-    position: 'bottom',
-    route: '/preferences',
+    position: 'right',
+    route: '/cook',
   },
 ];
 
