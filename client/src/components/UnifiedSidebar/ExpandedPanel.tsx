@@ -201,7 +201,7 @@ function ExpandedPanel({
               link={link}
               isActive={
                 link.Component
-                  ? link.id === renderedPanel
+                  ? expanded && link.id === renderedPanel
                   : Boolean(link.isActive?.(location.pathname))
               }
               expanded={expanded ?? true}

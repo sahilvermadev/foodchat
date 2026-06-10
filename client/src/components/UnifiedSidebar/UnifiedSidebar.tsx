@@ -161,6 +161,7 @@ function UnifiedSidebar() {
             <ActivePanelProvider>
               <ExpandedPanel
                 links={links}
+                expanded={expanded}
                 transparent={isCookingLandingRoute}
                 collapseOnNavigate
                 onCollapse={handleCollapse}
