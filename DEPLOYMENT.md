@@ -7,7 +7,7 @@ This document serves as the permanent technical record and operational runbook f
 ## 🚀 Live Environment Links
 
 * **Production Frontend**: [https://rekky.ai](https://rekky.ai)
-* **Production API Gateway**: [https://rekky-backend-production.up.railway.app](https://rekky-backend-production.up.railway.app)
+* **Production API Gateway**: [https://foodchat-backend-production.up.railway.app](https://foodchat-backend-production.up.railway.app)
 * **Unified Health Gateway**: [https://rekky.ai/health](https://rekky.ai/health) (Proxies seamlessly to Railway; returns `OK`)
 
 ---
@@ -21,7 +21,7 @@ graph TD
     User([User Browser]) -->|Unified Domain: rekky.ai| Vercel[Vercel Global CDN Edge]
     Vercel -->|Serves Static Files| User
     Vercel -->|Proxies /api/*, /oauth/*, /health| Railway[Railway Production Runner]
-    Railway -->|Express API Port 3080| Backend[rekky-backend]
+    Railway -->|Express API Port 3080| Backend[foodchat-backend]
     Backend -->|Internal Read/Write| Mongo[(MongoDB Instance)]
 ```
 
@@ -48,19 +48,19 @@ Located at the root of the repository, [vercel.json](file:///home/sahil/projects
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://rekky-backend-production.up.railway.app/api/:path*"
+      "destination": "https://foodchat-backend-production.up.railway.app/api/:path*"
     },
     {
       "source": "/oauth/:path*",
-      "destination": "https://rekky-backend-production.up.railway.app/oauth/:path*"
+      "destination": "https://foodchat-backend-production.up.railway.app/oauth/:path*"
     },
     {
       "source": "/images/:path*",
-      "destination": "https://rekky-backend-production.up.railway.app/images/:path*"
+      "destination": "https://foodchat-backend-production.up.railway.app/images/:path*"
     },
     {
       "source": "/health",
-      "destination": "https://rekky-backend-production.up.railway.app/health"
+      "destination": "https://foodchat-backend-production.up.railway.app/health"
     },
     {
       "source": "/((?!api|oauth|images|health).*)",
@@ -84,10 +84,10 @@ The stateful Express API and MongoDB instance are hosted on **Railway** under th
 
 ### 1. Railway Project Details
 * **Project ID**: `e8dec199-60ee-407a-8413-082030c41037`
-* **Linked Git Repository**: `sahilvermadev/rekky`
-* **Linked Service**: `rekky-backend`
+* **Linked Git Repository**: `sahilvermadev/foodchat`
+* **Linked Service**: `foodchat-backend`
 
-### 2. Environment Variables Configured on `rekky-backend`
+### 2. Environment Variables Configured on `foodchat-backend`
 | Variable | Value / Binding | Description |
 | :--- | :--- | :--- |
 | `MONGO_URI` | `${{MongoDB.MONGO_URL}}` | Dynamic reference to the linked MongoDB service instance connection string |
