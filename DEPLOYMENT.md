@@ -22,12 +22,15 @@ graph TD
     Vercel -->|Serves Static Files| User
     Vercel -->|Proxies /api/*, /oauth/*, /health| Railway[Railway Production Runner]
     Railway -->|Express API Port 3080| Backend[foodchat-backend]
+    Backend -->|stdio MCP subprocess| Epicure[Epicure Core MCP Server]
+    Epicure -->|Loads checked-in model files| EpicureData[(data/epicure-core)]
     Backend -->|Internal Read/Write| Mongo[(MongoDB Instance)]
 ```
 
 * **Unified Domain Resolution**: All client-side network calls are routed directly to the same host (`https://rekky.ai`).
 * **CDN Reverse Proxying**: Vercel acts as a reverse proxy at the edge. Requests to `/api/*`, `/oauth/*`, `/images/*`, and `/health` are transparently rewritten and forwarded over HTTP/2 to the live Railway container.
 * **Cookie Transmission**: Because requests appear same-origin to the browser, secure HTTP-only cookies are passed seamlessly without cross-site blocking.
+* **Epicure Tool Runtime**: The backend starts a local stdio MCP subprocess for Epicure. LibreChat registers those tools from the backend container; the browser never talks directly to the Epicure process.
 
 ---
 
@@ -104,6 +107,34 @@ The stateful Express API and MongoDB instance are hosted on **Railway** under th
 | `OPENROUTER_KEY` | `sk-or-...` | API Key for custom OpenRouter endpoints (Gemini, Llama, Claude, GPT) |
 | `TAVILY_API_KEY` | `tvly-...` | API Key for Tavily advanced web search and markdown scraping integration |
 
+### 3. Epicure Core MCP Runtime
+The production backend includes a local MCP server for culinary embedding tools. It is configured in [librechat.yaml](file:///home/sahil/projects/foodchat/librechat.yaml):
+
+```yaml
+mcpServers:
+  epicure:
+    type: stdio
+    command: /usr/bin/python3
+    args:
+      - /app/scripts/epicure_core_mcp_server.py
+    timeout: 60000
+```
+
+Runtime details:
+
+* The server script is [scripts/epicure_core_mcp_server.py](file:///home/sahil/projects/foodchat/scripts/epicure_core_mcp_server.py).
+* The checked-in model artifact is `data/epicure-core`, sourced from Hugging Face `Kaikaku/epicure-core`.
+* Docker installs `python3` and Alpine `py3-numpy`; the Epicure runtime must not depend on a PyPI install during Railway builds.
+* The server implements the stdio MCP JSON-RPC surface directly and exposes the compatibility tools Samwise expects: `neighbors`, `pairing_score`, `find_pairings`, `closest_mode`, `compare_on_axis`, `morph`, and `cultural_profile`.
+* The Core artifact does not include diet tags. Dietary constraints are still enforced by Samwise during recipe composition rather than inside the embedding lookup layer.
+
+Production startup logs should include:
+
+```text
+Epicure Core loaded from /app/data/epicure-core (schema=core, vocab=1790, modes=193, supervised_poles=113)
+[MCP][epicure] Tools: neighbors, pairing_score, find_pairings, closest_mode, compare_on_axis, morph, cultural_profile
+```
+
 ---
 
 ## 🧠 Key Technical Resolutions
@@ -139,6 +170,10 @@ During the deployment lifecycle, the following critical challenges were resolved
 * **Problem**: Local databases, git history, and build caches bloated the deployment directory. When running `npx @railway/cli up`, the entire directory was uploaded, triggering GraphQL timeouts on Railway due to payload size (hundreds of megabytes).
 * **Solution**: Created a highly targeted `.railwayignore` file at the root, explicitly excluding large directories like `.git/`, `.github/`, `.vercel/`, `.turbo/`, `node_modules/`, `client/dist/`, `data/`, `data-node/`, and log files. This reduced the upload payload to a few kilobytes, accelerating deployments and eliminating timeouts.
 
+### 7. Epicure Core Production Parity
+* **Problem**: The old Epicure integration depended on a Python package install during Docker build and used a legacy data bundle. A deploy attempt timed out while fetching Python dependencies from PyPI, and the production runtime could drift from the checked-in model files.
+* **Solution**: Replaced the legacy bundle with the checked-in `Kaikaku/epicure-core` artifact under `data/epicure-core`, added a repository-local stdio MCP server, and changed Docker to install only Alpine `python3` and `py3-numpy`. Local and production now load the same model files and expose the same seven Samwise-facing MCP tool names.
+
 ---
 
 ## 📖 Maintenance & Operational Runbook
@@ -159,13 +194,22 @@ If you make changes to the client React code, style system, or assets:
 
 ### 2. Deploying Backend Updates (Railway)
 If you make changes to the Express server, shared packages, or configurations:
-1. Simply trigger a fresh Nixpacks build and deploy via the Railway CLI:
+1. For changes touching Epicure MCP, run the local parity smoke test first:
+   ```bash
+   python3 scripts/smoke_epicure_core_mcp.py
+   ```
+   This verifies the Core artifact counts, all seven tool functions, and the stdio MCP handshake.
+2. Trigger a fresh Docker build and deploy via the Railway CLI:
    ```bash
    npx @railway/cli up
    ```
-2. Check deployment status:
+3. Check deployment status:
    ```bash
    npx @railway/cli status
+   ```
+4. Verify the production MCP startup lines:
+   ```bash
+   npx @railway/cli logs --latest --deployment --lines 300
    ```
 
 ### 3. Monitoring Operational Logs
