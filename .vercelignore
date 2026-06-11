@@ -12,6 +12,7 @@ e2e/
 .vscode/
 .husky/
 data/
+!client/src/components/Nav/SettingsTabs/Data/**
 data-node/
 node_modules/
 client/node_modules/
