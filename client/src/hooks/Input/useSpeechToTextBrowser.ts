@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useMemo } from 'react';
 import { useRecoilState } from 'recoil';
 import { useToastContext } from '@librechat/client';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
@@ -23,7 +23,6 @@ const useSpeechToTextBrowser = (
   const timeoutRef = useRef<NodeJS.Timeout | null>();
   const [autoSendText] = useRecoilState(store.autoSendText);
   const [languageSTT] = useRecoilState<string>(store.languageSTT);
-  const [autoTranscribeAudio] = useRecoilState<boolean>(store.autoTranscribeAudio);
 
   const {
     listening,
@@ -73,7 +72,7 @@ const useSpeechToTextBrowser = (
     };
   }, [setText, onTranscriptionComplete, resetTranscript, finalTranscript, autoSendText]);
 
-  const toggleListening = () => {
+  const toggleListening = useCallback(() => {
     if (!browserSupportsSpeechRecognition) {
       showToast({
         message: sttExternal
@@ -97,21 +96,29 @@ const useSpeechToTextBrowser = (
     } else {
       SpeechRecognition.startListening({
         language: languageSTT,
-        continuous: autoTranscribeAudio,
+        continuous: true,
       });
     }
-  };
+  }, [
+    browserSupportsSpeechRecognition,
+    isMicrophoneAvailable,
+    isListening,
+    languageSTT,
+    localize,
+    showToast,
+    sttExternal,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey && e.altKey && e.code === 'KeyL' && !isBrowserSTTEnabled) {
+      if (e.shiftKey && e.altKey && e.code === 'KeyL' && isBrowserSTTEnabled) {
         toggleListening();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isBrowserSTTEnabled, toggleListening]);
 
   return {
     isListening,

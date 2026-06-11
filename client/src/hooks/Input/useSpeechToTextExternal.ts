@@ -5,6 +5,8 @@ import { useSpeechToTextMutation } from '~/data-provider';
 import useGetAudioSettings from './useGetAudioSettings';
 import store from '~/store';
 
+const SILENCE_TIMEOUT_MS = 8000;
+
 const useSpeechToTextExternal = (
   setText: (text: string) => void,
   onTranscriptionComplete: (text: string) => void,
@@ -149,7 +151,7 @@ const useSpeechToTextExternal = (
       }
 
       const timeSinceLastSound = Date.now() - lastSoundTime;
-      const isOverSilenceThreshold = timeSinceLastSound > 3000;
+      const isOverSilenceThreshold = timeSinceLastSound > SILENCE_TIMEOUT_MS;
 
       if (isOverSilenceThreshold) {
         stopRecording();
