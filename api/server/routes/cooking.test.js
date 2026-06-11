@@ -8,6 +8,15 @@ const mockWebSearchConfig = {
   tavilyApiKey: '${TAVILY_API_KEY}',
 };
 
+jest.mock('@librechat/data-schemas', () => ({
+  logger: {
+    debug: jest.fn(),
+    error: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+  },
+}));
+
 jest.mock('~/server/middleware', () => ({
   requireJwtAuth: (req, res, next) => {
     if (!mockCurrentUser) {
@@ -28,6 +37,10 @@ jest.mock('~/server/middleware', () => ({
 jest.mock('~/models', () => ({
   saveMessage: jest.fn().mockResolvedValue({}),
   saveConvo: jest.fn().mockResolvedValue({}),
+}));
+
+jest.mock('~/server/services/Files/images/encode', () => ({
+  encodeAndFormat: jest.fn(),
 }));
 
 jest.mock('@librechat/api', () => {
@@ -69,6 +82,7 @@ const cookingApi = require('@librechat/api');
 const { Constants } = require('librechat-data-provider');
 const cookingRoutes = require('./cooking');
 const db = require('~/models');
+const { encodeAndFormat } = require('~/server/services/Files/images/encode');
 
 const user = { id: 'auth-user' };
 
@@ -140,6 +154,7 @@ describe('cooking routes', () => {
       text: 'Here is the recipe.',
       draftChanged: false,
     });
+    encodeAndFormat.mockResolvedValue({ files: [], image_urls: [] });
     cookingApi.startCookingSession.mockResolvedValue({ _id: 'session-1' });
     cookingApi.getCookingSession.mockResolvedValue({ _id: 'session-1' });
     cookingApi.appendCookingSessionEvent.mockResolvedValue({ _id: 'session-1' });
@@ -325,6 +340,148 @@ describe('cooking routes', () => {
     );
   });
 
+  test('chat restores the latest recipe image for a follow-up canvas request', async () => {
+    const sourceFile = {
+      file_id: 'recipe-image-1',
+      filepath: '/uploads/recipe-image-1.png',
+      filename: 'pizza-recipe.png',
+      type: 'image/png',
+      width: 960,
+      height: 740,
+    };
+    const imageBlock = {
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,recipe-source', detail: 'auto' },
+    };
+    encodeAndFormat
+      .mockResolvedValueOnce({ files: [], image_urls: [] })
+      .mockResolvedValueOnce({ files: [sourceFile], image_urls: [imageBlock] });
+
+    await request(app)
+      .post('/api/cooking/chat')
+      .send({
+        text: 'Create the pizza recipe canvas',
+        conversationId: 'conversation-1',
+        messageId: 'message-3',
+        responseMessageId: 'message-4',
+        messages: [
+          {
+            messageId: 'message-1',
+            conversationId: 'conversation-1',
+            isCreatedByUser: true,
+            text: 'Give me this recipe',
+            files: [sourceFile],
+          },
+          {
+            messageId: 'message-2',
+            conversationId: 'conversation-1',
+            isCreatedByUser: false,
+            text: 'I can create that recipe canvas.',
+          },
+        ],
+      })
+      .expect(200);
+
+    expect(cookingApi.runCookingChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            messageId: 'message-1',
+            image_urls: [imageBlock],
+          }),
+        ]),
+      }),
+    );
+  });
+
+  test('chat does not restore an old recipe image for an unrelated follow-up', async () => {
+    const sourceFile = {
+      file_id: 'recipe-image-1',
+      filepath: '/uploads/recipe-image-1.png',
+      filename: 'pizza-recipe.png',
+      type: 'image/png',
+      width: 960,
+      height: 740,
+    };
+
+    await request(app)
+      .post('/api/cooking/chat')
+      .send({
+        text: 'How do I keep onions from burning?',
+        conversationId: 'conversation-1',
+        messageId: 'message-3',
+        responseMessageId: 'message-4',
+        messages: [
+          {
+            messageId: 'message-1',
+            conversationId: 'conversation-1',
+            isCreatedByUser: true,
+            text: 'Give me this recipe',
+            files: [sourceFile],
+          },
+          {
+            messageId: 'message-2',
+            conversationId: 'conversation-1',
+            isCreatedByUser: false,
+            text: 'Here is the recipe.',
+          },
+        ],
+      })
+      .expect(200);
+
+    expect(encodeAndFormat).toHaveBeenCalledTimes(1);
+    expect(cookingApi.runCookingChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.not.arrayContaining([
+          expect.objectContaining({ image_urls: expect.any(Array) }),
+        ]),
+      }),
+    );
+  });
+
+  test('chat persists normalized image source metadata on the user message', async () => {
+    const sourceFile = {
+      file_id: 'recipe-image-1',
+      filepath: '/uploads/recipe-image-1.png',
+      filename: 'pizza-recipe.png',
+      type: 'image/png',
+      width: 960,
+      height: 740,
+    };
+    const imageBlock = {
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,recipe-source', detail: 'auto' },
+    };
+    encodeAndFormat.mockResolvedValue({ files: [sourceFile], image_urls: [imageBlock] });
+
+    await request(app)
+      .post('/api/cooking/chat')
+      .send({
+        text: 'Give me this recipe',
+        conversationId: 'conversation-1',
+        messageId: 'message-1',
+        responseMessageId: 'message-2',
+        files: [sourceFile],
+      })
+      .expect(200);
+
+    expect(db.saveMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        messageId: 'message-1',
+        files: [sourceFile],
+        metadata: expect.objectContaining({
+          cookingSource: {
+            type: 'image',
+            fileIds: ['recipe-image-1'],
+            filenames: ['pizza-recipe.png'],
+          },
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
   test('chat persists prompt suggestions on assistant message metadata', async () => {
     cookingApi.runCookingChat.mockResolvedValue({
       text: 'Here is the recipe.',
@@ -428,9 +585,13 @@ describe('cooking routes', () => {
       })
       .expect(200);
 
-    expect(response.text).toContain('"text":"Use a wide "');
-    expect(response.text).toContain('"text":"Use a wide pan."');
-    expect(response.text).not.toContain('"text":"Use a wide pan.","messageId":"message-2"');
+    const liveMessages = response.text
+      .split('\n\n')
+      .filter((event) => event.startsWith('event: message\ndata: '))
+      .map((event) => JSON.parse(event.slice(event.indexOf('data: ') + 6)))
+      .filter((payload) => payload.message === true);
+
+    expect(liveMessages.map((payload) => payload.text)).toEqual(['Use a wide ', 'Use a wide pan.']);
   });
 
   test('chat exposes only the validated cooking reply emitted by the agent', async () => {

@@ -2103,6 +2103,99 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(result.text).toBe('I created the two-ingredient chocolate mousse canvas.');
   });
 
+  test('historical recipe screenshot remains the controlling source for canvas creation', async () => {
+    const draft = activeDraft();
+    const imageBlock = {
+      type: 'image_url' as const,
+      image_url: { url: 'data:image/png;base64,pizza-recipe', detail: 'high' as const },
+    };
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'create-pizza',
+                  type: 'function',
+                  function: {
+                    name: 'create_cooking_document',
+                    arguments: JSON.stringify({
+                      title: 'Cold-Fermented Pizza',
+                      markdown:
+                        draft.documentMarkdown?.replace(
+                          '# Authentic Village-Style Masala Chhach',
+                          '# Cold-Fermented Pizza',
+                        ) ?? '',
+                      change_summary: 'created the attached pizza recipe canvas',
+                      user_message: 'I created the pizza recipe canvas from your screenshot.',
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'source_driven_request',
+        action: 'create_document',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints', 'document', 'source'],
+        withheldContextCategories: ['research'],
+        promptProfile: 'document_work',
+        clarificationNeeded: false,
+        rationaleLabels: ['attached_image_recipe_source'],
+      }),
+    );
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'Create the pizza recipe canvas',
+      messages: [
+        {
+          messageId: 'm1',
+          conversationId: 'conversation-1',
+          isCreatedByUser: true,
+          text: 'Give me this recipe',
+          image_urls: [imageBlock],
+        } as TMessage & { image_urls: (typeof imageBlock)[] },
+        {
+          messageId: 'm2',
+          conversationId: 'conversation-1',
+          isCreatedByUser: false,
+          text: 'I can create that recipe canvas.',
+        },
+      ],
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const toolNames = body.tools.map((tool: { function: { name: string } }) => tool.function.name);
+    const sourceMessage = body.messages.find(
+      (message: { role: string; content: unknown }) =>
+        message.role === 'user' && Array.isArray(message.content),
+    );
+
+    expect(body.messages[0].content).toContain('Attached Image Source Requirement');
+    expect(body.messages[0].content).toContain('the image controls the recipe');
+    expect(sourceMessage.content).toEqual([
+      { type: 'text', text: 'Give me this recipe' },
+      imageBlock,
+    ]);
+    expect(toolNames).toContain('create_cooking_document');
+    expect(toolNames).not.toContain('search_web');
+    expect(toolNames).not.toContain('read_recipe_source');
+    expect(result.draftChanged).toBe(true);
+  });
+
   test('planner-selected specific recipe request uses canvas instead of detailed chat recipe', async () => {
     const draft = activeDraft();
     const fetchMock = jest.fn().mockResolvedValueOnce({
@@ -4060,7 +4153,8 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
             {
               message: {
                 role: 'assistant',
-                content: 'The database is offline, but pancetta is generally a great substitute for guanciale.',
+                content:
+                  'The database is offline, but pancetta is generally a great substitute for guanciale.',
               },
             },
           ],
@@ -4093,4 +4187,3 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(toolMsg.content).toContain('The flavor database is temporarily unavailable');
   });
 });
-

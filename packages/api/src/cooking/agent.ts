@@ -39,11 +39,31 @@ export { sanitizePromptSuggestions, extractTextPromptSuggestions } from './sugge
 
 type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
 
+type CookingImageBlock = {
+  type: 'image_url';
+  image_url: string | { url: string; detail?: 'auto' | 'low' | 'high' };
+};
+
+type CookingTextBlock = {
+  type: 'text';
+  text: string;
+};
+
 type ChatMessage = {
   role: ChatRole;
-  content: string | any[] | null;
+  content: string | Array<CookingTextBlock | CookingImageBlock> | null;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
+};
+
+type CookingHistoryMessage = TMessage & {
+  image_urls?: CookingImageBlock[];
+};
+
+type AttachedImageSourceState = {
+  currentImageCount: number;
+  historicalImageCount: number;
+  available: boolean;
 };
 
 type ToolCall = {
@@ -153,8 +173,8 @@ type CookingChatInput = {
   timeZone?: string;
   onTiming?: (event: CookingChatTimingEvent) => void;
   onTextDelta?: (delta: string, isFinal?: boolean) => void | Promise<void>;
-  onStep?: (event: { type: string; payload: any }) => void | Promise<void>;
-  image_urls?: any[];
+  onStep?: (event: { type: string; payload: Record<string, unknown> }) => void | Promise<void>;
+  image_urls?: CookingImageBlock[];
 };
 
 export type CookingChatResult = {
@@ -292,6 +312,10 @@ Cooking document contract:
 
 External recipe sources:
 - When the user provides a recipe source and wants that recipe used, the source controls the recipe. Use read_recipe_source before creating, replacing, comparing, or claiming exactness.
+- An attached image or screenshot containing a recipe is also a recipe source. Inspect it carefully and treat its visible quantities, ingredient groups, alternatives, yield, temperatures, timing, and method as controlling facts.
+- When the user says "this recipe," "the attached recipe," "give me this," or asks to create a canvas after attaching a recipe image, reproduce the attached source rather than generating a generic recipe for the recognized dish.
+- Preserve meaningful source variants and options shown in the image, such as alternate sauces or methods. Do not silently collapse them into one generic path.
+- If critical source text is genuinely unreadable or cropped, identify the specific missing fact and ask one focused question. Never fill an unreadable quantity, temperature, or timing with an invented value while presenting it as the source recipe.
 - When the user asks for an exact, official, or named chef/author/publisher recipe, use web research before answering. If no readable source is found, say so and ask for a link or pasted text; do not reconstruct it from memory.
 - Be honest about source access. If the page cannot be read, is paywalled, or does not expose the usable recipe details, ask the user to paste the recipe text instead of inventing a lookalike.
 - When a source is readable, preserve the cooking facts that make it that recipe: quantities, ratios, yield, equipment size, temperature, timing, and critical method. Rewrite guidance in Samwise's own words and cite the source where chat needs a citation.
@@ -538,7 +562,10 @@ const tools: CookingToolDefinition[] = [
         type: 'object',
         properties: {
           ingredient: { type: 'string', description: 'The ingredient to substitute.' },
-          top_k: { type: 'integer', description: 'Number of substitutions to return. Default is 5.' },
+          top_k: {
+            type: 'integer',
+            description: 'Number of substitutions to return. Default is 5.',
+          },
         },
         required: ['ingredient'],
       },
@@ -548,8 +575,7 @@ const tools: CookingToolDefinition[] = [
     type: 'function',
     function: {
       name: 'pairing_score',
-      description:
-        'Calculate the compatibility/similarity score between two ingredients.',
+      description: 'Calculate the compatibility/similarity score between two ingredients.',
       parameters: {
         type: 'object',
         properties: {
@@ -580,7 +606,8 @@ const tools: CookingToolDefinition[] = [
     type: 'function',
     function: {
       name: 'compare_on_axis',
-      description: 'Compare two ingredients along a specific sensory or culinary axis (e.g. sweet, spicy, sour).',
+      description:
+        'Compare two ingredients along a specific sensory or culinary axis (e.g. sweet, spicy, sour).',
       parameters: {
         type: 'object',
         properties: {
@@ -604,7 +631,8 @@ const tools: CookingToolDefinition[] = [
           seed: { type: 'string', description: 'The starting ingredient.' },
           target: {
             type: 'string',
-            description: 'The target flavor axis, cuisine (e.g. "cuisine:Italian"), or another ingredient.',
+            description:
+              'The target flavor axis, cuisine (e.g. "cuisine:Italian"), or another ingredient.',
           },
           angle_deg: { type: 'number', description: 'Rotation angle in degrees. Default is 30.' },
           top_k: { type: 'integer', description: 'Number of neighbors to return. Default is 5.' },
@@ -617,7 +645,8 @@ const tools: CookingToolDefinition[] = [
     type: 'function',
     function: {
       name: 'cultural_profile',
-      description: 'Analyze an ingredient against all cuisine regions to see its cultural alignment.',
+      description:
+        'Analyze an ingredient against all cuisine regions to see its cultural alignment.',
       parameters: {
         type: 'object',
         properties: {
@@ -859,7 +888,7 @@ function selectCookingToolsForState(
     'compare_on_axis',
     'morph',
     'pairing_score',
-    'cultural_profile'
+    'cultural_profile',
   );
   const selected = localToolNames
     .map(cookingTool)
@@ -1027,17 +1056,48 @@ function historyMessages(messages: TMessage[] | undefined, conversationId: strin
     if (!content || message.error || message.unfinished) {
       return acc;
     }
-    const imageUrls = (message as any).image_urls;
+    const imageUrls = (message as CookingHistoryMessage).image_urls;
     const hasImages = Array.isArray(imageUrls) && imageUrls.length > 0;
-    const formattedContent = hasImages && message.isCreatedByUser
-      ? [{ type: 'text', text: content }, ...imageUrls]
-      : content;
+    const formattedContent: ChatMessage['content'] =
+      hasImages && message.isCreatedByUser
+        ? [{ type: 'text' as const, text: content }, ...imageUrls]
+        : content;
     acc.push({
       role: message.isCreatedByUser ? 'user' : 'assistant',
       content: formattedContent,
     });
     return acc;
   }, []);
+}
+
+function attachedImageSourceState(input: CookingChatInput): AttachedImageSourceState {
+  const currentImageCount = input.image_urls?.length ?? 0;
+  const historicalImageCount = (input.messages ?? []).reduce((count, message) => {
+    if (!message.isCreatedByUser) {
+      return count;
+    }
+    return count + ((message as CookingHistoryMessage).image_urls?.length ?? 0);
+  }, 0);
+  return {
+    currentImageCount,
+    historicalImageCount,
+    available: currentImageCount + historicalImageCount > 0,
+  };
+}
+
+function attachedImageSourceContext(state: AttachedImageSourceState): string {
+  if (!state.available) {
+    return '';
+  }
+  const location =
+    state.currentImageCount > 0 ? 'the current user message' : 'recent conversation history';
+  return [
+    'Attached Image Source Requirement:',
+    `A user-provided image source is available in ${location}.`,
+    'If the user asks for the recipe shown in that image or asks to put it on the canvas, the image controls the recipe.',
+    'Read the image itself and preserve visible quantities, ingredient groups, variants, yield, temperatures, timing, and critical method. Do not substitute a generic recipe for the recognized dish.',
+    'If a critical detail is unreadable, ask about that exact detail instead of inventing it.',
+  ].join('\n');
 }
 
 function parseArguments(value: string): Record<string, unknown> {
@@ -1279,10 +1339,11 @@ async function executeTool(
         CallToolResultSchema,
         { timeout: 30000 },
       );
-      const content = result.content
-        ?.map((c: any) => c.text)
-        .filter(Boolean)
-        .join('\n') || '';
+      const content =
+        result.content
+          ?.map((item) => ('text' in item && typeof item.text === 'string' ? item.text : ''))
+          .filter(Boolean)
+          .join('\n') || '';
       logger.info(
         `[CookingAgent] Called Epicure tool ${toolCall.function.name} with args: ${JSON.stringify(
           args,
@@ -1297,7 +1358,7 @@ async function executeTool(
       logger.error(`[CookingAgent] Failed to call Epicure tool ${toolCall.function.name}: ${msg}`);
       const fallbackPrompt = [
         `Error: The flavor database is temporarily unavailable (reason: ${msg}).`,
-        'Please answer the user using your general culinary knowledge, or if needed, call request_external_research to search the web for reliable pairings or substitutions.'
+        'Please answer the user using your general culinary knowledge, or if needed, call request_external_research to search the web for reliable pairings or substitutions.',
       ].join('\n');
       return {
         content: fallbackPrompt,
@@ -1835,14 +1896,15 @@ function missingCanvasMutationInstruction(turnPlan: CookingTurnPlan): string {
 function planNeedsExternalEvidence(
   turnPlan: CookingTurnPlan,
   sourceState: LinkedSourceState,
+  imageSourceState: AttachedImageSourceState,
 ): boolean {
   return (
     sourceState.readRequired ||
     turnPlan.action === 'read_source' ||
     turnPlan.action === 'research_then_answer' ||
-    turnPlan.intent === 'source_driven_request' ||
+    (turnPlan.intent === 'source_driven_request' && !imageSourceState.available) ||
     turnPlan.intent === 'research_request' ||
-    turnPlan.selectedContextCategories.includes('source') ||
+    (turnPlan.selectedContextCategories.includes('source') && !imageSourceState.available) ||
     turnPlan.selectedContextCategories.includes('research')
   );
 }
@@ -1873,7 +1935,7 @@ function isCanvasMutationTool(
 }
 
 export async function runCookingChat(input: CookingChatInput): Promise<CookingChatResult> {
-  const logCookingAgent = (event: string, payload: Record<string, any>) => {
+  const logCookingAgent = (event: string, payload: Record<string, unknown>) => {
     globalLogCookingAgent(event, payload);
     if (input.onStep) {
       try {
@@ -1886,6 +1948,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
 
   const turnStartedAt = Date.now();
   const sourceState = linkedSourceState(input.text);
+  const imageSourceState = attachedImageSourceState(input);
   const requestedModel = selectedModel(input.model);
   const turnContext = buildTurnContext({
     conversationCreatedAt: input.conversationCreatedAt,
@@ -1910,6 +1973,9 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     requestedModel,
     linkedUrlCount: sourceState.urls.length,
     linkedSourceReadRequired: sourceState.readRequired,
+    attachedImageSourceAvailable: imageSourceState.available,
+    currentImageCount: imageSourceState.currentImageCount,
+    historicalImageCount: imageSourceState.historicalImageCount,
     runtimeFallbackIntent: turnUnderstanding.intent,
     runtimeFallbackResponseMode: turnUnderstanding.responseMode,
     runtimeFallbackAllowDocumentTools: turnUnderstanding.toolPolicy.allowDocumentTools,
@@ -1919,7 +1985,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     defaultModel: requestedModel,
     plannerModel: process.env.COOKING_AGENT_PLANNER_MODEL,
     complexModel: process.env.COOKING_AGENT_COMPLEX_MODEL,
-    complexPlanning: sourceState.readRequired || Boolean(input.activeDraft),
+    complexPlanning:
+      sourceState.readRequired || imageSourceState.available || Boolean(input.activeDraft),
   });
   const webContextStartedAt = Date.now();
   const webContext = await createCookingWebContext({
@@ -1960,6 +2027,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
       activeDraft: input.activeDraft,
       documents: input.documents,
       linkedSourceState: sourceState,
+      attachedImageSourceState: imageSourceState,
       preferenceSectionTitles: preferenceSectionTitles(input.preferencesMarkdown),
       availableCapabilities: {
         documentTools: true,
@@ -1988,7 +2056,12 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     hardConstraintCount: turnPlan.constraints.hard.length,
     softConstraintCount: turnPlan.constraints.soft.length,
   });
-  const externalEvidenceNeeded = planNeedsExternalEvidence(turnPlan, sourceState);
+  const externalEvidenceNeeded = planNeedsExternalEvidence(turnPlan, sourceState, imageSourceState);
+  const sourceDependent =
+    imageSourceState.available ||
+    sourceState.readRequired ||
+    turnPlan.intent === 'source_driven_request' ||
+    turnPlan.selectedContextCategories.includes('source');
   const sourceLimit = planNeedsBroaderSourceSet(turnPlan) ? 5 : 3;
   const modelRoutes = {
     ...routeCookingModels({
@@ -1998,7 +2071,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
       repairModel: process.env.COOKING_AGENT_REPAIR_MODEL,
       turnPlan,
       safetySensitive: externalEvidenceNeeded,
-      sourceDependent: externalEvidenceNeeded,
+      sourceDependent,
     }),
     planner: plannerRoute,
   };
@@ -2014,7 +2087,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     repairPurpose: modelRoutes.repair.purpose,
     repairReason: modelRoutes.repair.reason,
     safetySensitive: externalEvidenceNeeded,
-    sourceDependent: externalEvidenceNeeded,
+    sourceDependent,
+    attachedImageSourceAvailable: imageSourceState.available,
   });
   logCookingAgent('evidence_gate', {
     conversationId: input.conversationId,
@@ -2100,6 +2174,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           : '',
         linkedSourceContext(sourceState),
         linkedSourcePreload.context,
+        attachedImageSourceContext(imageSourceState),
         toolStateContext(activeCanvas, availableToolState.availableTools),
         cookingSystemInstructionsForProfile(turnPlan.promptProfile),
       ]
@@ -2109,11 +2184,13 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     ...historyMessages(input.messages, input.conversationId),
     {
       role: 'user',
-      content: input.image_urls && input.image_urls.length
-        ? [{ type: 'text', text: input.text }, ...input.image_urls]
-        : input.text,
+      content:
+        input.image_urls && input.image_urls.length
+          ? [{ type: 'text', text: input.text }, ...input.image_urls]
+          : input.text,
     },
   ];
+  const systemPromptContent = typeof messages[0].content === 'string' ? messages[0].content : '';
   logCookingSource('provider_prompt_ready', {
     conversationId: input.conversationId,
     linkedUrlCount: sourceState.urls.length,
@@ -2121,14 +2198,13 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     preloadedSourceCount: linkedSourcePreload.sources.length,
     availableToolNames: availableToolState.availableToolNames,
     activeCanvas,
-    systemPromptChars: messages[0].content?.length ?? 0,
-    systemHasPreloadedSource:
-      messages[0].content?.includes('Preloaded Linked Recipe Source') ?? false,
-    systemHasExactTrue: messages[0].content?.includes('"exactRecipeAvailable":true') ?? false,
-    systemHasExactFalse: messages[0].content?.includes('"exactRecipeAvailable":false') ?? false,
+    systemPromptChars: systemPromptContent.length,
+    systemHasPreloadedSource: systemPromptContent.includes('Preloaded Linked Recipe Source'),
+    systemHasExactTrue: systemPromptContent.includes('"exactRecipeAvailable":true'),
+    systemHasExactFalse: systemPromptContent.includes('"exactRecipeAvailable":false'),
     systemHasUnavailableWeb:
-      messages[0].content?.includes('Web access is unavailable') ||
-      messages[0].content?.includes('Web access is not configured'),
+      systemPromptContent.includes('Web access is unavailable') ||
+      systemPromptContent.includes('Web access is not configured'),
     plannerUsed: turnPlan.plannerUsed,
     plannerFallbackReason: turnPlan.fallbackReason,
     plannedIntent: turnPlan.intent,
@@ -2138,7 +2214,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
   logCookingAgent('prompt_built', {
     conversationId: input.conversationId,
     messageCount: messages.length,
-    systemPromptChars: messages[0].content?.length ?? 0,
+    systemPromptChars: systemPromptContent.length,
     historyMessageCount: Math.max(0, messages.length - 2),
     promptProfile: turnPlan.promptProfile,
     activeCanvasContextIncluded:
@@ -2149,8 +2225,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     selectedContextCategories: turnPlan.selectedContextCategories,
     availableToolNames: availableToolState.availableToolNames,
     hasUnavailableWebNotice:
-      messages[0].content?.includes('Web access is unavailable') ||
-      messages[0].content?.includes('Web access is not configured'),
+      systemPromptContent.includes('Web access is unavailable') ||
+      systemPromptContent.includes('Web access is not configured'),
   });
   let draft: CookingDraft | undefined;
   let draftChanged = false;
@@ -2459,7 +2535,10 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         toolCount: availableToolState.availableTools.length,
         activeCanvas,
         availableToolNames: availableToolState.availableToolNames,
-        promptChars: messages.reduce((sum, message) => sum + getChatMessageChars(message.content), 0),
+        promptChars: messages.reduce(
+          (sum, message) => sum + getChatMessageChars(message.content),
+          0,
+        ),
         plannerUsed: turnPlan.plannerUsed,
         plannerFallbackReason: turnPlan.fallbackReason,
         plannedIntent: turnPlan.intent,
@@ -2482,7 +2561,10 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         messageCount: messages.length,
         toolCount: availableToolState.availableTools.length,
         availableToolNames: availableToolState.availableToolNames,
-        promptChars: messages.reduce((sum, message) => sum + getChatMessageChars(message.content), 0),
+        promptChars: messages.reduce(
+          (sum, message) => sum + getChatMessageChars(message.content),
+          0,
+        ),
         plannedIntent: turnPlan.intent,
         plannedAction: turnPlan.action,
         promptProfile: turnPlan.promptProfile,
@@ -2709,7 +2791,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           usedFastCanvasReturn: result.draftChanged && isCanvasMutationTool(toolCall.function.name),
           linkedSourceReadSucceeded: sourceState.readSucceeded,
           args: parseArguments(toolCall.function.arguments),
-          result: result.content?.length > 2000 ? `${result.content.slice(0, 2000)}...` : result.content,
+          result:
+            result.content?.length > 2000 ? `${result.content.slice(0, 2000)}...` : result.content,
         });
         draft = result.draft ?? draft;
         draftChanged = draftChanged || result.draftChanged;

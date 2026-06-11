@@ -240,6 +240,75 @@ function models() {
   return require('~/models');
 }
 
+function isImageFile(file) {
+  return (
+    file &&
+    (typeof file.type === 'string'
+      ? file.type.startsWith('image/')
+      : Boolean(file.width && file.height))
+  );
+}
+
+function refersToRecentImageSource(text) {
+  const normalized = typeof text === 'string' ? text.trim() : '';
+  return (
+    /\b(this|that|it|attached|attachment|image|photo|screenshot|shown|above|recipe|canvas|transcribe|replicate|recreate)\b/i.test(
+      normalized,
+    ) || /^(yes|yeah|yep|sure|okay|ok|do it|go ahead|please do)[.!\s]*$/i.test(normalized)
+  );
+}
+
+async function restoreLatestCookingImage(req, messages, currentImageUrls, text) {
+  if (
+    !Array.isArray(messages) ||
+    messages.length === 0 ||
+    currentImageUrls.length > 0 ||
+    !refersToRecentImageSource(text)
+  ) {
+    return messages;
+  }
+
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (!message?.isCreatedByUser) {
+      continue;
+    }
+    if (Array.isArray(message.image_urls) && message.image_urls.length > 0) {
+      return messages;
+    }
+
+    const imageFiles = Array.isArray(message.files) ? message.files.filter(isImageFile) : [];
+    if (imageFiles.length === 0) {
+      return messages;
+    }
+
+    let imageUrls;
+    try {
+      ({ image_urls: imageUrls } = await encodeAndFormat(
+        req,
+        imageFiles,
+        { provider: 'openAI', endpoint: 'openAI' },
+        VisionModes.agents,
+      ));
+    } catch (error) {
+      logger.warn('[CookingChat] failed to restore historical image source', {
+        messageId: message.messageId,
+        error: error instanceof Error ? error.message : 'unknown error',
+      });
+      continue;
+    }
+    if (imageUrls.length === 0) {
+      continue;
+    }
+
+    return messages.map((candidate, candidateIndex) =>
+      candidateIndex === index ? { ...candidate, image_urls: imageUrls } : candidate,
+    );
+  }
+
+  return messages;
+}
+
 router.post('/chat', async (req, res) => {
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   if (!text) {
@@ -314,7 +383,12 @@ router.post('/chat', async (req, res) => {
     const requestFiles = req.body?.files ?? [];
     logger.info('[CookingChat] files received in request body', {
       filesCount: requestFiles.length,
-      files: requestFiles.map(f => ({ file_id: f.file_id, filepath: f.filepath, filename: f.filename, type: f.type }))
+      files: requestFiles.map((f) => ({
+        file_id: f.file_id,
+        filepath: f.filepath,
+        filename: f.filename,
+        type: f.type,
+      })),
     });
 
     const { image_urls: imageUrls, files: processedFiles } = await encodeAndFormat(
@@ -329,9 +403,30 @@ router.post('/chat', async (req, res) => {
 
     logger.info('[CookingChat] encodeAndFormat result', {
       imageUrlsCount: imageUrls?.length ?? 0,
-      imageUrls: imageUrls?.map(img => ({ type: img.type, hasUrl: !!img.image_url?.url })),
-      processedFilesCount: processedFiles?.length ?? 0
+      imageUrls: imageUrls?.map((img) => ({ type: img.type, hasUrl: !!img.image_url?.url })),
+      processedFilesCount: processedFiles?.length ?? 0,
     });
+
+    if (processedFiles.length > 0) {
+      requestMessage.files = processedFiles;
+    }
+    if (imageUrls.length > 0) {
+      requestMessage.metadata = {
+        ...(requestMessage.metadata || {}),
+        cookingSource: {
+          type: 'image',
+          fileIds: processedFiles.map((file) => file.file_id).filter(Boolean),
+          filenames: processedFiles.map((file) => file.filename).filter(Boolean),
+        },
+      };
+    }
+
+    const historyMessages = await restoreLatestCookingImage(
+      req,
+      isNewConvo ? [] : req.body?.messages,
+      imageUrls,
+      text,
+    );
 
     const result = await runCookingChat({
       user: userId(req),
@@ -340,7 +435,7 @@ router.post('/chat', async (req, res) => {
       model,
       promptPrefix: req.body?.promptPrefix,
       preferencesMarkdown: preferences?.markdown,
-      messages: isNewConvo ? [] : req.body?.messages,
+      messages: historyMessages,
       activeDraft,
       documents: documentCollection.documents,
       webSearchConfig: req.config?.webSearch,
@@ -577,7 +672,7 @@ router.post('/documents', async (req, res) => {
           endpoint: 'agents',
           title: conversationTitle(req.body.prompt),
         },
-        { context: 'POST /api/cooking/documents - precreate conversation' }
+        { context: 'POST /api/cooking/documents - precreate conversation' },
       );
     }
     res.status(201).json(document);

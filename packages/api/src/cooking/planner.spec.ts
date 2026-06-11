@@ -45,6 +45,11 @@ function input(overrides: Partial<CookingPlannerInput> = {}): CookingPlannerInpu
       readRequired: false,
       readSucceeded: false,
     },
+    attachedImageSourceState: {
+      currentImageCount: 0,
+      historicalImageCount: 0,
+      available: false,
+    },
     preferenceSectionTitles: ['Safety', 'Taste', 'Specialty Ingredients'],
     availableCapabilities: {
       documentTools: true,
@@ -107,6 +112,51 @@ describe('cooking planner', () => {
     expect(plan.action).toBe('direct_answer');
     expect(plan.toolPolicy.allowDocumentTools).toBe(true);
     expect(plan.privacySafeRationaleLabels).toEqual(['planner_unavailable']);
+  });
+
+  test('attached recipe screenshot falls back to source-faithful canvas work', async () => {
+    const plan = await planCookingTurn(
+      input({
+        text: 'Create the pizza recipe canvas',
+        attachedImageSourceState: {
+          currentImageCount: 0,
+          historicalImageCount: 1,
+          available: true,
+        },
+      }),
+      async () => 'not json',
+    );
+
+    expect(plan).toMatchObject({
+      plannerUsed: false,
+      intent: 'source_driven_request',
+      action: 'create_document',
+      promptProfile: 'document_work',
+    });
+    expect(plan.selectedContextCategories).toEqual(expect.arrayContaining(['source', 'document']));
+    expect(plan.privacySafeRationaleLabels).toEqual(['attached_image_recipe_source']);
+  });
+
+  test('attached recipe screenshot creates a distinct document when another canvas is active', async () => {
+    const plan = await planCookingTurn(
+      input({
+        text: 'Create the pizza recipe canvas',
+        activeDraft: activeDraft(),
+        availableCapabilities: {
+          documentTools: true,
+          activeCanvas: true,
+          webConfigured: true,
+        },
+        attachedImageSourceState: {
+          currentImageCount: 1,
+          historicalImageCount: 0,
+          available: true,
+        },
+      }),
+      async () => 'not json',
+    );
+
+    expect(plan.action).toBe('create_document');
   });
 
   test('quick normal meal selects routine_direct, withholds specialty, and withholds document tools', async () => {

@@ -76,6 +76,11 @@ export type CookingPlannerInput = {
     readRequired: boolean;
     readSucceeded: boolean;
   };
+  attachedImageSourceState: {
+    currentImageCount: number;
+    historicalImageCount: number;
+    available: boolean;
+  };
   preferenceSectionTitles: string[];
   availableCapabilities: {
     documentTools: boolean;
@@ -273,11 +278,37 @@ function fallbackPlan(
       hasActiveDraft: Boolean(input.activeDraft),
       turnContext: input.turnContext,
     });
-  const action = actionFromResponseMode(understanding.responseMode);
-  const selectedContextCategories = selectedCategoriesForUnderstanding(understanding);
+  const attachedRecipeRequest =
+    input.attachedImageSourceState.available &&
+    /\b(recipe|canvas|give me this|make this|write this up|recreate|replicate|transcribe)\b/i.test(
+      input.text,
+    );
+  const attachedRecipeRevisionRequest =
+    attachedRecipeRequest &&
+    Boolean(input.activeDraft) &&
+    /\b(update|revise|edit|replace|overwrite)\b/i.test(input.text);
+  let action = actionFromResponseMode(understanding.responseMode);
+  if (attachedRecipeRequest) {
+    action = attachedRecipeRevisionRequest ? 'revise_document' : 'create_document';
+  }
+  const intent = attachedRecipeRequest ? 'source_driven_request' : understanding.intent;
+  const selectedContextCategories = unique([
+    ...selectedCategoriesForUnderstanding(understanding),
+    ...(input.attachedImageSourceState.available ? (['source'] as const) : []),
+    ...(action === 'create_document' || action === 'revise_document'
+      ? (['document'] as const)
+      : []),
+  ]);
   const allCategories = [...contextCategories];
+  let privacySafeRationaleLabels = ['runtime_context_only'];
+  if (fallbackReason) {
+    privacySafeRationaleLabels = ['planner_unavailable'];
+  }
+  if (attachedRecipeRequest) {
+    privacySafeRationaleLabels = ['attached_image_recipe_source'];
+  }
   return {
-    intent: understanding.intent,
+    intent,
     action,
     confidence: fallbackReason ? 'low' : 'medium',
     constraints: understanding.constraints,
@@ -288,13 +319,19 @@ function fallbackPlan(
     promptProfile: promptProfileForAction({
       action,
       activeCanvas: Boolean(input.activeDraft),
-      intent: understanding.intent,
+      intent,
     }),
     clarification: {
       needed: understanding.responseMode === 'ask_clarifying_question',
     },
-    privacySafeRationaleLabels: fallbackReason ? ['planner_unavailable'] : ['runtime_context_only'],
-    toolPolicy: understanding.toolPolicy,
+    privacySafeRationaleLabels,
+    toolPolicy: {
+      ...understanding.toolPolicy,
+      allowDocumentTools:
+        action === 'create_document' ||
+        action === 'revise_document' ||
+        understanding.toolPolicy.allowDocumentTools,
+    },
     plannerUsed: false,
     fallbackReason,
   };
@@ -360,14 +397,19 @@ function normalizedPromptProfile(
 }
 
 function normalizePlan(input: CookingPlannerInput, raw: RawCookingPlan): CookingTurnPlan {
-  const intent = normalizedIntent(raw);
   const action = normalizedAction(input, raw);
+  const intent =
+    input.attachedImageSourceState.available &&
+    (action === 'create_document' || action === 'revise_document')
+      ? 'source_driven_request'
+      : normalizedIntent(raw);
   const promptProfile = normalizedPromptProfile(input, raw, action, intent);
   const plannerSelected = validContextCategories(raw.selectedContextCategories);
   const selectedContextCategories = unique([
     'hard_constraints' as const,
     ...plannerSelected,
     ...(input.linkedSourceState.readRequired ? (['source'] as const) : []),
+    ...(input.attachedImageSourceState.available ? (['source'] as const) : []),
     ...(promptProfile === 'source_or_research' ? (['research'] as const) : []),
     ...(promptProfile === 'document_work' || action === 'read_document'
       ? (['document'] as const)
@@ -478,6 +520,8 @@ function plannerPrompt(input: CookingPlannerInput): PlannerChatMessage[] {
         '- Treat the user intent semantically rather than by surface wording: if they are asking for a complete cookable recipe, plan document work; if they are asking a narrow technique or decision-support question, plan chat.',
         '- If there is an active canvas and the user wants the same recipe changed, choose revise_document with promptProfile document_work; the response can still briefly explain the change in chat after the tool succeeds.',
         '- If the current request is too underspecified to make a useful durable recipe, choose ask_clarifying_question or direct_answer that helps them choose; do not plan a long formal recipe in chat.',
+        '- A user-attached recipe image is a source, not inspiration. When the user asks for "this recipe" or asks to create its canvas, choose create_document or revise_document as appropriate and preserve the attached source instead of planning a generic recipe.',
+        '- The response model can inspect attached images. You only need to plan source-faithful work; do not request web research merely because the source is an image.',
         '',
         'Stickiness & State-Aware Planning Rules:',
         '- Check the provided "previousPlanState" (which includes the previous turn\'s classified intent and action) to understand what the agent was just doing.',
@@ -502,6 +546,7 @@ function plannerPrompt(input: CookingPlannerInput): PlannerChatMessage[] {
           readRequired: input.linkedSourceState.readRequired,
           readSucceeded: input.linkedSourceState.readSucceeded,
         },
+        attachedImageSource: input.attachedImageSourceState,
         preferenceSectionTitles: input.preferenceSectionTitles,
         availableCapabilities: input.availableCapabilities,
       }),
