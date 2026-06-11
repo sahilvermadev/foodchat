@@ -2,8 +2,9 @@ import * as q from './types/queries';
 import { ResourceType } from './accessPermissions';
 
 let BASE_URL = '';
-if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) {
-  BASE_URL = import.meta.env.VITE_API_URL;
+const viteEnv = (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env;
+if (viteEnv?.VITE_API_URL) {
+  BASE_URL = viteEnv.VITE_API_URL;
 } else if (
   typeof process === 'undefined' ||
   (process as typeof process & { browser?: boolean }).browser === true
