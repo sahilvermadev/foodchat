@@ -11,9 +11,8 @@ e2e/
 .github/
 .vscode/
 .husky/
-data/
-!client/src/components/Nav/SettingsTabs/Data/**
-data-node/
+/data/
+/data-node/
 node_modules/
 client/node_modules/
 packages/client/node_modules/
