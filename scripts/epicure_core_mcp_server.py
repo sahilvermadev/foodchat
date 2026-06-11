@@ -12,14 +12,19 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from mcp.server.fastmcp import FastMCP
-from safetensors.numpy import load_file
 
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_DIR = ROOT / "data" / "epicure-core"
 MODEL_DIR = Path(os.environ.get("EPICURE_CORE_DIR", str(DEFAULT_MODEL_DIR)))
 SERVER_NAME = os.environ.get("MCP_SERVER_NAME", "epicure")
+SERVER_INSTRUCTIONS = (
+    "Read-only access to Kaikaku/epicure-core, a 300-dimensional ingredient embedding with "
+    "1,790 canonical ingredients. Use find_pairings for recipe design, neighbors for "
+    "substitutions, pairing_score for compatibility, closest_mode for flavor families, "
+    "compare_on_axis for sensory or culinary axes, morph for directed fusion, and "
+    "cultural_profile for cuisine alignment."
+)
 
 
 def _unit(v: np.ndarray, axis: int = -1, eps: float = 1e-9) -> np.ndarray:
@@ -52,7 +57,7 @@ class EpicureCore:
         self.config = _read_json(model_dir / "config.json")
         self.vocab: dict[str, int] = {str(k): int(v) for k, v in _read_json(model_dir / "vocab.json").items()}
         self.itos: dict[int, str] = {int(k): str(v) for k, v in _read_json(model_dir / "itos.json").items()}
-        raw_embeddings = load_file(str(model_dir / "embeddings.safetensors"))["embeddings"].astype(np.float32)
+        raw_embeddings = np.load(model_dir / "embeddings.npy").astype(np.float32)
         self.embeddings = _unit(raw_embeddings).astype(np.float32)
         self.supervised_poles = {
             str(k): _unit(np.array(v, dtype=np.float32)) for k, v in _read_json(model_dir / "supervised_poles.json").items()
@@ -156,19 +161,6 @@ def model() -> EpicureCore:
     return core
 
 
-mcp = FastMCP(
-    name=SERVER_NAME,
-    instructions=(
-        "Read-only access to Kaikaku/epicure-core, a 300-dimensional ingredient embedding with "
-        "1,790 canonical ingredients. Use find_pairings for recipe design, neighbors for "
-        "substitutions, pairing_score for compatibility, closest_mode for flavor families, "
-        "compare_on_axis for sensory or culinary axes, morph for directed fusion, and "
-        "cultural_profile for cuisine alignment."
-    ),
-)
-
-
-@mcp.tool(name="neighbors", description="Find nearest ingredients to a single seed in Kaikaku/epicure-core.")
 def neighbors(ingredient: str, top_k: int = 5) -> dict[str, Any]:
     core = model()
     name, vec = core.vector(ingredient)
@@ -178,8 +170,6 @@ def neighbors(ingredient: str, top_k: int = 5) -> dict[str, Any]:
         "neighbors": core.nearest(vec, top_k=top_k, exclude={name}),
     }
 
-
-@mcp.tool(name="pairing_score", description="Calculate cosine compatibility between two ingredients.")
 def pairing_score(ingredient_a: str, ingredient_b: str) -> dict[str, Any]:
     core = model()
     name_a, vec_a = core.vector(ingredient_a)
@@ -193,8 +183,6 @@ def pairing_score(ingredient_a: str, ingredient_b: str) -> dict[str, Any]:
         "interpretation": "higher is closer in the Core ingredient embedding",
     }
 
-
-@mcp.tool(name="find_pairings", description="Find Core-backed pairing candidates for one or more seed ingredients.")
 def find_pairings(
     ingredients: list[str] | str,
     is_vegan: bool = False,
@@ -233,8 +221,6 @@ def find_pairings(
         },
     }
 
-
-@mcp.tool(name="closest_mode", description="Return the closest named Core modes for an ingredient.")
 def closest_mode(ingredient: str, property: str | None = None, top_k: int = 3) -> dict[str, Any]:
     core = model()
     name, vec = core.vector(ingredient)
@@ -256,8 +242,6 @@ def closest_mode(ingredient: str, property: str | None = None, top_k: int = 3) -
     scored.sort(key=lambda item: item["score"], reverse=True)
     return {"model": "Kaikaku/epicure-core", "ingredient": name, "modes": scored[: max(1, int(top_k))]}
 
-
-@mcp.tool(name="compare_on_axis", description="Compare two ingredients along a Core axis or mode.")
 def compare_on_axis(ingredient_a: str, ingredient_b: str, axis: str) -> dict[str, Any]:
     core = model()
     name_a, vec_a = core.vector(ingredient_a)
@@ -274,8 +258,6 @@ def compare_on_axis(ingredient_a: str, ingredient_b: str, axis: str) -> dict[str
         "difference": round(abs(score_a - score_b), 4),
     }
 
-
-@mcp.tool(name="morph", description="Rotate a seed ingredient toward a Core target and return nearest ingredients.")
 def morph(seed: str, target: str, angle_deg: float = 30.0, top_k: int = 5) -> dict[str, Any]:
     core = model()
     seed_name, seed_vec = core.vector(seed)
@@ -296,8 +278,6 @@ def morph(seed: str, target: str, angle_deg: float = 30.0, top_k: int = 5) -> di
         "results": core.nearest(query, top_k=top_k, exclude={seed_name}),
     }
 
-
-@mcp.tool(name="cultural_profile", description="Score an ingredient against Core cuisine poles.")
 def cultural_profile(ingredient: str) -> dict[str, Any]:
     core = model()
     name, vec = core.vector(ingredient)
@@ -309,7 +289,178 @@ def cultural_profile(ingredient: str) -> dict[str, Any]:
     return {"model": "Kaikaku/epicure-core", "ingredient": name, "cuisines": scores}
 
 
-if __name__ == "__main__":
+def _schema(properties: dict[str, dict[str, Any]], required: list[str]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
+
+
+TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "neighbors",
+        "description": "Find nearest ingredients to a single seed in Kaikaku/epicure-core.",
+        "inputSchema": _schema(
+            {
+                "ingredient": {"type": "string"},
+                "top_k": {"type": "integer", "default": 5, "minimum": 1, "maximum": 20},
+            },
+            ["ingredient"],
+        ),
+    },
+    {
+        "name": "pairing_score",
+        "description": "Calculate cosine compatibility between two ingredients.",
+        "inputSchema": _schema(
+            {"ingredient_a": {"type": "string"}, "ingredient_b": {"type": "string"}},
+            ["ingredient_a", "ingredient_b"],
+        ),
+    },
+    {
+        "name": "find_pairings",
+        "description": "Find Core-backed pairing candidates for one or more seed ingredients.",
+        "inputSchema": _schema(
+            {
+                "ingredients": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                    ]
+                },
+                "is_vegan": {"type": "boolean", "default": False},
+                "is_vegetarian": {"type": "boolean", "default": False},
+            },
+            ["ingredients"],
+        ),
+    },
+    {
+        "name": "closest_mode",
+        "description": "Return the closest named Core modes for an ingredient.",
+        "inputSchema": _schema(
+            {
+                "ingredient": {"type": "string"},
+                "property": {"type": "string"},
+                "top_k": {"type": "integer", "default": 3, "minimum": 1, "maximum": 20},
+            },
+            ["ingredient"],
+        ),
+    },
+    {
+        "name": "compare_on_axis",
+        "description": "Compare two ingredients along a Core axis or mode.",
+        "inputSchema": _schema(
+            {
+                "ingredient_a": {"type": "string"},
+                "ingredient_b": {"type": "string"},
+                "axis": {"type": "string"},
+            },
+            ["ingredient_a", "ingredient_b", "axis"],
+        ),
+    },
+    {
+        "name": "morph",
+        "description": "Rotate a seed ingredient toward a Core target and return nearest ingredients.",
+        "inputSchema": _schema(
+            {
+                "seed": {"type": "string"},
+                "target": {"type": "string"},
+                "angle_deg": {"type": "number", "default": 30.0},
+                "top_k": {"type": "integer", "default": 5, "minimum": 1, "maximum": 20},
+            },
+            ["seed", "target"],
+        ),
+    },
+    {
+        "name": "cultural_profile",
+        "description": "Score an ingredient against Core cuisine poles.",
+        "inputSchema": _schema({"ingredient": {"type": "string"}}, ["ingredient"]),
+    },
+]
+
+TOOL_HANDLERS = {
+    "neighbors": neighbors,
+    "pairing_score": pairing_score,
+    "find_pairings": find_pairings,
+    "closest_mode": closest_mode,
+    "compare_on_axis": compare_on_axis,
+    "morph": morph,
+    "cultural_profile": cultural_profile,
+}
+
+
+def _write_message(message: dict[str, Any]) -> None:
+    sys.stdout.write(json.dumps(message, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+
+
+def _success(message_id: Any, result: dict[str, Any]) -> None:
+    _write_message({"jsonrpc": "2.0", "id": message_id, "result": result})
+
+
+def _error(message_id: Any, code: int, message: str) -> None:
+    _write_message({"jsonrpc": "2.0", "id": message_id, "error": {"code": code, "message": message}})
+
+
+def _tool_result(payload: dict[str, Any], is_error: bool = False) -> dict[str, Any]:
+    return {
+        "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+        "isError": is_error,
+    }
+
+
+def _handle_request(request: dict[str, Any]) -> None:
+    method = request.get("method")
+    message_id = request.get("id")
+    params = request.get("params") or {}
+
+    if method == "notifications/initialized":
+        return
+    if message_id is None:
+        return
+
+    try:
+        if method == "initialize":
+            _success(
+                message_id,
+                {
+                    "protocolVersion": params.get("protocolVersion", "2024-11-05"),
+                    "capabilities": {"tools": {"listChanged": False}},
+                    "serverInfo": {"name": SERVER_NAME, "version": "1.0.0"},
+                    "instructions": SERVER_INSTRUCTIONS,
+                },
+            )
+        elif method == "tools/list":
+            _success(message_id, {"tools": TOOLS})
+        elif method == "tools/call":
+            name = params.get("name")
+            arguments = params.get("arguments") or {}
+            handler = TOOL_HANDLERS.get(name)
+            if handler is None:
+                _error(message_id, -32601, f"Unknown tool: {name}")
+                return
+            _success(message_id, _tool_result(handler(**arguments)))
+        elif method == "ping":
+            _success(message_id, {})
+        else:
+            _error(message_id, -32601, f"Method not found: {method}")
+    except Exception as exc:
+        _success(message_id, _tool_result({"error": str(exc)}, is_error=True))
+
+
+def run_stdio_server() -> None:
     print("Starting Epicure Core MCP server on stdio.", file=sys.stderr)
     model()
-    mcp.run("stdio")
+    print("Epicure Core MCP server successfully loaded and running on stdio.", file=sys.stderr)
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        try:
+            _handle_request(json.loads(line))
+        except json.JSONDecodeError as exc:
+            _error(None, -32700, f"Parse error: {exc}")
+
+
+if __name__ == "__main__":
+    run_stdio_server()
