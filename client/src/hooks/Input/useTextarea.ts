@@ -22,6 +22,29 @@ import store from '~/store';
 
 type KeyEvent = KeyboardEvent<HTMLTextAreaElement>;
 
+const getExtensionFromMimeType = (mimeType: string): string => {
+  const map: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'text/plain': 'txt',
+    'text/html': 'html',
+    'application/pdf': 'pdf',
+    'application/json': 'json',
+  };
+  if (map[mimeType]) {
+    return map[mimeType];
+  }
+  const subtype = mimeType.split('/')[1];
+  if (subtype && /^[a-zA-Z0-9]+$/.test(subtype)) {
+    return subtype;
+  }
+  return '';
+};
+
+
 export default function useTextarea({
   textAreaRef,
   submitButtonRef,
@@ -211,10 +234,22 @@ export default function useTextarea({
       }
 
       if (clipboardData.files.length > 0) {
+        e.preventDefault();
         setFilesLoading(true);
         const timestampedFiles: File[] = [];
-        for (const file of clipboardData.files) {
-          const newFile = new File([file], `clipboard_${+new Date()}_${file.name}`, {
+        const filesArray = Array.from(clipboardData.files);
+        const timestamp = Date.now();
+        for (let i = 0; i < filesArray.length; i++) {
+          const file = filesArray[i];
+          let name = file.name || 'image';
+          const hasExtension = name.includes('.') && name.split('.').pop()?.length;
+          if (!hasExtension && file.type) {
+            const ext = getExtensionFromMimeType(file.type);
+            if (ext) {
+              name = `${name}.${ext}`;
+            }
+          }
+          const newFile = new File([file], `clipboard_${timestamp}_${i}_${name}`, {
             type: file.type,
           });
           timestampedFiles.push(newFile);

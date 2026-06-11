@@ -13,7 +13,7 @@ export type ToolCall = {
 
 export type ChatMessage = {
   role: ChatRole;
-  content: string | null;
+  content: string | any[] | null;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
 };
@@ -287,7 +287,8 @@ export async function ensureInlineSourceCitations(
         'auto',
         0.1,
       );
-      const revisedText = revised.content?.trim() ?? '';
+      const contentStr = typeof revised.content === 'string' ? revised.content : '';
+      const revisedText = contentStr.trim();
       const revisedCitations = citedWebSources(revisedText, sources, sourceLimit);
       if (
         revisedText &&

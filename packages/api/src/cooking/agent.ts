@@ -41,7 +41,7 @@ type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
 
 type ChatMessage = {
   role: ChatRole;
-  content: string | null;
+  content: string | any[] | null;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
 };
@@ -154,6 +154,7 @@ type CookingChatInput = {
   onTiming?: (event: CookingChatTimingEvent) => void;
   onTextDelta?: (delta: string, isFinal?: boolean) => void | Promise<void>;
   onStep?: (event: { type: string; payload: any }) => void | Promise<void>;
+  image_urls?: any[];
 };
 
 export type CookingChatResult = {
@@ -1023,9 +1024,14 @@ function historyMessages(messages: TMessage[] | undefined, conversationId: strin
     if (!content || message.error || message.unfinished) {
       return acc;
     }
+    const imageUrls = (message as any).image_urls;
+    const hasImages = Array.isArray(imageUrls) && imageUrls.length > 0;
+    const formattedContent = hasImages && message.isCreatedByUser
+      ? [{ type: 'text', text: content }, ...imageUrls]
+      : content;
     acc.push({
       role: message.isCreatedByUser ? 'user' : 'assistant',
-      content,
+      content: formattedContent,
     });
     return acc;
   }, []);
@@ -1079,7 +1085,8 @@ async function recoverEmptyResponse(messages: ChatMessage[], model: string): Pro
       'auto',
       0.1,
     );
-    return extractTextPromptSuggestions(recovered.content?.trim() ?? '').text;
+    const contentStr = typeof recovered.content === 'string' ? recovered.content : '';
+    return extractTextPromptSuggestions(contentStr.trim()).text;
   } catch {
     return '';
   }
@@ -1669,7 +1676,8 @@ async function completeJsonOnly(
   temperature?: number,
 ): Promise<string> {
   const assistant = await complete(messages, model, [], undefined, 'auto', temperature);
-  return assistant.content?.trim() ?? '';
+  const contentStr = typeof assistant.content === 'string' ? assistant.content : '';
+  return contentStr.trim();
 }
 
 async function repairCookingResponse(
@@ -1692,7 +1700,8 @@ async function repairCookingResponse(
     'auto',
     0.1,
   );
-  return extractTextPromptSuggestions(repaired.content?.trim() ?? '').text;
+  const contentStr = typeof repaired.content === 'string' ? repaired.content : '';
+  return extractTextPromptSuggestions(contentStr.trim()).text;
 }
 
 async function sanitizeResponseText(
@@ -1741,7 +1750,8 @@ async function sanitizeResponseText(
       'auto',
       0.1,
     );
-    return response.content?.trim() ?? text;
+    const contentStr = typeof response.content === 'string' ? response.content : '';
+    return contentStr.trim() || text;
   } catch (error) {
     logger.error('[CookingAgent] sanitization failed', error);
     return text;
@@ -1836,6 +1846,21 @@ function planNeedsExternalEvidence(
 
 function planNeedsBroaderSourceSet(turnPlan: CookingTurnPlan): boolean {
   return turnPlan.intent === 'research_request' || turnPlan.action === 'research_then_answer';
+}
+
+function getChatMessageChars(content: ChatMessage['content']): number {
+  if (typeof content === 'string') {
+    return content.length;
+  }
+  if (Array.isArray(content)) {
+    return content.reduce((sum, part) => {
+      if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
+        return sum + part.text.length;
+      }
+      return sum;
+    }, 0);
+  }
+  return 0;
 }
 
 function isCanvasMutationTool(
@@ -2079,7 +2104,12 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         .join('\n\n'),
     },
     ...historyMessages(input.messages, input.conversationId),
-    { role: 'user', content: input.text },
+    {
+      role: 'user',
+      content: input.image_urls && input.image_urls.length
+        ? [{ type: 'text', text: input.text }, ...input.image_urls]
+        : input.text,
+    },
   ];
   logCookingSource('provider_prompt_ready', {
     conversationId: input.conversationId,
@@ -2426,7 +2456,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         toolCount: availableToolState.availableTools.length,
         activeCanvas,
         availableToolNames: availableToolState.availableToolNames,
-        promptChars: messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0),
+        promptChars: messages.reduce((sum, message) => sum + getChatMessageChars(message.content), 0),
         plannerUsed: turnPlan.plannerUsed,
         plannerFallbackReason: turnPlan.fallbackReason,
         plannedIntent: turnPlan.intent,
@@ -2449,7 +2479,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         messageCount: messages.length,
         toolCount: availableToolState.availableTools.length,
         availableToolNames: availableToolState.availableToolNames,
-        promptChars: messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0),
+        promptChars: messages.reduce((sum, message) => sum + getChatMessageChars(message.content), 0),
         plannedIntent: turnPlan.intent,
         plannedAction: turnPlan.action,
         promptProfile: turnPlan.promptProfile,
@@ -2511,7 +2541,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
       durationMs: Date.now() - providerStartedAt,
       toolCallCount: assistant.tool_calls?.length ?? 0,
       providerToolCallCount: assistant.tool_calls?.length ?? 0,
-      outputChars: assistant.content?.length ?? 0,
+      outputChars: typeof assistant.content === 'string' ? assistant.content.length : 0,
     });
     logCookingAgent('provider_response', {
       conversationId: input.conversationId,
@@ -2520,11 +2550,11 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
       durationMs: Date.now() - providerStartedAt,
       toolCallCount: assistant.tool_calls?.length ?? 0,
       toolCallNames: assistant.tool_calls?.map((toolCall) => toolCall.function.name) ?? [],
-      outputChars: assistant.content?.length ?? 0,
-      hasText: Boolean(assistant.content?.trim()),
+      outputChars: typeof assistant.content === 'string' ? assistant.content.length : 0,
+      hasText: typeof assistant.content === 'string' ? Boolean(assistant.content.trim()) : false,
     });
     messages.push(assistant);
-    assistantText = assistant.content?.trim() ?? '';
+    assistantText = typeof assistant.content === 'string' ? assistant.content.trim() : '';
 
     if (!assistant.tool_calls?.length) {
       if (

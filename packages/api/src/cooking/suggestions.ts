@@ -13,7 +13,7 @@ export type ToolCall = {
 
 export type ChatMessage = {
   role: ChatRole;
-  content: string | null;
+  content: string | any[] | null;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
 };

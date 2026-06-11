@@ -20,7 +20,8 @@ const {
   appendCookingSessionEvent,
   completeCookingSession,
 } = require('@librechat/api');
-const { Constants } = require('librechat-data-provider');
+const { Constants, VisionModes } = require('librechat-data-provider');
+const { encodeAndFormat } = require('~/server/services/Files/images/encode');
 const { requireJwtAuth, configMiddleware } = require('~/server/middleware');
 const { loadAuthValues } = require('~/server/services/Tools/credentials');
 
@@ -309,6 +310,29 @@ router.post('/chat', async (req, res) => {
     const agentStartedAt = Date.now();
     let assistantTextStreamed = false;
     let cumulativeText = '';
+
+    const requestFiles = req.body?.files ?? [];
+    logger.info('[CookingChat] files received in request body', {
+      filesCount: requestFiles.length,
+      files: requestFiles.map(f => ({ file_id: f.file_id, filepath: f.filepath, filename: f.filename, type: f.type }))
+    });
+
+    const { image_urls: imageUrls, files: processedFiles } = await encodeAndFormat(
+      req,
+      requestFiles,
+      {
+        provider: 'openAI',
+        endpoint: 'openAI',
+      },
+      VisionModes.agents,
+    );
+
+    logger.info('[CookingChat] encodeAndFormat result', {
+      imageUrlsCount: imageUrls?.length ?? 0,
+      imageUrls: imageUrls?.map(img => ({ type: img.type, hasUrl: !!img.image_url?.url })),
+      processedFilesCount: processedFiles?.length ?? 0
+    });
+
     const result = await runCookingChat({
       user: userId(req),
       conversationId,
@@ -322,6 +346,7 @@ router.post('/chat', async (req, res) => {
       webSearchConfig: req.config?.webSearch,
       loadAuthValues,
       conversationCreatedAt: req.body?.createdAt || new Date(),
+      image_urls: imageUrls,
       onTiming: (event) => agentTiming.push(event),
       onStep: (step) => {
         sendEvent(res, {
