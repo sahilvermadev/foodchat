@@ -7,7 +7,7 @@ client/dist
 .turbo
 data-node
 data/*
-!data/epicure
-!data/epicure/**
+!data/epicure-core
+!data/epicure-core/**
 logs
 *.log

@@ -38,5 +38,5 @@ mcpServers:
     type: stdio
     command: /opt/epicure-venv/bin/python
     args:
-      - /app/scripts/epicure_mcp_server.py
+      - /app/scripts/epicure_core_mcp_server.py
     timeout: 60000

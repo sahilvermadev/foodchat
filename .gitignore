@@ -4,10 +4,12 @@
 data-node
 meili_data*
 data/*
-!data/epicure/
-!data/epicure/**
+!data/epicure-core/
+!data/epicure-core/**
 logs
 *.log
+__pycache__/
+*.pyc
 
 # Runtime data
 pids
