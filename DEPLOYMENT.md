@@ -98,14 +98,22 @@ The stateful Express API and MongoDB instance are hosted on **Railway** under th
 | `HOST` | `0.0.0.0` | Bound host enabling Railway ingress router matching |
 | `DOMAIN_CLIENT` | `https://rekky.ai` | Target client origin (used for email validation and app redirections) |
 | `DOMAIN_SERVER` | `https://rekky.ai` | Proxied server origin (passed as callback base in OAuth flows) |
-| `JWT_SECRET` | `16f8...09ef` | Cryptographic secret for signing JWT access tokens |
-| `JWT_REFRESH_SECRET` | `eaa5...8418` | Cryptographic secret for signing refresh tokens |
-| `CREDS_KEY` | `f34b...66f0` | Database credentials encryption key |
-| `CREDS_IV` | `e234...bfb` | Database credentials initialization vector |
+| `JWT_SECRET` | Configured, but currently matches the upstream default | Signs JWT access tokens; rotation invalidates active access tokens |
+| `JWT_REFRESH_SECRET` | Configured, but currently matches the upstream default | Signs refresh tokens; rotation requires users to sign in again |
+| `CREDS_KEY` | Configured, but currently matches the upstream default | Encrypts stored credentials; do not rotate without migrating existing encrypted values |
+| `CREDS_IV` | Configured, but currently matches the upstream default | Used with `CREDS_KEY`; rotate only as part of the same credential migration |
 | `ALLOW_UNVERIFIED_EMAIL_LOGIN` | `true` | Standard user authentication permissions bypass override |
 | `ALLOW_REGISTRATION` | `true` | Enables/disables the email sign-up/registration form on the login screen |
 | `OPENROUTER_KEY` | `sk-or-...` | API Key for custom OpenRouter endpoints (Gemini, Llama, Claude, GPT) |
 | `TAVILY_API_KEY` | `tvly-...` | API Key for Tavily advanced web search and markdown scraping integration |
+
+Security audit note (June 11, 2026): Railway has all four secret variables present,
+but their values exactly match the defaults in `packages/api/src/app/checks.ts`.
+Production startup therefore emits default-secret warnings. This is not caused by a
+missing Railway binding. Replace the JWT secrets during a planned session reset.
+Replace `CREDS_KEY` and `CREDS_IV` only with a migration that decrypts existing stored
+credentials with the old pair and re-encrypts them with the new pair; changing them
+directly can break saved provider or MCP credentials.
 
 ### 3. Epicure Core MCP Runtime
 The production backend includes a local MCP server for culinary embedding tools. It is configured in [librechat.yaml](file:///home/sahil/projects/foodchat/librechat.yaml):
