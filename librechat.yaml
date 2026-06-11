@@ -36,8 +36,7 @@ webSearch:
 mcpServers:
   epicure:
     type: stdio
-    command: ${EPICURE_PYTHON_PATH}
+    command: /usr/bin/python3
     args:
-      - ${EPICURE_SERVER_PATH}
+      - /app/scripts/epicure_mcp_server.py
     timeout: 60000
-

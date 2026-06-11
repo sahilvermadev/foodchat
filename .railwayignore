@@ -6,6 +6,8 @@ client/dist
 .vercel
 .turbo
 data-node
-data
+data/*
+!data/epicure
+!data/epicure/**
 logs
 *.log

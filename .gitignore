@@ -3,7 +3,9 @@
 # Logs
 data-node
 meili_data*
-data/
+data/*
+!data/epicure/
+!data/epicure/**
 logs
 *.log
 

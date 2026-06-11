@@ -5,7 +5,7 @@ FROM node:20-alpine AS node
 
 RUN apk upgrade --no-cache
 RUN apk add --no-cache jemalloc
-RUN apk add --no-cache python3 py3-pip uv
+RUN apk add --no-cache python3 py3-pip uv git
 
 # Set environment variable to use jemalloc
 ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
@@ -13,6 +13,7 @@ ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
 # Add `uv` for extended MCP support
 COPY --from=ghcr.io/astral-sh/uv:0.9.5-python3.12-alpine /usr/local/bin/uv /usr/local/bin/uvx /bin/
 RUN uv --version
+RUN uv pip install --system "epicure-mcp @ git+https://github.com/KAIKAKU-AI/epicure-mcp.git@954847e4a42cceeed0f02cddbe15a00c01ab3efe"
 
 # Set configurable max-old-space-size with default
 ARG NODE_MAX_OLD_SPACE_SIZE=6144
