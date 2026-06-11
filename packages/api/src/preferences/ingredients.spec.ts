@@ -76,7 +76,7 @@ describe('specialty ingredient catalog', () => {
       imageStatus: 'ready',
       imageUrl: 'data:image/png;base64,abc',
       imagePrompt: 'prompt',
-      imageStyle: 'mise-ingredient-v1',
+      imageStyle: 'rekky-ingredient-v1',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
@@ -88,7 +88,7 @@ describe('specialty ingredient catalog', () => {
     });
     expect(mockCreate).not.toHaveBeenCalled();
     expect(mockFindOne).toHaveBeenCalledWith({
-      imageStyle: 'mise-ingredient-v1',
+      imageStyle: 'rekky-ingredient-v1',
       $or: [{ normalizedName: 'gochujang' }, { aliases: 'gochujang' }],
     });
   });
@@ -102,7 +102,7 @@ describe('specialty ingredient catalog', () => {
       category: 'Condiments & Sauces',
       aliases: [],
       imageStatus: 'ready',
-      imageStyle: 'mise-ingredient-v1',
+      imageStyle: 'rekky-ingredient-v1',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     };
@@ -138,7 +138,7 @@ describe('specialty ingredient catalog', () => {
               category: 'Condiments & Sauces',
               aliases: [],
               imageStatus: 'failed',
-              imageStyle: 'mise-ingredient-v1',
+              imageStyle: 'rekky-ingredient-v1',
               createdAt: new Date('2026-01-01T00:00:00.000Z'),
               updatedAt: new Date('2026-01-01T00:00:00.000Z'),
             },
@@ -150,10 +150,10 @@ describe('specialty ingredient catalog', () => {
     await listSpecialtyIngredients('');
 
     expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
-    expect(mockFind).toHaveBeenCalledWith({ imageStyle: 'mise-ingredient-v1' });
+    expect(mockFind).toHaveBeenCalledWith({ imageStyle: 'rekky-ingredient-v1' });
   });
 
-  test('lists persisted Mise catalog records without generating duplicate illustrations', async () => {
+  test('lists persisted Rekky catalog records without generating duplicate illustrations', async () => {
     mockFind.mockReturnValue({
       select: jest.fn().mockReturnValue({
         sort: jest.fn().mockReturnValue({
@@ -167,7 +167,7 @@ describe('specialty ingredient catalog', () => {
               aliases: ['gochujang paste'],
               imageStatus: 'ready',
               imageData: Buffer.from('stored-image'),
-              imageStyle: 'mise-ingredient-v1',
+              imageStyle: 'rekky-ingredient-v1',
               createdAt: new Date('2026-01-01T00:00:00.000Z'),
               updatedAt: new Date('2026-01-01T00:00:00.000Z'),
             },
@@ -180,7 +180,7 @@ describe('specialty ingredient catalog', () => {
       ingredients: [
         {
           _id: 'legacy-ingredient',
-          imageStyle: 'mise-ingredient-v1',
+          imageStyle: 'rekky-ingredient-v1',
           imageStatus: 'ready',
         },
       ],
@@ -198,7 +198,7 @@ describe('specialty ingredient catalog', () => {
       category: 'Condiments & Sauces',
       aliases: [],
       imageStatus: 'pending',
-      imageStyle: 'mise-ingredient-v1',
+      imageStyle: 'rekky-ingredient-v1',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     };
@@ -212,7 +212,7 @@ describe('specialty ingredient catalog', () => {
     expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
       {
         _id: 'ingredient-4',
-        imageStyle: 'mise-ingredient-v1',
+        imageStyle: 'rekky-ingredient-v1',
         imageStatus: 'pending',
       },
       { $set: { imageStatus: 'generating' } },

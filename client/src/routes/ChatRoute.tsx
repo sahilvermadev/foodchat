@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useRecoilCallback, useRecoilValue } from 'recoil';
 import { useToastContext } from '@librechat/client';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -58,6 +58,13 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
   const conversationId = routeConversationId || (isCookingMode ? Constants.NEW_CONVO : '');
   useIdChangeEffect(conversationId);
   const { hasSetConversation, conversation } = store.useCreateConversationAtom(index);
+  const lastConversationIdRef = useRef<string>('');
+  if (conversationId !== lastConversationIdRef.current) {
+    lastConversationIdRef.current = conversationId;
+    if (conversationId !== conversation?.conversationId) {
+      hasSetConversation.current = false;
+    }
+  }
   const { newConversation } = useNewConvo();
   const { showToast } = useToastContext();
   const localize = useLocalize();

@@ -50,11 +50,9 @@ Samwise is the cooking assistant persona.
 
 ### Compatibility Identifiers
 
-Public branding does not rename persisted compatibility identifiers. The MongoDB
-database remains `Mise`, and specialty ingredient illustrations remain keyed by
-`mise-ingredient-v1`. These names are versioned storage identifiers required to
-keep deployed user data readable without an operator-run migration. New
-user-facing product copy should use Rekky.
+Public branding does rename compatibility identifiers. The MongoDB
+database is `rekky`, and specialty ingredient illustrations are keyed by
+`rekky-ingredient-v1`. New user-facing product copy should use Rekky.
 
 ## Request Path
 

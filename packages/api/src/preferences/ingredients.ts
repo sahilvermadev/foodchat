@@ -10,7 +10,7 @@ import { specialtyIngredientSchema } from '@librechat/data-schemas';
 import { createIllustrationThumbnail, decodeIllustrationDataUrl } from '../illustrations/media';
 import type { IllustrationMedia } from '../illustrations/media';
 
-const imageStyle = 'mise-ingredient-v1';
+const imageStyle = 'rekky-ingredient-v1';
 const requestTimeoutMs = 45000;
 const generationLeaseMs = requestTimeoutMs * 2;
 const maxSuggestions = 12;
