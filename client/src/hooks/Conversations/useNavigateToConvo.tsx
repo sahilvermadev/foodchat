@@ -60,7 +60,10 @@ const useNavigateToConvo = (index = 0) => {
     [location.pathname],
   );
 
-  const fetchFreshData = async (conversation?: Partial<TConversation>) => {
+  const fetchFreshData = async (
+    conversation?: Partial<TConversation>,
+    targetMessageId?: string,
+  ) => {
     const conversationId = conversation?.conversationId;
     if (!conversationId) {
       return;
@@ -74,12 +77,16 @@ const useNavigateToConvo = (index = 0) => {
       const convoData = { ...data };
       clearModelForNonEphemeralAgent(convoData);
       setConversation(convoData);
-      navigate(getConversationPath(conversationId), { state: { focusChat: true } });
+      navigate(getConversationPath(conversationId), {
+        state: { focusChat: true, historySearchMessageId: targetMessageId },
+      });
     } catch (error) {
       console.error('Error fetching conversation data on navigation', error);
       if (conversation) {
         setConversation(conversation as TConversation);
-        navigate(getConversationPath(conversationId), { state: { focusChat: true } });
+        navigate(getConversationPath(conversationId), {
+          state: { focusChat: true, historySearchMessageId: targetMessageId },
+        });
       }
     }
   };
@@ -89,13 +96,14 @@ const useNavigateToConvo = (index = 0) => {
     options?: {
       resetLatestMessage?: boolean;
       currentConvoId?: string;
+      targetMessageId?: string;
     },
   ) => {
     if (!conversation) {
       logger.warn('conversation', 'Conversation not provided to `navigateToConvo`');
       return;
     }
-    const { resetLatestMessage = true, currentConvoId } = options || {};
+    const { resetLatestMessage = true, currentConvoId, targetMessageId } = options || {};
     logger.log('conversation', 'Navigating to conversation', conversation);
     hasSetConversation.current = true;
     setSubmission(null);
@@ -134,7 +142,7 @@ const useNavigateToConvo = (index = 0) => {
     clearMessagesCache(queryClient, currentConvoId);
     if (convo.conversationId !== Constants.NEW_CONVO && convo.conversationId) {
       queryClient.invalidateQueries([QueryKeys.conversation, convo.conversationId]);
-      fetchFreshData(convo);
+      fetchFreshData(convo, targetMessageId);
     } else {
       setConversation(convo);
       navigate(getConversationPath(convo.conversationId), { state: { focusChat: true } });

@@ -31,6 +31,33 @@ export type ConversationListResponse = {
   nextCursor: string | null;
 };
 
+export type ChatHistorySearchSource = 'title' | 'user' | 'assistant' | 'canvas';
+
+export type ChatHistorySearchMatch = {
+  source: ChatHistorySearchSource;
+  excerpt: string;
+  messageId?: string;
+  documentId?: string;
+  createdAt?: string;
+};
+
+export type ChatHistorySearchResult = Omit<MinimalConversation, 'conversationId'> & {
+  conversationId: string;
+  score: number;
+  totalMatches: number;
+  matches: ChatHistorySearchMatch[];
+};
+
+export type ChatHistorySearchParams = {
+  q: string;
+  limit?: number;
+};
+
+export type ChatHistorySearchResponse = {
+  query: string;
+  results: ChatHistorySearchResult[];
+};
+
 export type ConversationData = InfiniteData<ConversationListResponse>;
 export type ConversationUpdater = (
   data: ConversationData,

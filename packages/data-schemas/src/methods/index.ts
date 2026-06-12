@@ -32,6 +32,7 @@ import { createPresetMethods, type PresetMethods } from './preset';
 import { createConversationTagMethods, type ConversationTagMethods } from './conversationTag';
 import { createMessageMethods, type MessageMethods } from './message';
 import { createConversationMethods, type ConversationMethods } from './conversation';
+import { createHistorySearchMethods, type HistorySearchMethods } from './historySearch';
 /* Tier 3 — Complex (heavier injection) */
 import {
   createTxMethods,
@@ -92,6 +93,7 @@ export type AllMethods = UserMethods &
   ConversationTagMethods &
   MessageMethods &
   ConversationMethods &
+  HistorySearchMethods &
   TxMethods &
   TransactionMethods &
   SpendTokensMethods &
@@ -149,6 +151,7 @@ export function createMethods(
     getMessages: messageMethods.getMessages,
     deleteMessages: messageMethods.deleteMessages,
   });
+  const historySearchMethods = createHistorySearchMethods(mongoose);
 
   // ACL entry methods (used internally for removeAllPermissions)
   const aclEntryMethods = createAclEntryMethods(mongoose);
@@ -218,6 +221,7 @@ export function createMethods(
     ...createConversationTagMethods(mongoose),
     ...messageMethods,
     ...conversationMethods,
+    ...historySearchMethods,
     /* Tier 3 */
     ...txMethods,
     ...transactionMethods,
@@ -257,6 +261,7 @@ export type {
   ConversationTagMethods,
   MessageMethods,
   ConversationMethods,
+  HistorySearchMethods,
   TxMethods,
   TransactionMethods,
   SpendTokensMethods,

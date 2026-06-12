@@ -1,7 +1,4 @@
-import {
-  QueryKeys,
-  dataService,
-} from 'librechat-data-provider';
+import { QueryKeys, dataService } from 'librechat-data-provider';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   UseInfiniteQueryOptions,
@@ -13,6 +10,7 @@ import type t from 'librechat-data-provider';
 import type {
   ConversationListResponse,
   ConversationListParams,
+  ChatHistorySearchResponse,
   MessagesListParams,
   MessagesListResponse,
   SharedLinksListParams,
@@ -84,6 +82,24 @@ export const useConversationsInfiniteQuery = (
     cacheTime: 30 * 60 * 1000, // 30 minutes
     ...config,
   });
+};
+
+export const useChatHistorySearchQuery = (
+  query: string,
+  config?: UseQueryOptions<ChatHistorySearchResponse>,
+) => {
+  const normalizedQuery = query.trim();
+
+  return useQuery<ChatHistorySearchResponse>(
+    [QueryKeys.searchConversations, normalizedQuery],
+    () => dataService.searchChatHistory({ q: normalizedQuery, limit: 20 }),
+    {
+      enabled: normalizedQuery.length >= 2,
+      staleTime: 30000,
+      cacheTime: 300000,
+      ...config,
+    },
+  );
 };
 
 export const useMessagesInfiniteQuery = (

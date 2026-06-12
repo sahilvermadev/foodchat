@@ -54,6 +54,23 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/search', async (req, res) => {
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
+
+  if (query.length < 2) {
+    return res.status(200).json({ query, results: [] });
+  }
+
+  try {
+    const result = await db.searchChatHistory(req.user.id, { query, limit });
+    return res.status(200).json(result);
+  } catch (error) {
+    logger.error('Error searching chat history', error);
+    return res.status(500).json({ error: 'Error searching chat history' });
+  }
+});
+
 router.get('/:conversationId', async (req, res) => {
   const { conversationId } = req.params;
   const convo = await db.getConvo(req.user.id, conversationId);

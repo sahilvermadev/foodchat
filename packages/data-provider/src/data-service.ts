@@ -499,6 +499,12 @@ export const listConversations = (
   return request.get(endpoints.conversations(params ?? {}));
 };
 
+export const searchChatHistory = (
+  params: q.ChatHistorySearchParams,
+): Promise<q.ChatHistorySearchResponse> => {
+  return request.get(endpoints.chatHistorySearch(params));
+};
+
 export function getConversations(cursor: string): Promise<t.TGetConversationsResponse> {
   return request.get(endpoints.conversations({ cursor }));
 }

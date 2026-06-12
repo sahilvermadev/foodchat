@@ -109,6 +109,9 @@ export const conversations = (params: q.ConversationListParams) => {
   return `${conversationsRoot}${buildQuery(params)}`;
 };
 
+export const chatHistorySearch = (params: q.ChatHistorySearchParams) =>
+  `${conversationsRoot}/search${buildQuery(params)}`;
+
 export const conversationById = (id: string) => `${conversationsRoot}/${id}`;
 
 export const genTitle = (conversationId: string) =>

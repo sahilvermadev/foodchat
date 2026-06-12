@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
 import { CSSTransition } from 'react-transition-group';
@@ -25,6 +26,8 @@ function MessagesViewContent({
   const scrollButtonPreference = useRecoilValue(store.showScrollButton);
   const [currentEditId, setCurrentEditId] = useState<number | string | null>(-1);
   const scrollToBottomRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const lastSearchNavigationRef = useRef<string>();
 
   const {
     conversation,
@@ -36,6 +39,58 @@ function MessagesViewContent({
   } = useMessageScrolling(_messagesTree);
 
   const { conversationId } = conversation ?? {};
+  const hasNoMessages = _messagesTree === null || _messagesTree?.length === 0;
+  const emptyState = isCookingChat ? null : (
+    <div
+      className={cn('flex w-full items-center justify-center p-3 text-text-secondary', fontSize)}
+    >
+      {localize('com_ui_nothing_found')}
+    </div>
+  );
+
+  useEffect(() => {
+    const targetMessageId = (location.state as { historySearchMessageId?: string } | null)
+      ?.historySearchMessageId;
+    const navigationTarget = `${location.key}:${targetMessageId ?? ''}`;
+    if (
+      !targetMessageId ||
+      lastSearchNavigationRef.current === navigationTarget ||
+      !_messagesTree?.length
+    ) {
+      return;
+    }
+
+    let attempts = 0;
+    const interval = window.setInterval(() => {
+      attempts += 1;
+      const target = document.getElementById(targetMessageId);
+      if (!target) {
+        if (attempts >= 10) {
+          window.clearInterval(interval);
+        }
+        return;
+      }
+      window.clearInterval(interval);
+      lastSearchNavigationRef.current = navigationTarget;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.add(
+        'ring-2',
+        'ring-border-heavy',
+        'ring-offset-4',
+        'ring-offset-surface-primary',
+      );
+      window.setTimeout(() => {
+        target.classList.remove(
+          'ring-2',
+          'ring-border-heavy',
+          'ring-offset-4',
+          'ring-offset-surface-primary',
+        );
+      }, 1800);
+    }, 100);
+
+    return () => window.clearInterval(interval);
+  }, [_messagesTree, location.key, location.state]);
 
   return (
     <>
@@ -52,17 +107,8 @@ function MessagesViewContent({
             }}
           >
             <div className="flex flex-col pb-9 pt-14 dark:bg-transparent">
-              {(_messagesTree && _messagesTree.length == 0) || _messagesTree === null ? (
-                isCookingChat ? null : (
-                  <div
-                    className={cn(
-                      'flex w-full items-center justify-center p-3 text-text-secondary',
-                      fontSize,
-                    )}
-                  >
-                    {localize('com_ui_nothing_found')}
-                  </div>
-                )
+              {hasNoMessages ? (
+                emptyState
               ) : (
                 <>
                   <div ref={screenshotTargetRef}>
