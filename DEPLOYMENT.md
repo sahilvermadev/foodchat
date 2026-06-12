@@ -124,13 +124,14 @@ mcpServers:
     type: stdio
     command: /usr/bin/python3
     args:
-      - /app/scripts/epicure_core_mcp_server.py
+      - scripts/epicure_core_mcp_server.py
     timeout: 60000
 ```
 
 Runtime details:
 
 * The server script is [scripts/epicure_core_mcp_server.py](file:///home/sahil/projects/foodchat/scripts/epicure_core_mcp_server.py).
+* The script path is repository-relative so the same configuration resolves locally from the repository root and in Railway from `/app`.
 * The checked-in model artifact is `data/epicure-core`, sourced from Hugging Face `Kaikaku/epicure-core`.
 * Docker installs `python3` and Alpine `py3-numpy`; the Epicure runtime must not depend on a PyPI install during Railway builds.
 * The server implements the stdio MCP JSON-RPC surface directly and exposes the compatibility tools Samwise expects: `neighbors`, `pairing_score`, `find_pairings`, `closest_mode`, `compare_on_axis`, `morph`, and `cultural_profile`.
