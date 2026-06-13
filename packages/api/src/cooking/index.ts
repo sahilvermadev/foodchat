@@ -8,3 +8,5 @@ export * from './planner';
 export * from './quality';
 export * from './routing';
 export * from './context';
+export * from './category';
+export * from './savedRecipeDiscussion';

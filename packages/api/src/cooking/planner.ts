@@ -1,5 +1,6 @@
-import type { CookingDraft, TMessage } from 'librechat-data-provider';
+import type { CookingChatCategory, CookingDraft, TMessage } from 'librechat-data-provider';
 
+import { deriveCookingChatCategory } from './category';
 import type { TurnContext } from './context';
 import type {
   CookingResponseMode,
@@ -23,6 +24,8 @@ export type CookingPromptProfile =
   | 'source_or_research'
   | 'active_canvas_discussion';
 
+export type CookingDeliveryMode = 'glance' | 'standard' | 'deep_dive' | 'canvas_confirmation';
+
 export type CookingPlannerFallbackReason = 'provider_error' | 'malformed_json' | 'invalid_policy';
 
 export type CookingContextCategory =
@@ -41,6 +44,7 @@ export type CookingContextCategory =
   | 'research';
 
 export type CookingTurnPlan = {
+  category: CookingChatCategory;
   intent: CookingTurnIntent;
   action: CookingPlannedAction;
   confidence: 'high' | 'medium' | 'low';
@@ -51,6 +55,7 @@ export type CookingTurnPlan = {
   selectedContextCategories: CookingContextCategory[];
   withheldContextCategories: CookingContextCategory[];
   promptProfile: CookingPromptProfile;
+  deliveryMode: CookingDeliveryMode;
   clarification: {
     needed: boolean;
     reasonLabel?: string;
@@ -231,6 +236,47 @@ function promptProfileForAction(input: {
   return 'routine_direct';
 }
 
+function requestsDeepDive(text: string): boolean {
+  return /\b(why|explain|compare|comparison|difference|tradeoffs?|pros and cons|science|mechanism|in detail|deep dive|walk me through)\b/i.test(
+    text,
+  );
+}
+
+function activeCookingCue(text: string): boolean {
+  return /\b(now|right now|quick|quickly|fast|urgent|asap|while (i'?m|i am) cooking|currently cooking|in the pan|on the stove)\b/i.test(
+    text,
+  );
+}
+
+function deliveryModeForPlan(input: {
+  action: CookingPlannedAction;
+  intent: CookingTurnIntent;
+  promptProfile: CookingPromptProfile;
+  text: string;
+}): CookingDeliveryMode {
+  if (input.action === 'create_document' || input.action === 'revise_document') {
+    return 'canvas_confirmation';
+  }
+
+  if (input.action === 'ask_clarifying_question') {
+    return 'glance';
+  }
+
+  if (requestsDeepDive(input.text)) {
+    return 'deep_dive';
+  }
+
+  if (
+    input.intent === 'quick_recommendation' ||
+    input.promptProfile === 'active_canvas_discussion' ||
+    activeCookingCue(input.text)
+  ) {
+    return 'glance';
+  }
+
+  return 'standard';
+}
+
 function selectedCategoriesForUnderstanding(
   understanding: CookingTurnUnderstanding,
 ): CookingContextCategory[] {
@@ -299,6 +345,11 @@ function fallbackPlan(
       ? (['document'] as const)
       : []),
   ]);
+  const promptProfile = promptProfileForAction({
+    action,
+    activeCanvas: Boolean(input.activeDraft),
+    intent,
+  });
   const allCategories = [...contextCategories];
   let privacySafeRationaleLabels = ['runtime_context_only'];
   if (fallbackReason) {
@@ -308,6 +359,7 @@ function fallbackPlan(
     privacySafeRationaleLabels = ['attached_image_recipe_source'];
   }
   return {
+    category: deriveCookingChatCategory({ text: input.text, intent, action }),
     intent,
     action,
     confidence: fallbackReason ? 'low' : 'medium',
@@ -316,11 +368,8 @@ function fallbackPlan(
     withheldContextCategories: allCategories.filter(
       (category) => !selectedContextCategories.includes(category),
     ),
-    promptProfile: promptProfileForAction({
-      action,
-      activeCanvas: Boolean(input.activeDraft),
-      intent,
-    }),
+    promptProfile,
+    deliveryMode: deliveryModeForPlan({ action, intent, promptProfile, text: input.text }),
     clarification: {
       needed: understanding.responseMode === 'ask_clarifying_question',
     },
@@ -404,6 +453,7 @@ function normalizePlan(input: CookingPlannerInput, raw: RawCookingPlan): Cooking
       ? 'source_driven_request'
       : normalizedIntent(raw);
   const promptProfile = normalizedPromptProfile(input, raw, action, intent);
+  const deliveryMode = deliveryModeForPlan({ action, intent, promptProfile, text: input.text });
   const plannerSelected = validContextCategories(raw.selectedContextCategories);
   const selectedContextCategories = unique([
     'hard_constraints' as const,
@@ -427,6 +477,7 @@ function normalizePlan(input: CookingPlannerInput, raw: RawCookingPlan): Cooking
     (Boolean(input.activeDraft) && (action === 'read_document' || action === 'revise_document'));
 
   return {
+    category: deriveCookingChatCategory({ text: input.text, intent, action }),
     intent,
     action,
     confidence,
@@ -442,6 +493,7 @@ function normalizePlan(input: CookingPlannerInput, raw: RawCookingPlan): Cooking
             (category) => !selectedContextCategories.includes(category),
           ),
     promptProfile,
+    deliveryMode,
     clarification: {
       needed: Boolean(raw.clarificationNeeded) || action === 'ask_clarifying_question',
       reasonLabel:

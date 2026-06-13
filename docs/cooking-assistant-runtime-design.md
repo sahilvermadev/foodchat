@@ -23,13 +23,16 @@ For each user turn, the server sends the model:
 4. A dynamically selected set of document and web-research tools.
 5. A prompt profile whose detail depends on routine, document, source/research, or
    active-canvas discussion work.
-6. Prior chat history and the new user message.
+6. A deterministic delivery mode that controls chat length and shape.
+7. Prior chat history and the new user message.
 
 The model is intended to converse naturally for ordinary questions and only create or
 modify a canvas when the user wants a durable recipe, guide, or prep plan. Web sources
 are intended to support an answer, never replace it. Completed response text is
 buffered until a quality gate accepts it or a single repair pass succeeds; rejected
-first drafts are not streamed to the user.
+first drafts are not streamed to the user. Once accepted, buffered responses are
+revealed to the client in semantic blocks such as paragraphs or list items, not fake
+character-level typing.
 
 The system can be slow because a single user action may invoke multiple model calls,
 web extraction calls, and a same-provider fallback retry. It can be over-directed
@@ -76,6 +79,11 @@ route in `api/server/routes/cooking.js` handles streaming, persistence, and
 post-response preference curation. Agent behavior lives primarily in
 `packages/api/src/cooking/agent.ts`.
 
+Cooking-created SSE events are tagged so the client can anchor the viewport to the
+assistant response start instead of following the bottom of a growing answer. Long
+responses therefore preserve the readable beginning of the answer and rely on the
+existing jump-to-latest control when the user wants to move to the end.
+
 ## What The Model Receives
 
 ### Prompt Assembly
@@ -93,6 +101,7 @@ The first model message is a system message assembled in this order:
 | Preloaded linked-source extraction | Tavily result, when a URL was pasted                         | Gives source content before the first provider turn                       |
 | Attached-image source requirement  | current upload or restored historical recipe image           | Makes the visible image facts control source-faithful recipe work         |
 | Current product/tool state         | dynamic tool selector                                        | Explains which actions are possible now                                   |
+| Chat delivery rules                | deterministic planner/runtime mode                           | Keeps chat concise, action-first, and distinct from canvas content        |
 | Main cooking instructions          | prompt profile                                               | Defines only the voice, document, and sourcing rules needed for this turn |
 
 The server then appends earlier non-error, finished messages for the current
@@ -117,6 +126,23 @@ The main instruction block currently asks the model to behave as follows:
 | Recipe image use       | Treat an attached recipe screenshot as a controlling source. Preserve visible quantities, groups, variants, yield, temperatures, timing, and method; ask about unreadable critical facts instead of inventing them. |
 | Recipe document format | Produce structured, highly detailed markdown with orientation, ingredients, method, sensory cues, timers, troubleshooting, serving notes, and purposeful variations when applicable.                                |
 
+### Delivery Modes
+
+The planner does not ask the model to choose response length. Runtime derives a
+`deliveryMode` from the validated intent, action, prompt profile, and current user text:
+
+| Mode                  | When used                                                                     | Chat contract                                                                |
+| --------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `glance`              | Quick recommendations, active cooking cues, clarifications, canvas follow-ups | 40-90 words where possible; answer first; at most three short bullets        |
+| `standard`            | Normal cooking guidance without explicit deep explanation                     | 100-180 words where possible; clear answer before explanation                |
+| `deep_dive`           | User explicitly asks why, comparison, tradeoffs, or detailed explanation      | Structured explanation is allowed, but still starts with the practical point |
+| `canvas_confirmation` | Successful document creation or revision                                      | One short sentence; do not repeat the recipe or canvas content in chat       |
+
+The quality gate can record advisory labels when a reply is too verbose, buries the
+useful action, opens with excessive preamble, or repeats full canvas content. These
+labels guide repair and diagnostics, but they are not allowed to hide an otherwise
+useful answer from the user.
+
 These instructions are strong enough to shape normal answers even when no document is
 being created. A simple conversational turn still carries the full recipe-document
 contract unless the provider chooses to ignore irrelevant parts.
@@ -128,6 +154,36 @@ conversation turns and update durable saved preferences. It is instructed not to
 one-off recipe requests, temporary ingredients, casual curiosity, or unconfirmed
 long-term goals. On later chats, the resulting preferences markdown is passed back
 into the cooking system prompt.
+
+### Conversation Categories
+
+Each Samwise conversation stores one broad `cookingCategory` for history organization:
+
+| Category       | Session purpose                                                         |
+| -------------- | ----------------------------------------------------------------------- |
+| `ideas`        | Deciding what to cook, recommendations, planning, or flavor exploration |
+| `recipes`      | Creating, importing, or recreating a recipe                             |
+| `saved_recipe` | Discussing a recipe opened from the user's saved Cooking Library        |
+| `adjustments`  | Substituting, scaling, adapting, or otherwise revising a recipe         |
+| `cooking_help` | Technique, troubleshooting, food safety, or active cook-along guidance  |
+
+The category module derives a category from the planner's validated intent and action,
+without adding another model field or model call. Runtime merges it with the stored session
+category in this precedence order: `saved_recipe`, `recipes`, `adjustments`, `cooking_help`,
+then `ideas`. Categories can therefore become more specific as a session develops but
+cannot be demoted by a weaker follow-up. A conversation containing a recipe document is
+always categorized as `recipes`, regardless of later questions or adjustments, unless it
+was created from a saved library recipe. Saved-recipe chats are assigned by verified recipe
+ID at conversation creation and remain `saved_recipe` for the whole session. The resolved
+category is stored on the conversation and copied into the assistant message metadata for
+diagnostics.
+
+Starting a saved-recipe discussion uses a dedicated backend operation. Ownership is checked
+with a side-effect-free existence query rather than the full recipe detail loader, so chat
+authorization does not trigger legacy repairs or illustration scheduling. The operation then
+creates the conversation document and persists the conversation provenance. If conversation
+persistence fails, it removes the newly created document before returning the error; if that
+rollback also fails, a typed error retains both failures for diagnostics.
 
 ## Tools The Model Can Use
 
@@ -295,14 +351,15 @@ time-to-first-visible-text.
 
 ## Persistence And UI Responsibilities
 
-| Layer                    | Responsibility                                                                                                                                                                                                                       |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Chat route               | Persists user message, normalized file/source metadata, Samwise response, conversation data, prompt suggestion metadata, and source metadata; restores the latest prior recipe image for follow-up turns; queues preference curation |
-| Cooking document service | Stores conversation documents, selected document, and cooking-session snapshots                                                                                                                                                      |
-| Cooking workspace        | Displays either full chat or chat alongside the selected canvas; supports multiple document tabs and deletion                                                                                                                        |
-| Recipe canvas            | Displays and allows user-driven saving of document markdown into the library                                                                                                                                                         |
-| Recipe library           | Displays saved recipes/guides/prep plans and asynchronously generated illustrations                                                                                                                                                  |
-| Message renderer         | Shows prompt suggestion chips and source cards from message metadata                                                                                                                                                                 |
+| Layer                             | Responsibility                                                                                                                                                                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chat route                        | Persists user message, normalized file/source metadata, Samwise response, conversation data, prompt suggestion metadata, and source metadata; restores the latest prior recipe image for follow-up turns; queues preference curation |
+| Cooking document service          | Stores conversation documents, selected document, and cooking-session snapshots                                                                                                                                                      |
+| Saved-recipe discussion operation | Verifies recipe ownership, creates the initial document, persists saved-recipe provenance, and compensates for partial persistence failures                                                                                          |
+| Cooking workspace                 | Displays either full chat or chat alongside the selected canvas; supports multiple document tabs and deletion                                                                                                                        |
+| Recipe canvas                     | Displays and allows user-driven saving of document markdown into the library                                                                                                                                                         |
+| Recipe library                    | Displays saved recipes/guides/prep plans and asynchronously generated illustrations                                                                                                                                                  |
+| Message renderer                  | Shows prompt suggestion chips and source cards from message metadata                                                                                                                                                                 |
 
 The assistant cannot save a recipe to the library through its current tool surface.
 It creates or revises conversation documents; the user presses **Save** in the
@@ -427,21 +484,25 @@ this document:
 
 ## Implementation Map
 
-| Module                                                | Role in this design                                                                                                                         |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/api/src/cooking/agent.ts`                   | System instructions, prompt construction, tool selection/execution, provider loop, source correction, suggestions, timing events            |
-| `packages/api/src/cooking/web.ts`                     | Tavily-backed search and extraction tools, URL safety checks, recipe fact extraction                                                        |
-| `packages/api/src/cooking/service.ts`                 | Conversation document persistence and cooking-session persistence                                                                           |
-| `packages/api/src/cooking/canvas.ts`                  | Validation/recognition of usable canvas markdown                                                                                            |
-| `packages/api/src/preferences/batch.ts`               | Background curation of durable preferences learned from chat                                                                                |
-| `packages/api/src/recipes/service.ts`                 | Saved library documents, categorization, and illustration scheduling                                                                        |
-| `packages/api/src/recipes/illustrate.ts`              | Library illustration generation prompt/provider                                                                                             |
-| `api/server/routes/cooking.js`                        | Authenticated SSE chat API, context loading, image-source restoration, message persistence, response metadata, performance trace collection |
-| `packages/data-provider/src/createPayload.ts`         | Client-to-server routing into the cooking chat bridge                                                                                       |
-| `client/src/routes/ChatRoute.tsx`                     | Cooking route setup, default model selection, document queries, workspace composition                                                       |
-| `client/src/components/Cooking/Workspace.tsx`         | Chat/canvas layout and visible document selection                                                                                           |
-| `client/src/components/Cooking/WebSources.tsx`        | Displays supporting source cards saved on assistant messages                                                                                |
-| `client/src/components/Cooking/PromptSuggestions.tsx` | Displays suggested next-turn chips                                                                                                          |
-| `client/src/components/Cooking/RecipeCanvas.tsx`      | Displays active document and provides user-initiated save/update actions                                                                    |
-| `client/src/utils/rekkyDefaults.ts`                   | Client default endpoint, model, and assistant display constants                                                                             |
-| `librechat.yaml`                                      | OpenRouter endpoint and Tavily web-search configuration                                                                                     |
+| Module                                                 | Role in this design                                                                                                                         |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/api/src/cooking/agent.ts`                    | System instructions, prompt construction, tool selection/execution, provider loop, source correction, suggestions, timing events            |
+| `packages/api/src/cooking/web.ts`                      | Tavily-backed search and extraction tools, URL safety checks, recipe fact extraction                                                        |
+| `packages/api/src/cooking/service.ts`                  | Conversation document persistence and cooking-session persistence                                                                           |
+| `packages/api/src/cooking/savedRecipeDiscussion.ts`    | Saved-recipe discussion startup, ownership verification, provenance persistence, and compensating rollback                                  |
+| `packages/api/src/cooking/canvas.ts`                   | Validation/recognition of usable canvas markdown                                                                                            |
+| `packages/api/src/preferences/batch.ts`                | Background curation of durable preferences learned from chat                                                                                |
+| `packages/api/src/recipes/service.ts`                  | Saved library documents, categorization, and illustration scheduling                                                                        |
+| `packages/api/src/recipes/illustrate.ts`               | Library illustration generation prompt/provider                                                                                             |
+| `api/server/routes/cooking.js`                         | Authenticated SSE chat API, context loading, image-source restoration, message persistence, response metadata, performance trace collection |
+| `packages/data-provider/src/createPayload.ts`          | Client-to-server routing into the cooking chat bridge                                                                                       |
+| `client/src/routes/ChatRoute.tsx`                      | Cooking route setup, default model selection, document queries, workspace composition                                                       |
+| `client/src/components/Cooking/Workspace.tsx`          | Chat/canvas layout and visible document selection                                                                                           |
+| `client/src/components/Cooking/WebSources.tsx`         | Displays supporting source cards saved on assistant messages                                                                                |
+| `client/src/components/Cooking/PromptSuggestions.tsx`  | Displays suggested next-turn chips                                                                                                          |
+| `client/src/components/Cooking/RecipeCanvas.tsx`       | Displays active document and provides user-initiated save/update actions                                                                    |
+| `client/src/components/Chat/landingLayout.ts`          | Central responsive geometry for the landing stage, composer, and suggestion rail                                                            |
+| `client/src/hooks/Input/transcriptionSession.ts`       | Preserves pre-recording text and composes stable final/interim speech transcripts                                                           |
+| `client/src/hooks/Chat/useStartCookingConversation.ts` | Owns cache invalidation and new cooking-conversation startup order                                                                          |
+| `client/src/utils/rekkyDefaults.ts`                    | Client default endpoint, model, and assistant display constants                                                                             |
+| `librechat.yaml`                                       | OpenRouter endpoint and Tavily web-search configuration                                                                                     |

@@ -1,4 +1,4 @@
-import React, { useState, memo, useEffect } from 'react';
+import React, { useState, memo } from 'react';
 import { useRecoilValue } from 'recoil';
 import store from '~/store';
 import { ChevronDown, ChevronUp, Terminal } from 'lucide-react';
@@ -14,6 +14,14 @@ type HoodProps = {
   message: TMessage;
   isSubmitting?: boolean;
 };
+
+type CookingStatusKey =
+  | 'com_cooking_status_checking_recipe'
+  | 'com_cooking_status_choosing_approach'
+  | 'com_cooking_status_planning'
+  | 'com_cooking_status_thinking'
+  | 'com_cooking_status_updating_canvas'
+  | 'com_cooking_status_verifying';
 
 function getStepTitle(type: string, payload: Record<string, any>) {
   switch (type) {
@@ -145,23 +153,38 @@ const StepRow = memo(function StepRow({ step }: { step: StepEvent }) {
   );
 });
 
+function statusKeyForSteps(steps: StepEvent[]): CookingStatusKey {
+  const latestType = steps[steps.length - 1]?.type ?? '';
+  if (latestType.startsWith('quality_')) {
+    return 'com_cooking_status_verifying';
+  }
+  if (latestType === 'web_context_loaded' || latestType === 'read_source') {
+    return 'com_cooking_status_checking_recipe';
+  }
+  if (latestType.startsWith('planner_') || latestType === 'model_routing') {
+    return 'com_cooking_status_choosing_approach';
+  }
+  if (latestType.startsWith('tool_')) {
+    return 'com_cooking_status_updating_canvas';
+  }
+  if (latestType === 'turn_start') {
+    return 'com_cooking_status_planning';
+  }
+  return 'com_cooking_status_thinking';
+}
+
 function Hood({ message, isSubmitting }: HoodProps) {
   const [open, setOpen] = useState(false);
   const steps = useRecoilValue(store.stepsByMessageId(message.messageId)) || [];
-  const hasText = Boolean(message.text?.trim());
   const localize = useLocalize();
-
-  useEffect(() => {
-    if (isSubmitting && !hasText) {
-      setOpen(true);
-    } else {
-      setOpen(false);
-    }
-  }, [isSubmitting, hasText]);
 
   if (message.isCreatedByUser || steps.length === 0) {
     return null;
   }
+
+  const label = isSubmitting
+    ? localize(statusKeyForSteps(steps))
+    : localize('com_cooking_look_under_hood');
 
   return (
     <div className="mb-2 flex max-w-xl flex-col self-start">
@@ -172,7 +195,7 @@ function Hood({ message, isSubmitting }: HoodProps) {
         <Terminal
           className={`text-text-secondary/60 h-3 w-3 transition-colors ${isSubmitting ? 'animate-pulse text-text-primary' : ''}`}
         />
-        <span>{localize('com_cooking_look_under_hood')}</span>
+        <span>{label}</span>
         <span className="font-normal opacity-60">
           ({localize('com_cooking_step_count', { 0: steps.length })})
         </span>

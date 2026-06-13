@@ -7,6 +7,7 @@ import {
 
 function plan(overrides: Partial<CookingTurnPlan> = {}): CookingTurnPlan {
   return {
+    category: 'ideas',
     intent: 'quick_recommendation',
     action: 'direct_answer',
     confidence: 'high',
@@ -17,6 +18,7 @@ function plan(overrides: Partial<CookingTurnPlan> = {}): CookingTurnPlan {
     selectedContextCategories: ['hard_constraints', 'locale'],
     withheldContextCategories: ['specialty_ingredients'],
     promptProfile: 'routine_direct',
+    deliveryMode: 'glance',
     clarification: {
       needed: false,
     },
@@ -59,6 +61,28 @@ describe('cooking response quality gate', () => {
       failureLabels: [],
       repairInstruction: undefined,
     });
+  });
+
+  test('treats delivery budget labels as advisory instead of blocking', async () => {
+    const longReply = Array.from({ length: 140 }, (_, index) => `word${index}`).join(' ');
+    const result = await validateCookingResponseWithJudge(
+      {
+        text: longReply,
+        turnPlan: plan({ deliveryMode: 'glance' }),
+        draftChanged: false,
+        webSources: [],
+      },
+      async () =>
+        JSON.stringify({
+          passes: false,
+          failureLabels: ['overlong_for_delivery_mode'],
+          rationaleLabels: ['too_verbose'],
+        }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.failureLabels).toContain('overlong_for_delivery_mode');
+    expect(result.repairInstruction).toContain('glance is 40-90 words');
   });
 
   test('LLM quality judge can pass semantically useful phrasing that lexical fallback would reject', async () => {

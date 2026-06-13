@@ -4,6 +4,7 @@ import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { MCPManager } from '~/mcp/MCPManager';
 
 import type {
+  CookingChatCategory,
   CookingDocumentType,
   CookingDraft,
   TCustomConfig,
@@ -17,7 +18,12 @@ import { buildTurnContext } from './context';
 import { createCookingWebContext } from './web';
 import type { CookingWebSource } from './web';
 import { planCookingTurn } from './planner';
-import type { CookingPlannedAction, CookingPromptProfile, CookingTurnPlan } from './planner';
+import type {
+  CookingDeliveryMode,
+  CookingPlannedAction,
+  CookingPromptProfile,
+  CookingTurnPlan,
+} from './planner';
 import { generateCookingDraft, getCookingDraftByConversation, updateCookingDraft } from './service';
 import { CookingValidationError } from './validation';
 import { buildPreferenceBrief } from './brief';
@@ -25,6 +31,7 @@ import { validateCookingResponseHardBoundaries, validateCookingResponseWithJudge
 import type { CookingQualityFailureLabel } from './quality';
 import { routeCookingModels, routeCookingPlanner } from './routing';
 import type { CookingModelPurpose, CookingModelRoutingReason } from './routing';
+import { canStreamCookingTurnBeforeValidation } from './streaming';
 import { ensureInlineSourceCitations } from './citations';
 import type { AvailableCookingTool as CitationCookingTool } from './citations';
 import {
@@ -185,6 +192,7 @@ export type CookingChatResult = {
   webSources: CookingWebSource[];
   activeIntent?: CookingTurnIntent;
   activeAction?: CookingPlannedAction;
+  activeCategory?: CookingChatCategory;
 };
 
 export type CookingChatTimingEvent = {
@@ -410,6 +418,38 @@ function cookingSystemInstructionsForProfile(profile: CookingPromptProfile): str
     return withoutCanvasRequirements;
   }
   return withoutSection(withoutCanvasRequirements, 'Cooking document contract');
+}
+
+function cookingDeliveryInstructions(mode: CookingDeliveryMode): string {
+  const common = [
+    'Cooking chat delivery rules:',
+    '- Put the useful cooking action, answer, or decision first.',
+    '- Follow with the key sensory endpoint, warning, or tradeoff when useful.',
+    '- Keep explanations after the action, not before it.',
+    '- Full recipes belong on the cooking canvas; do not restate full canvas contents in chat.',
+  ];
+  if (mode === 'glance') {
+    return [
+      ...common,
+      '- Delivery mode: glance. Use 40-90 words when possible, with at most 3 short bullets.',
+    ].join('\n');
+  }
+  if (mode === 'deep_dive') {
+    return [
+      ...common,
+      '- Delivery mode: deep_dive. Use structured explanation only because the user asked for why, comparison, or detail.',
+    ].join('\n');
+  }
+  if (mode === 'canvas_confirmation') {
+    return [
+      ...common,
+      '- Delivery mode: canvas_confirmation. After creating or revising a document, reply with one short sentence confirming the result and do not repeat the recipe.',
+    ].join('\n');
+  }
+  return [
+    ...common,
+    '- Delivery mode: standard. Use 100-180 words when possible and keep the answer easy to scan.',
+  ].join('\n');
 }
 
 const tools: CookingToolDefinition[] = [
@@ -918,6 +958,14 @@ type AvailableToolState = {
   availableToolNameSet: Set<string>;
 };
 
+function emptyAvailableToolState(): AvailableToolState {
+  return {
+    availableTools: [],
+    availableToolNames: [],
+    availableToolNameSet: new Set(),
+  };
+}
+
 function buildAvailableToolState({
   activeCanvas,
   allowDocumentTools,
@@ -1106,6 +1154,21 @@ function parseArguments(value: string): Record<string, unknown> {
     return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     return {};
+  }
+}
+
+function toolPayloadHasError(content: string | undefined): boolean {
+  if (!content) {
+    return false;
+  }
+  if (/^\s*error\s*:/i.test(content)) {
+    return true;
+  }
+  try {
+    const parsed = JSON.parse(content) as { error?: unknown; ok?: unknown };
+    return typeof parsed.error === 'string' || parsed.ok === false;
+  } catch {
+    return false;
   }
 }
 
@@ -2176,6 +2239,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         linkedSourcePreload.context,
         attachedImageSourceContext(imageSourceState),
         toolStateContext(activeCanvas, availableToolState.availableTools),
+        cookingDeliveryInstructions(turnPlan.deliveryMode),
         cookingSystemInstructionsForProfile(turnPlan.promptProfile),
       ]
         .filter(Boolean)
@@ -2210,6 +2274,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     plannedIntent: turnPlan.intent,
     plannedAction: turnPlan.action,
     promptProfile: turnPlan.promptProfile,
+    deliveryMode: turnPlan.deliveryMode,
   });
   logCookingAgent('prompt_built', {
     conversationId: input.conversationId,
@@ -2217,6 +2282,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     systemPromptChars: systemPromptContent.length,
     historyMessageCount: Math.max(0, messages.length - 2),
     promptProfile: turnPlan.promptProfile,
+    deliveryMode: turnPlan.deliveryMode,
     activeCanvasContextIncluded:
       turnPlan.promptProfile === 'active_canvas_discussion' ||
       turnPlan.promptProfile === 'document_work',
@@ -2235,19 +2301,16 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
   let latestCanvasUserMessage = '';
   let missingCanvasMutationRetryUsed = false;
   let canvasMutationToolAttempted = false;
+  let nonMutatingToolPayloadErrorCount = 0;
 
   const isLowRiskTurn =
     process.env.NODE_ENV !== 'test' &&
-    !activeCanvas &&
-    !draftChanged &&
-    !input.preferencesMarkdown?.trim() &&
-    (turnPlan.intent === 'general_cooking_question' ||
-      turnPlan.intent === 'quick_recommendation') &&
-    turnPlan.action === 'direct_answer' &&
-    turnPlan.promptProfile === 'routine_direct' &&
-    !sourceState.readRequired &&
-    turnPlan.constraints.hard.length === 0 &&
-    turnPlan.constraints.soft.length === 0;
+    canStreamCookingTurnBeforeValidation({
+      turnPlan,
+      activeCanvas,
+      draftChanged,
+      sourceReadRequired: sourceState.readRequired,
+    });
 
   const validateAndRepairResponse = async (
     responseText: string,
@@ -2485,6 +2548,10 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         'needless_clarification',
         'canvas_claim_without_mutation',
         'unnecessary_restriction_disclosure',
+        'overlong_for_delivery_mode',
+        'buried_primary_action',
+        'repeats_canvas_content',
+        'excessive_preamble',
       ].includes(label),
     );
     if (hardBoundaryQuality.ok && quality.qualityJudgeUsed && canOverrideSemanticVeto) {
@@ -2822,6 +2889,23 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           tool_call_id: toolCall.id,
           content: result.content,
         });
+        if (!isCanvasMutationTool(toolCall.function.name) && toolPayloadHasError(result.content)) {
+          nonMutatingToolPayloadErrorCount += 1;
+          if (nonMutatingToolPayloadErrorCount >= 2) {
+            availableToolState = emptyAvailableToolState();
+            messages.push({
+              role: 'system',
+              content:
+                'The optional culinary science tool returned repeated argument or vocabulary errors. Stop calling tools for this turn and answer the user directly from cooking knowledge. Briefly mention uncertainty only if it affects the practical recommendation.',
+            });
+            logCookingAgent('tool_payload_error_tools_disabled', {
+              conversationId: input.conversationId,
+              turn,
+              toolName: toolCall.function.name,
+              errorCount: nonMutatingToolPayloadErrorCount,
+            });
+          }
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Tool execution failed.';
         input.onTiming?.({
@@ -2856,6 +2940,23 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
               : undefined,
           }),
         });
+        if (!isCanvasMutationTool(toolCall.function.name)) {
+          nonMutatingToolPayloadErrorCount += 1;
+          if (nonMutatingToolPayloadErrorCount >= 2) {
+            availableToolState = emptyAvailableToolState();
+            messages.push({
+              role: 'system',
+              content:
+                'The optional culinary science tool returned repeated execution errors. Stop calling tools for this turn and answer the user directly from cooking knowledge. Briefly mention uncertainty only if it affects the practical recommendation.',
+            });
+            logCookingAgent('tool_execution_error_tools_disabled', {
+              conversationId: input.conversationId,
+              turn,
+              toolName: toolCall.function.name,
+              errorCount: nonMutatingToolPayloadErrorCount,
+            });
+          }
+        }
       }
     }
 
@@ -2881,6 +2982,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         text: latestCanvasUserMessage,
         activeIntent: turnPlan.intent,
         activeAction: turnPlan.action,
+        activeCategory: turnPlan.category,
       };
     }
   }
@@ -2951,5 +3053,6 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     text,
     activeIntent: turnPlan.intent,
     activeAction: turnPlan.action,
+    activeCategory: turnPlan.category,
   };
 }

@@ -1,7 +1,9 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { RecoilRoot } from 'recoil';
 import type { GenerativePromptSpec } from 'librechat-data-provider';
 import GenerativePrompts from '../GenerativePrompts';
+import store from '~/store';
 
 const user = { id: 'user-1' };
 const preferences = { updatedAt: '2026-06-07T10:00:00.000Z' };
@@ -61,6 +63,14 @@ const promptSpec: GenerativePromptSpec = {
   },
 };
 
+function renderPrompts(sidebarExpanded = false) {
+  return render(
+    <RecoilRoot initializeState={({ set }) => set(store.sidebarExpanded, sidebarExpanded)}>
+      <GenerativePrompts enabled disabled={false} onSubmitPrompt={jest.fn()} />
+    </RecoilRoot>,
+  );
+}
+
 describe('GenerativePrompts', () => {
   beforeEach(() => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -86,7 +96,11 @@ describe('GenerativePrompts', () => {
   it('keeps mobile suggestions in document flow and submits their action payload', async () => {
     const onSubmitPrompt = jest.fn();
 
-    render(<GenerativePrompts enabled disabled={false} onSubmitPrompt={onSubmitPrompt} />);
+    render(
+      <RecoilRoot initializeState={({ set }) => set(store.sidebarExpanded, false)}>
+        <GenerativePrompts enabled disabled={false} onSubmitPrompt={onSubmitPrompt} />
+      </RecoilRoot>,
+    );
 
     const rail = await screen.findByTestId('generative-prompts');
     expect(rail).toHaveClass('relative');
@@ -107,7 +121,7 @@ describe('GenerativePrompts', () => {
   });
 
   it('keeps suggestions visible while the composer is focused', async () => {
-    render(<GenerativePrompts enabled disabled={false} onSubmitPrompt={jest.fn()} />);
+    renderPrompts();
 
     const rail = await screen.findByTestId('generative-prompts');
     await waitFor(() => expect(rail).toBeVisible());
@@ -127,10 +141,19 @@ describe('GenerativePrompts', () => {
       JSON.stringify({ expiresAt: Date.now() + 60_000, spec: promptSpec }),
     );
 
-    render(<GenerativePrompts enabled disabled={false} onSubmitPrompt={jest.fn()} />);
+    renderPrompts();
 
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /Quick lunch/i })).not.toBeInTheDocument();
     });
+  });
+
+  it('removes suggestions from interaction while the sidebar is expanded', async () => {
+    renderPrompts(true);
+
+    const rail = await screen.findByTestId('generative-prompts');
+    expect(rail).toHaveClass('pointer-events-none', 'opacity-0');
+    expect(rail).toHaveAttribute('aria-hidden', 'true');
+    expect(rail).toHaveAttribute('inert');
   });
 });

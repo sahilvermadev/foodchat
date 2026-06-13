@@ -9,7 +9,11 @@ export type CookingQualityFailureLabel =
   | 'unnecessary_restriction_disclosure'
   | 'canvas_claim_without_mutation'
   | 'source_only_response'
-  | 'private_context_leak';
+  | 'private_context_leak'
+  | 'overlong_for_delivery_mode'
+  | 'buried_primary_action'
+  | 'repeats_canvas_content'
+  | 'excessive_preamble';
 
 export type CookingSemanticQualityFailureLabel = Extract<
   CookingQualityFailureLabel,
@@ -20,6 +24,10 @@ export type CookingSemanticQualityFailureLabel = Extract<
   | 'canvas_claim_without_mutation'
   | 'source_only_response'
   | 'private_context_leak'
+  | 'overlong_for_delivery_mode'
+  | 'buried_primary_action'
+  | 'repeats_canvas_content'
+  | 'excessive_preamble'
 >;
 
 export type CookingQualityJudgeFallbackReason = 'provider_error' | 'malformed_json';
@@ -45,6 +53,13 @@ export type CookingQualityInput = {
   conversationCreatedAt?: string | number | Date;
 };
 
+const advisoryFailureLabels = new Set<CookingQualityFailureLabel>([
+  'overlong_for_delivery_mode',
+  'buried_primary_action',
+  'repeats_canvas_content',
+  'excessive_preamble',
+]);
+
 type QualityJudgeMessage = {
   role: 'system' | 'user';
   content: string;
@@ -67,6 +82,10 @@ const semanticFailureLabels = new Set<CookingSemanticQualityFailureLabel>([
   'canvas_claim_without_mutation',
   'source_only_response',
   'private_context_leak',
+  'overlong_for_delivery_mode',
+  'buried_primary_action',
+  'repeats_canvas_content',
+  'excessive_preamble',
 ]);
 
 function unique<T extends string>(values: T[]): T[] {
@@ -116,6 +135,15 @@ function repairInstruction(labels: CookingQualityFailureLabel[]): string | undef
     labels.includes('private_context_leak')
       ? '- Remove granular private context such as exact location, timezone, timestamp, and withheld pantry inventory.'
       : '',
+    labels.includes('overlong_for_delivery_mode')
+      ? '- Match the planned delivery mode length: glance is 40-90 words, standard is 100-180 words, deep_dive is longer only when requested, and canvas_confirmation is one short sentence.'
+      : '',
+    labels.includes('buried_primary_action') || labels.includes('excessive_preamble')
+      ? '- Put the immediate answer or next cooking action in the first sentence. Remove preamble, throat-clearing, and setup before the useful part.'
+      : '',
+    labels.includes('repeats_canvas_content')
+      ? '- Do not repeat full recipe/canvas contents in chat. Summarize what changed or answer the narrow question only.'
+      : '',
     'Return only the corrected user-facing answer.',
   ]
     .filter(Boolean)
@@ -160,6 +188,10 @@ function semanticLabelsFromJudgment(raw: RawQualityJudgment): CookingQualityFail
   return ['not_actionable'];
 }
 
+function qualityOk(labels: CookingQualityFailureLabel[]): boolean {
+  return labels.every((label) => advisoryFailureLabels.has(label));
+}
+
 function qualityJudgePrompt(input: CookingQualityInput): QualityJudgeMessage[] {
   return [
     {
@@ -170,7 +202,7 @@ function qualityJudgePrompt(input: CookingQualityInput): QualityJudgeMessage[] {
         'Use judgment, not keyword matching. Decide whether the reply would feel helpful, privacy-respecting, and truthful to the user.',
         'Return exactly one JSON object. No markdown, no prose.',
         '',
-        'Allowed failureLabels: missing_time_constraint, not_actionable, needless_clarification, unnecessary_restriction_disclosure, canvas_claim_without_mutation, source_only_response, private_context_leak.',
+        'Allowed failureLabels: missing_time_constraint, not_actionable, needless_clarification, unnecessary_restriction_disclosure, canvas_claim_without_mutation, source_only_response, private_context_leak, overlong_for_delivery_mode, buried_primary_action, repeats_canvas_content, excessive_preamble.',
         'Use missing_time_constraint only when an explicit time limit is materially ignored.',
         'Use not_actionable when the user needed usable cooking guidance but got no concrete option, dish, adjustment, or next step.',
         'Use needless_clarification when the plan does not need clarification and the reply delays useful guidance with questions.',
@@ -178,6 +210,10 @@ function qualityJudgePrompt(input: CookingQualityInput): QualityJudgeMessage[] {
         'Use canvas_claim_without_mutation when responseState.draftChanged is false but the reply tells the user a canvas/document was created, revised, changed, or saved.',
         'Use source_only_response when the reply is only source names, URLs, citations, or attribution and does not answer the cooking request.',
         'Use private_context_leak when the reply exposes exact saved location, timezone, timestamp, saved inventory/profile contents, or other private profile facts in user-visible prose without a direct user need.',
+        'Use overlong_for_delivery_mode when the reply is materially longer than the planned deliveryMode calls for.',
+        'Use buried_primary_action when the reply eventually answers but makes the user read setup before the useful cooking action.',
+        'Use repeats_canvas_content when the chat reply restates a full recipe or canvas content after a document mutation instead of a short confirmation.',
+        'Use excessive_preamble when the reply starts with generic acknowledgement, reassurance, or commentary instead of the answer.',
         'A concise list of concrete options can pass even without imperative verbs.',
         'The privacyReviewContext is for judging only; do not copy its values into rationaleLabels.',
         'Output keys: passes, failureLabels, repairPlanLabels, rationaleLabels.',
@@ -196,6 +232,7 @@ function qualityJudgePrompt(input: CookingQualityInput): QualityJudgeMessage[] {
           hardConstraints: input.turnPlan.constraints.hard,
           softConstraints: input.turnPlan.constraints.soft,
           promptProfile: input.turnPlan.promptProfile,
+          deliveryMode: input.turnPlan.deliveryMode,
           clarification: input.turnPlan.clarification,
         },
         responseState: {
@@ -221,7 +258,7 @@ function qualityResult(input: {
 }): CookingQualityResult {
   const failureLabels = unique(input.labels);
   return {
-    ok: failureLabels.length === 0,
+    ok: qualityOk(failureLabels),
     failureLabels,
     repairInstruction: repairInstruction(failureLabels),
     qualityJudgeUsed: input.qualityJudgeUsed,

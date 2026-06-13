@@ -25,6 +25,7 @@ import Footer from './Footer';
 import { cn } from '~/utils';
 import { useCookingChat } from '~/components/Cooking/CookingChatContext';
 import store from '~/store';
+import { getChatComposerClass, getChatStageClass } from './landingLayout';
 
 function LoadingMessagesSkeleton() {
   return (
@@ -88,6 +89,7 @@ function ChatView({
   const conversationId = conversationIdOverride ?? params.conversationId;
   const rootSubmission = useRecoilValue(store.submissionByIndex(index));
   const centerFormOnLanding = useRecoilValue(store.centerFormOnLanding);
+  const sidebarExpanded = useRecoilValue(store.sidebarExpanded);
   const localize = useLocalize();
   const { isCookingChat } = useCookingChat();
   const methods = useForm<ChatFormValues>({
@@ -167,30 +169,18 @@ function ChatView({
               </div>
               <>
                 <div
-                  className={cn(
-                    'relative z-10 flex flex-col',
-                    isLandingPage
-                      ? 'min-h-0 flex-1 items-center justify-center overflow-hidden px-5 min-[769px]:overflow-visible min-[769px]:px-0'
-                      : 'h-full overflow-y-auto',
-                  )}
+                  className={getChatStageClass({
+                    isLandingPage,
+                    isCookingChat,
+                    sidebarExpanded,
+                  })}
                 >
                   {content}
-                  <div
-                    className={cn(
-                      'w-full',
-                      isLandingPage &&
-                        'fixed inset-x-0 bottom-0 z-30 mx-auto px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] transition-all duration-200 min-[769px]:static min-[769px]:max-w-3xl min-[769px]:px-0 min-[769px]:pb-0 xl:max-w-4xl',
-                    )}
-                  >
+                  <div className={getChatComposerClass(isLandingPage)}>
                     <ChatForm index={index} />
                     {isLandingPage ? <ConversationStarters /> : <Footer />}
                   </div>
                 </div>
-                {isLandingPage && (
-                  <div className="relative z-10">
-                    <Footer />
-                  </div>
-                )}
               </>
             </div>
           </Presentation>

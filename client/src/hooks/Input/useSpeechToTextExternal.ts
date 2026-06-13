@@ -8,7 +8,8 @@ import store from '~/store';
 const SILENCE_TIMEOUT_MS = 8000;
 
 const useSpeechToTextExternal = (
-  setText: (text: string) => void,
+  onRecordingStart: () => void,
+  onTranscript: (text: string) => void,
   onTranscriptionComplete: (text: string) => void,
 ) => {
   const { showToast } = useToastContext();
@@ -23,7 +24,7 @@ const useSpeechToTextExternal = (
   const [permission, setPermission] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isRequestBeingMade, setIsRequestBeingMade] = useState(false);
-  const [audioMimeType, setAudioMimeType] = useState<string>(() => getBestSupportedMimeType());
+  const audioMimeTypeRef = useRef<string>(getBestSupportedMimeType());
 
   const [minDecibels] = useRecoilState(store.decibelValue);
   const [autoSendText] = useRecoilState(store.autoSendText);
@@ -34,7 +35,7 @@ const useSpeechToTextExternal = (
   const { mutate: processAudio, isLoading: isProcessing } = useSpeechToTextMutation({
     onSuccess: (data) => {
       const extractedText = data.text;
-      setText(extractedText);
+      onTranscript(extractedText);
       setIsRequestBeingMade(false);
 
       if (autoSendText > -1 && speechToText && extractedText.length > 0) {
@@ -113,6 +114,7 @@ const useSpeechToTextExternal = (
 
   const handleStop = () => {
     if (audioChunksRef.current.length > 0) {
+      const audioMimeType = audioMimeTypeRef.current;
       const audioBlob = new Blob(audioChunksRef.current, { type: audioMimeType });
       const fileExtension = getFileExtension(audioMimeType);
 
@@ -133,6 +135,7 @@ const useSpeechToTextExternal = (
 
   const monitorSilence = (stream: MediaStream, stopRecording: () => void) => {
     const audioContext = new AudioContext();
+    audioContextRef.current = audioContext;
     const audioStreamSource = audioContext.createMediaStreamSource(stream);
     const analyser = audioContext.createAnalyser();
     analyser.minDecibels = minDecibels;
@@ -176,12 +179,13 @@ const useSpeechToTextExternal = (
 
     if (audioStream.current) {
       try {
+        onRecordingStart();
         audioChunksRef.current = [];
         const bestMimeType = getBestSupportedMimeType();
-        setAudioMimeType(bestMimeType);
+        audioMimeTypeRef.current = bestMimeType;
 
         mediaRecorderRef.current = new MediaRecorder(audioStream.current, {
-          mimeType: audioMimeType,
+          mimeType: bestMimeType,
         });
         mediaRecorderRef.current.addEventListener('dataavailable', (event: BlobEvent) => {
           audioChunksRef.current.push(event.data);
@@ -214,6 +218,10 @@ const useSpeechToTextExternal = (
       if (animationFrameIdRef.current !== null) {
         window.cancelAnimationFrame(animationFrameIdRef.current);
         animationFrameIdRef.current = null;
+      }
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+        audioContextRef.current = null;
       }
 
       setIsListening(false);
@@ -269,6 +277,13 @@ const useSpeechToTextExternal = (
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      audioStream.current?.getTracks().forEach((track) => track.stop());
+      if (animationFrameIdRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameIdRef.current);
+      }
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isListening]);

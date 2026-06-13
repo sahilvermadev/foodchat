@@ -405,6 +405,10 @@ export default function useEventHandlers({
        */
       const initialResponse = {
         ...submission.initialResponse,
+        metadata: {
+          ...submission.initialResponse.metadata,
+          ...(data.cooking === true ? { cookingScrollAnchor: true } : {}),
+        },
         parentMessageId: userMessage.messageId,
         messageId: userMessage.messageId + '_',
       };
@@ -462,6 +466,10 @@ export default function useEventHandlers({
       } else if (resetLatestMessage) {
         logger.log('latest_message', 'createdHandler: resetting latest message');
         resetLatestMessage();
+      }
+      if (data.cooking === true) {
+        setAbortScroll(false);
+        return;
       }
       scrollToEnd(() => setAbortScroll(false));
     },

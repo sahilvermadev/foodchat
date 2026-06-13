@@ -558,6 +558,7 @@ export type TBaseResData = {
 export type TResData = TBaseResData & {
   requestMessage: t.TMessage;
   responseMessage: t.TMessage;
+  cooking?: boolean;
 };
 
 export type TFinalResData = Omit<TBaseResData, 'conversation'> & {

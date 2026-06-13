@@ -47,6 +47,7 @@ function UnifiedSidebar() {
   const [expanded, setExpanded] = useRecoilState(store.sidebarExpanded);
   const [sidebarWidth, setSidebarWidth] = useState(getInitialWidth);
   const [isResizing, setIsResizing] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
   const resizeHandlers = useRef<{ move: (e: MouseEvent) => void; up: () => void } | null>(null);
 
   const links = useUnifiedSidebarLinks();
@@ -143,12 +144,28 @@ function UnifiedSidebar() {
     return () => document.removeEventListener('keydown', handler);
   }, [isSmallScreen, expanded, handleCollapse]);
 
+  useEffect(() => {
+    if (isSmallScreen || !expanded || isResizing) {
+      return;
+    }
+
+    const handleClick = (event: MouseEvent) => {
+      const sidebar = sidebarRef.current;
+      if (sidebar && !event.composedPath().includes(sidebar)) {
+        handleCollapse();
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [expanded, handleCollapse, isResizing, isSmallScreen]);
+
   if (isSmallScreen) {
     return (
       <>
         <div
           className={cn(
-            'fixed left-0 top-0 z-[110] flex h-full bg-surface-primary-alt',
+            'fixed left-0 top-0 z-[110] flex h-full bg-[#f7f4ed] dark:bg-surface-primary-alt',
             expanded ? 'translate-x-0' : '-translate-x-full',
           )}
           style={{
@@ -166,7 +183,7 @@ function UnifiedSidebar() {
                 collapseOnNavigate
                 onCollapse={handleCollapse}
               />
-              <nav className="min-h-0 flex-1 overflow-hidden bg-surface-primary-alt">
+              <nav className="min-h-0 flex-1 overflow-hidden bg-[#f7f4ed] dark:bg-surface-primary-alt">
                 <SidePanelNav links={links} />
               </nav>
             </ActivePanelProvider>
@@ -195,6 +212,7 @@ function UnifiedSidebar() {
     <SidebarChatProvider>
       <ActivePanelProvider>
         <aside
+          ref={sidebarRef}
           className="relative flex h-full flex-shrink-0 overflow-hidden"
           style={{
             width: expanded ? sidebarWidth : COLLAPSED_WIDTH,

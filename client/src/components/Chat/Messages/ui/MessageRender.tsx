@@ -203,7 +203,7 @@ const MessageRender = memo(function MessageRender({
         baseClasses.common,
         baseClasses.chat,
         conditionalClasses.focus,
-        'message-render',
+        'message-render scroll-mt-24',
       )}
     >
       {!hasParallelContent && (

@@ -211,6 +211,7 @@ export default function RecipeDetail() {
       {
         prompt: `Discuss ${recipeDisplayTitle(recipe)}`,
         conversationId: newConvoId,
+        savedRecipeId: recipe._id,
         documentMarkdown: recipe.documentMarkdown,
         documentType: recipe.documentType,
         recipe: recipe.recipe,

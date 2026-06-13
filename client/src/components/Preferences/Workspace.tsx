@@ -2545,17 +2545,17 @@ export default function PreferencesWorkspace() {
 
   return (
     <main className="rekky-ui rekky-preferences-surface flex h-full min-h-0 flex-col bg-[#f7f1e8] text-text-primary dark:bg-[#141014]">
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="w-full px-5 py-8 sm:px-8 lg:px-16">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-8 sm:px-8 sm:py-7 lg:px-14">
+        <div className="mx-auto w-full max-w-[1500px]">
           <section
             aria-label={localize('com_preferences_document')}
             className="min-w-0 space-y-8 sm:space-y-12"
           >
             <header>
-              <div className="flex flex-col gap-4 pt-1 lg:flex-row lg:items-start lg:justify-between lg:pt-0">
+              <div className="flex flex-col gap-4 pt-1 sm:pt-4 lg:flex-row lg:items-start lg:justify-between">
                 <h1
                   id="preferences-title"
-                  className="max-w-[18rem] text-[2.55rem] font-medium leading-[0.92] tracking-[-0.035em] text-text-primary sm:max-w-4xl sm:text-6xl sm:tracking-[-0.01em]"
+                  className="text-[2.45rem] font-medium leading-[0.95] tracking-normal text-text-primary sm:text-[3.45rem]"
                 >
                   {localize('com_preferences_dashboard_title')}
                 </h1>

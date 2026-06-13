@@ -1,4 +1,5 @@
 import { Schema } from 'mongoose';
+import { CookingChatCategories } from 'librechat-data-provider';
 import { conversationPreset } from './defaults';
 import { IConversation } from '~/types';
 
@@ -29,6 +30,15 @@ const convoSchema: Schema<IConversation> = new Schema(
       type: [String],
       default: [],
       meiliIndex: true,
+    },
+    cookingCategory: {
+      type: String,
+      enum: CookingChatCategories,
+      meiliIndex: true,
+    },
+    savedRecipeId: {
+      type: String,
+      index: true,
     },
     files: {
       type: [String],

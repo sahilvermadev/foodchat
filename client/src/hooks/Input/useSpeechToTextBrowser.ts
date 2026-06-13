@@ -4,11 +4,13 @@ import { useToastContext } from '@librechat/client';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import { useGetCustomConfigSpeechQuery } from 'librechat-data-provider/react-query';
 import useGetAudioSettings from './useGetAudioSettings';
+import { composeBrowserTranscript } from './transcriptionSession';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
 const useSpeechToTextBrowser = (
-  setText: (text: string) => void,
+  onRecordingStart: () => void,
+  onTranscript: (text: string) => void,
   onTranscriptionComplete: (text: string) => void,
 ) => {
   const localize = useLocalize();
@@ -19,7 +21,7 @@ const useSpeechToTextBrowser = (
   const sttExternal = Boolean(speechConfig?.sttExternal);
 
   const lastTranscript = useRef<string | null>(null);
-  const lastInterim = useRef<string | null>(null);
+  const lastDisplayedTranscript = useRef<string | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>();
   const [autoSendText] = useRecoilState(store.autoSendText);
   const [languageSTT] = useRecoilState<string>(store.languageSTT);
@@ -27,25 +29,26 @@ const useSpeechToTextBrowser = (
   const {
     listening,
     finalTranscript,
-    resetTranscript,
     interimTranscript,
+    resetTranscript,
     isMicrophoneAvailable,
     browserSupportsSpeechRecognition,
   } = useSpeechRecognition();
   const isListening = useMemo(() => listening, [listening]);
 
   useEffect(() => {
-    if (interimTranscript == null || interimTranscript === '') {
+    const displayTranscript = composeBrowserTranscript(finalTranscript, interimTranscript);
+    if (!displayTranscript) {
       return;
     }
 
-    if (lastInterim.current === interimTranscript) {
+    if (lastDisplayedTranscript.current === displayTranscript) {
       return;
     }
 
-    setText(interimTranscript);
-    lastInterim.current = interimTranscript;
-  }, [setText, interimTranscript]);
+    onTranscript(displayTranscript);
+    lastDisplayedTranscript.current = displayTranscript;
+  }, [finalTranscript, interimTranscript, onTranscript]);
 
   useEffect(() => {
     if (finalTranscript == null || finalTranscript === '') {
@@ -56,12 +59,13 @@ const useSpeechToTextBrowser = (
       return;
     }
 
-    setText(finalTranscript);
     lastTranscript.current = finalTranscript;
     if (autoSendText > -1 && finalTranscript.length > 0) {
       timeoutRef.current = setTimeout(() => {
         onTranscriptionComplete(finalTranscript);
         resetTranscript();
+        lastDisplayedTranscript.current = null;
+        lastTranscript.current = null;
       }, autoSendText * 1000);
     }
 
@@ -70,7 +74,7 @@ const useSpeechToTextBrowser = (
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [setText, onTranscriptionComplete, resetTranscript, finalTranscript, autoSendText]);
+  }, [onTranscriptionComplete, resetTranscript, finalTranscript, autoSendText]);
 
   const toggleListening = useCallback(() => {
     if (!browserSupportsSpeechRecognition) {
@@ -94,6 +98,10 @@ const useSpeechToTextBrowser = (
     if (isListening === true) {
       SpeechRecognition.stopListening();
     } else {
+      onRecordingStart();
+      resetTranscript();
+      lastDisplayedTranscript.current = null;
+      lastTranscript.current = null;
       SpeechRecognition.startListening({
         language: languageSTT,
         continuous: true,
@@ -105,6 +113,8 @@ const useSpeechToTextBrowser = (
     isListening,
     languageSTT,
     localize,
+    onRecordingStart,
+    resetTranscript,
     showToast,
     sttExternal,
   ]);

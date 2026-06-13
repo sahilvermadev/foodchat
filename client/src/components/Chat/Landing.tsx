@@ -6,11 +6,21 @@ import { useChatContext, useAgentsMapContext } from '~/Providers';
 import { useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import ConvoIcon from '~/components/Endpoints/ConvoIcon';
 import { useLocalize, useAuthContext } from '~/hooks';
+import type { TranslationKeys } from '~/hooks/useLocalize';
 import { useCookingChat } from '~/components/Cooking/CookingChatContext';
 import { getIconEndpoint, getEntity } from '~/utils';
 
 const containerClassName =
   'shadow-stroke relative flex h-full items-center justify-center rounded-full bg-white dark:bg-presentation dark:text-white text-black dark:after:shadow-none ';
+
+const defaultCookingWordKey: TranslationKeys = 'com_cooking_chat_landing_word_cooking';
+const cookingWordKeys: TranslationKeys[] = [
+  defaultCookingWordKey,
+  'com_cooking_chat_landing_word_inventing',
+  'com_cooking_chat_landing_word_tweaking',
+  'com_cooking_chat_landing_word_craving',
+  'com_cooking_chat_landing_word_mastering',
+];
 
 function getTextSizeClass(text: string | undefined | null) {
   if (!text) {
@@ -26,6 +36,38 @@ function getTextSizeClass(text: string | undefined | null) {
   }
 
   return 'text-lg sm:text-md';
+}
+
+function RotatingCookingHeadline() {
+  const localize = useLocalize();
+  const [wordIndex, setWordIndex] = useState(0);
+  const wordKey = cookingWordKeys[wordIndex] ?? defaultCookingWordKey;
+  const word = localize(wordKey);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setWordIndex((index) => (index + 1) % cookingWordKeys.length);
+    }, 4200);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  return (
+    <h1
+      className={`${getTextSizeClass(localize('com_cooking_chat_landing'))} flex flex-wrap items-baseline justify-center font-medium text-text-primary`}
+      aria-label={localize('com_cooking_chat_landing')}
+    >
+      <span>{localize('com_cooking_chat_landing_prefix')}</span>
+      <span
+        className="ml-2 inline-grid min-w-[10ch] overflow-hidden text-left align-baseline text-[#c1121f] dark:text-[#e63946]"
+        aria-hidden="true"
+      >
+        <span key={word} className="rekky-rotating-word whitespace-nowrap">
+          {word}
+        </span>
+      </span>
+    </h1>
+  );
 }
 
 export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: boolean }) {
@@ -54,7 +96,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     });
   }, [conversation?.endpoint, conversation?.iconURL, endpointsConfig]);
 
-  const { entity, isAgent } = getEntity({
+  const { entity } = getEntity({
     endpoint: endpointType,
     agentsMap,
     agent_id: conversation?.agent_id,
@@ -141,6 +183,48 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     return getGreeting() + (user?.name ? ', ' + user.name : '');
   }, [getGreeting, isCookingChat, localize, startupConfig?.interface?.customWelcome, user?.name]);
 
+  const headline = useMemo(() => {
+    if (isCookingChat && !name) {
+      return <RotatingCookingHeadline />;
+    }
+
+    if (name) {
+      return (
+        <div className="flex flex-col items-center gap-0 p-2">
+          <SplitText
+            key={`split-text-${name}`}
+            text={name}
+            className={`${getTextSizeClass(name)} font-medium text-text-primary`}
+            delay={50}
+            textAlign="center"
+            animationFrom={{ opacity: 0, transform: 'translate3d(0,50px,0)' }}
+            animationTo={{ opacity: 1, transform: 'translate3d(0,0,0)' }}
+            easing={easings.easeOutCubic}
+            threshold={0}
+            rootMargin="0px"
+            onLineCountChange={handleLineCountChange}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <SplitText
+        key={`split-text-${greetingText}${user?.name ? '-user' : ''}`}
+        text={greetingText}
+        className={`${getTextSizeClass(greetingText)} font-medium text-text-primary`}
+        delay={50}
+        textAlign="center"
+        animationFrom={{ opacity: 0, transform: 'translate3d(0,50px,0)' }}
+        animationTo={{ opacity: 1, transform: 'translate3d(0,0,0)' }}
+        easing={easings.easeOutCubic}
+        threshold={0}
+        rootMargin="0px"
+        onLineCountChange={handleLineCountChange}
+      />
+    );
+  }, [greetingText, handleLineCountChange, isCookingChat, name, user?.name]);
+
   return (
     <div
       className={`flex shrink-0 transform-gpu flex-col items-center justify-center pb-0 transition-all duration-200 min-[769px]:h-full min-[769px]:pb-16 ${centerFormOnLanding ? 'max-h-full min-[769px]:max-h-0' : 'max-h-full'} ${getDynamicMargin}`}
@@ -164,37 +248,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
               />
             </div>
           )}
-          {(isAgent && name) || name ? (
-            <div className="flex flex-col items-center gap-0 p-2">
-              <SplitText
-                key={`split-text-${name}`}
-                text={name}
-                className={`${getTextSizeClass(name)} font-medium text-text-primary`}
-                delay={50}
-                textAlign="center"
-                animationFrom={{ opacity: 0, transform: 'translate3d(0,50px,0)' }}
-                animationTo={{ opacity: 1, transform: 'translate3d(0,0,0)' }}
-                easing={easings.easeOutCubic}
-                threshold={0}
-                rootMargin="0px"
-                onLineCountChange={handleLineCountChange}
-              />
-            </div>
-          ) : (
-            <SplitText
-              key={`split-text-${greetingText}${user?.name ? '-user' : ''}`}
-              text={greetingText}
-              className={`${getTextSizeClass(greetingText)} font-medium text-text-primary`}
-              delay={50}
-              textAlign="center"
-              animationFrom={{ opacity: 0, transform: 'translate3d(0,50px,0)' }}
-              animationTo={{ opacity: 1, transform: 'translate3d(0,0,0)' }}
-              easing={easings.easeOutCubic}
-              threshold={0}
-              rootMargin="0px"
-              onLineCountChange={handleLineCountChange}
-            />
-          )}
+          {headline}
         </div>
         {description && (
           <div className="animate-fadeIn mt-4 max-w-md text-center text-sm font-normal text-text-primary">

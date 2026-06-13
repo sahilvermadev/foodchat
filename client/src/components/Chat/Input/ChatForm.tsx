@@ -273,7 +273,10 @@ const ChatForm = memo(function ChatForm({
               isTextAreaFocused ? 'shadow-lg' : 'shadow-md',
               isTemporary
                 ? 'border-violet-800/60 bg-violet-950/10'
-                : 'border-border-light bg-surface-chat',
+                : 'border-black/10 bg-[var(--rekky-alabaster)] dark:border-border-light dark:bg-surface-chat',
+              isTextAreaFocused &&
+                !isTemporary &&
+                'border-[#c1121f]/35 shadow-[#c1121f]/10 dark:border-[#c1121f]/45',
             )}
           >
             <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} />
@@ -327,7 +330,7 @@ const ChatForm = memo(function ChatForm({
                   className={cn(
                     baseClasses,
                     removeFocusRings,
-                    'scrollbar-hover transition-[max-height] duration-200 disabled:cursor-not-allowed',
+                    'scrollbar-hover caret-[#c1121f] transition-[max-height] duration-200 disabled:cursor-not-allowed',
                   )}
                 />
               </div>
@@ -369,7 +372,6 @@ const ChatForm = memo(function ChatForm({
                 <AudioRecorder
                   methods={methods}
                   ask={submitMessage}
-                  textAreaRef={textAreaRef}
                   disabled={disableInputs || isNotAppendable}
                   isSubmitting={isSubmitting}
                 />

@@ -4,6 +4,7 @@ import type { TMessageContentParts, FunctionTool, FunctionToolCall } from './typ
 import { TFeedback, feedbackSchema } from './feedback';
 import type { SearchResultData } from './types/web';
 import type { TFile } from './types/files';
+import { CookingChatCategories } from './types/cooking';
 
 export const isUUID = z.string().uuid();
 
@@ -813,6 +814,8 @@ export const tConversationSchema = z.object({
   examples: z.array(tExampleSchema).optional(),
   /* DB */
   tags: z.array(z.string()).optional(),
+  cookingCategory: z.enum(CookingChatCategories).optional(),
+  savedRecipeId: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   /* Files */

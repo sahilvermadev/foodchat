@@ -9,6 +9,7 @@ const mockWebSearchConfig = {
 };
 
 jest.mock('@librechat/data-schemas', () => ({
+  isValidObjectIdString: (value) => /^[a-f\d]{24}$/i.test(value),
   logger: {
     debug: jest.fn(),
     error: jest.fn(),
@@ -35,6 +36,7 @@ jest.mock('~/server/middleware', () => ({
 }));
 
 jest.mock('~/models', () => ({
+  getConvo: jest.fn().mockResolvedValue(null),
   saveMessage: jest.fn().mockResolvedValue({}),
   saveConvo: jest.fn().mockResolvedValue({}),
 }));
@@ -54,6 +56,7 @@ jest.mock('@librechat/api', () => {
   return {
     CookingValidationError,
     runCookingChat: jest.fn(),
+    resolveCookingChatCategory: jest.fn().mockReturnValue('cooking_help'),
     curatePendingPreferences: jest.fn(),
     withPendingPreferenceBatch: jest.fn((message) => ({
       ...message,
@@ -69,6 +72,7 @@ jest.mock('@librechat/api', () => {
     selectCookingDocument: jest.fn(),
     deleteCookingDocument: jest.fn(),
     updateCookingDocument: jest.fn(),
+    startSavedRecipeDiscussion: jest.fn(),
     generateCookingDraft: jest.fn(),
     updateCookingDraft: jest.fn(),
     startCookingSession: jest.fn(),
@@ -85,6 +89,7 @@ const db = require('~/models');
 const { encodeAndFormat } = require('~/server/services/Files/images/encode');
 
 const user = { id: 'auth-user' };
+const savedRecipeId = '665f1f77bcf86cd799439011';
 
 function createApp() {
   const app = express();
@@ -137,7 +142,21 @@ describe('cooking routes', () => {
     cookingApi.getExistingPreferences.mockResolvedValue(null);
     cookingApi.getCookingDraftByConversation.mockResolvedValue(null);
     cookingApi.listCookingDocuments.mockResolvedValue({ documents: [] });
+    db.getConvo.mockResolvedValue(null);
+    cookingApi.resolveCookingChatCategory.mockReturnValue('cooking_help');
     cookingApi.createCookingDocument.mockResolvedValue({ _id: 'document-1' });
+    cookingApi.startSavedRecipeDiscussion.mockImplementation(
+      async (_input, persistConversation) => {
+        await persistConversation({
+          conversationId: 'conversation-saved',
+          endpoint: 'agents',
+          title: 'Discuss Changezi Chicken',
+          cookingCategory: 'saved_recipe',
+          savedRecipeId,
+        });
+        return { _id: 'document-1' };
+      },
+    );
     cookingApi.updateCookingDocument.mockResolvedValue({ _id: 'document-1' });
     cookingApi.selectCookingDocument.mockResolvedValue({
       documents: [{ _id: 'document-1', selected: true }],
@@ -221,6 +240,84 @@ describe('cooking routes', () => {
       undefined,
     );
     expect(cookingApi.listCookingDocuments).toHaveBeenCalledWith('auth-user', 'conversation-1');
+  });
+
+  test('marks conversations created from an owned saved recipe', async () => {
+    await request(app)
+      .post('/api/cooking/documents')
+      .send({
+        prompt: 'Discuss Changezi Chicken',
+        conversationId: 'conversation-saved',
+        documentType: 'recipe',
+        savedRecipeId,
+      })
+      .expect(201, { _id: 'document-1' });
+
+    expect(cookingApi.startSavedRecipeDiscussion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user: 'auth-user',
+        conversationId: 'conversation-saved',
+        savedRecipeId,
+      }),
+      expect.any(Function),
+    );
+    expect(db.saveConvo).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        conversationId: 'conversation-saved',
+        cookingCategory: 'saved_recipe',
+        savedRecipeId,
+      }),
+      expect.objectContaining({
+        context: 'POST /api/cooking/documents - start saved recipe discussion',
+      }),
+    );
+  });
+
+  test('rejects a saved recipe chat when the recipe is not owned by the user', async () => {
+    cookingApi.startSavedRecipeDiscussion.mockResolvedValue(null);
+
+    await request(app)
+      .post('/api/cooking/documents')
+      .send({
+        prompt: 'Discuss Changezi Chicken',
+        conversationId: 'conversation-saved',
+        documentType: 'recipe',
+        savedRecipeId: '665f1f77bcf86cd799439012',
+      })
+      .expect(404);
+
+    expect(cookingApi.startSavedRecipeDiscussion).toHaveBeenCalled();
+    expect(cookingApi.createCookingDocument).not.toHaveBeenCalled();
+    expect(db.saveConvo).not.toHaveBeenCalled();
+  });
+
+  test('rejects malformed saved recipe ids before database access', async () => {
+    await request(app)
+      .post('/api/cooking/documents')
+      .send({
+        prompt: 'Discuss Changezi Chicken',
+        conversationId: 'conversation-saved',
+        documentType: 'recipe',
+        savedRecipeId: 'not-an-object-id',
+      })
+      .expect(400);
+
+    expect(cookingApi.startSavedRecipeDiscussion).not.toHaveBeenCalled();
+    expect(cookingApi.createCookingDocument).not.toHaveBeenCalled();
+  });
+
+  test('requires a conversation id when starting a saved recipe chat', async () => {
+    await request(app)
+      .post('/api/cooking/documents')
+      .send({
+        prompt: 'Discuss Changezi Chicken',
+        documentType: 'recipe',
+        savedRecipeId,
+      })
+      .expect(400);
+
+    expect(cookingApi.startSavedRecipeDiscussion).not.toHaveBeenCalled();
   });
 
   test('passes authenticated user id into every service call', async () => {
@@ -313,6 +410,47 @@ describe('cooking routes', () => {
       user: 'auth-user',
       conversationId: 'conversation-1',
     });
+  });
+
+  test('chat resolves and persists the conversation cooking category', async () => {
+    db.getConvo.mockResolvedValue({ cookingCategory: 'ideas' });
+    cookingApi.listCookingDocuments.mockResolvedValue({
+      documents: [{ _id: 'recipe-1', documentType: 'recipe' }],
+    });
+    cookingApi.runCookingChat.mockResolvedValue({
+      text: 'I created the recipe.',
+      draftChanged: true,
+      draft: { documentType: 'recipe' },
+      activeCategory: 'recipes',
+      activeIntent: 'recipe_request',
+      activeAction: 'create_document',
+    });
+    cookingApi.resolveCookingChatCategory.mockReturnValue('recipes');
+
+    await request(app)
+      .post('/api/cooking/chat')
+      .send({
+        text: 'Create a biryani recipe',
+        conversationId: 'conversation-1',
+        messageId: 'message-1',
+        responseMessageId: 'message-2',
+      })
+      .expect(200);
+
+    expect(cookingApi.resolveCookingChatCategory).toHaveBeenCalledWith({
+      currentCategory: 'ideas',
+      proposedCategory: 'recipes',
+      text: 'Create a biryani recipe',
+      intent: 'recipe_request',
+      action: 'create_document',
+      existingDocumentTypes: ['recipe'],
+      changedDocumentType: 'recipe',
+    });
+    expect(db.saveConvo).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ cookingCategory: 'recipes' }),
+      expect.objectContaining({ context: 'POST /api/cooking/chat - conversation' }),
+    );
   });
 
   test('chat does not forward stale client history when starting a new cooking conversation', async () => {
@@ -508,12 +646,13 @@ describe('cooking routes', () => {
       expect.objectContaining({
         messageId: 'message-2',
         sender: 'Samwise',
-        metadata: {
+        metadata: expect.objectContaining({
           cookingPromptSuggestions: [
             'How should I prep this for a weeknight dinner?',
             'What texture cues should I watch for?',
           ],
-        },
+          cookingCategory: 'cooking_help',
+        }),
       }),
       expect.objectContaining({ context: 'POST /api/cooking/chat - response message' }),
     );
@@ -549,7 +688,7 @@ describe('cooking routes', () => {
       expect.anything(),
       expect.objectContaining({
         messageId: 'message-2',
-        metadata: {
+        metadata: expect.objectContaining({
           cookingPromptSuggestions: ['Can you turn this into a tested canning recipe?'],
           cookingWebSources: [
             {
@@ -559,7 +698,8 @@ describe('cooking routes', () => {
               accessedAt: '2026-05-18T00:00:00.000Z',
             },
           ],
-        },
+          cookingCategory: 'cooking_help',
+        }),
       }),
       expect.objectContaining({ context: 'POST /api/cooking/chat - response message' }),
     );
@@ -592,6 +732,39 @@ describe('cooking routes', () => {
       .filter((payload) => payload.message === true);
 
     expect(liveMessages.map((payload) => payload.text)).toEqual(['Use a wide ', 'Use a wide pan.']);
+  });
+
+  test('chat reveals validated final replies in semantic blocks', async () => {
+    const finalText = 'First, lower the heat.\n\n- Stir until glossy.\n- Taste before serving.';
+    cookingApi.runCookingChat.mockImplementation(async ({ onTextDelta }) => {
+      await onTextDelta(finalText, true);
+      return {
+        text: finalText,
+        draftChanged: false,
+      };
+    });
+
+    const response = await request(app)
+      .post('/api/cooking/chat')
+      .send({
+        text: 'Help me fix this sauce',
+        conversationId: 'conversation-1',
+        messageId: 'message-1',
+        responseMessageId: 'message-2',
+      })
+      .expect(200);
+
+    const liveMessages = response.text
+      .split('\n\n')
+      .filter((event) => event.startsWith('event: message\ndata: '))
+      .map((event) => JSON.parse(event.slice(event.indexOf('data: ') + 6)))
+      .filter((payload) => payload.message === true);
+
+    expect(liveMessages.map((payload) => payload.text)).toEqual([
+      'First, lower the heat.',
+      'First, lower the heat.\n\n- Stir until glossy.',
+      'First, lower the heat.\n\n- Stir until glossy.\n- Taste before serving.',
+    ]);
   });
 
   test('chat exposes only the validated cooking reply emitted by the agent', async () => {

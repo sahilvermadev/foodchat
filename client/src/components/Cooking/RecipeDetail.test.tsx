@@ -1,11 +1,12 @@
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/extend-expect';
 import type { SavedRecipe } from 'librechat-data-provider';
 import RecipeDetail from './RecipeDetail';
 
 let mockRecipe: SavedRecipe;
+const mockCreateCookingDocument = jest.fn();
 
 jest.mock('~/components/Chat/Messages/Content/Markdown', () => ({
   __esModule: true,
@@ -13,7 +14,10 @@ jest.mock('~/components/Chat/Messages/Content/Markdown', () => ({
 }));
 
 jest.mock('~/data-provider', () => ({
-  useCreateCookingDocumentMutation: () => ({ isLoading: false, mutate: jest.fn() }),
+  useCreateCookingDocumentMutation: () => ({
+    isLoading: false,
+    mutate: mockCreateCookingDocument,
+  }),
   useRecipeQuery: () => ({ data: mockRecipe, isLoading: false }),
   useUpdateSavedRecipeMutation: () => ({ isLoading: false, mutate: jest.fn() }),
 }));
@@ -36,7 +40,7 @@ jest.mock('@librechat/client', () => ({
 
 function savedRecipe(ingredients: NonNullable<SavedRecipe['recipe']>['ingredients']): SavedRecipe {
   return {
-    _id: 'recipe-1',
+    _id: '665f1f77bcf86cd799439011',
     user: 'user-1',
     title: 'Changezi Chicken',
     documentType: 'recipe',
@@ -68,7 +72,10 @@ function savedRecipe(ingredients: NonNullable<SavedRecipe['recipe']>['ingredient
 
 function renderDetail() {
   render(
-    <MemoryRouter initialEntries={['/recipes/recipe-1']}>
+    <MemoryRouter
+      initialEntries={['/recipes/recipe-1']}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
       <Routes>
         <Route path="/recipes/:recipeId" element={<RecipeDetail />} />
       </Routes>
@@ -77,6 +84,14 @@ function renderDetail() {
 }
 
 describe('RecipeDetail structured ingredients', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    Object.defineProperty(window.crypto, 'randomUUID', {
+      configurable: true,
+      value: jest.fn(() => 'conversation-saved-recipe'),
+    });
+  });
+
   test('falls back to markdown ingredients for placeholder structured data', () => {
     mockRecipe = savedRecipe([
       {
@@ -110,5 +125,21 @@ describe('RecipeDetail structured ingredients', () => {
     expect(screen.getByTestId('structured-ingredients')).toHaveTextContent('chicken');
     expect(screen.getByTestId('markdown-body')).not.toHaveTextContent('stale markdown chicken');
     expect(screen.getByTestId('markdown-body')).toHaveTextContent('## Instructions');
+  });
+
+  test('identifies chats started from a saved recipe', () => {
+    mockRecipe = savedRecipe([]);
+
+    renderDetail();
+    fireEvent.click(screen.getByRole('button', { name: 'com_recipes_discuss_ai' }));
+
+    expect(mockCreateCookingDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conversation-saved-recipe',
+        savedRecipeId: '665f1f77bcf86cd799439011',
+        documentType: 'recipe',
+      }),
+      expect.any(Object),
+    );
   });
 });

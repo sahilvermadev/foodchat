@@ -1,4 +1,5 @@
 import type { Document, Types } from 'mongoose';
+import type { CookingChatCategory } from 'librechat-data-provider';
 
 // @ts-ignore
 export interface IConversation extends Document {
@@ -41,6 +42,8 @@ export interface IConversation extends Document {
   greeting?: string;
   spec?: string;
   tags?: string[];
+  cookingCategory?: CookingChatCategory;
+  savedRecipeId?: string;
   tools?: string[];
   maxContextTokens?: number;
   max_tokens?: number;

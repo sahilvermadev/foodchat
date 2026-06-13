@@ -97,6 +97,7 @@ describe('cooking planner', () => {
       intent: 'quick_recommendation',
       action: 'direct_answer',
       promptProfile: 'routine_direct',
+      deliveryMode: 'glance',
       confidence: 'high',
     });
     expect(plan.selectedContextCategories).toEqual(['hard_constraints', 'locale', 'meal_occasion']);
@@ -110,8 +111,26 @@ describe('cooking planner', () => {
     expect(plan.fallbackReason).toBe('malformed_json');
     expect(plan.intent).toBe('general_cooking_question');
     expect(plan.action).toBe('direct_answer');
+    expect(plan.deliveryMode).toBe('glance');
     expect(plan.toolPolicy.allowDocumentTools).toBe(true);
     expect(plan.privacySafeRationaleLabels).toEqual(['planner_unavailable']);
+  });
+
+  test('uses deep_dive only when the user asks for explanation', async () => {
+    const plan = await planCookingTurn(
+      input({ text: 'Explain why resting meat helps before slicing' }),
+      provider({
+        intent: 'general_cooking_question',
+        action: 'direct_answer',
+        confidence: 'high',
+        selectedContextCategories: ['hard_constraints'],
+        withheldContextCategories: [],
+        promptProfile: 'routine_direct',
+        clarificationNeeded: false,
+      }),
+    );
+
+    expect(plan.deliveryMode).toBe('deep_dive');
   });
 
   test('attached recipe screenshot falls back to source-faithful canvas work', async () => {
@@ -132,6 +151,7 @@ describe('cooking planner', () => {
       intent: 'source_driven_request',
       action: 'create_document',
       promptProfile: 'document_work',
+      deliveryMode: 'canvas_confirmation',
     });
     expect(plan.selectedContextCategories).toEqual(expect.arrayContaining(['source', 'document']));
     expect(plan.privacySafeRationaleLabels).toEqual(['attached_image_recipe_source']);

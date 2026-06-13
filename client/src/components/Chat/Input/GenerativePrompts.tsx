@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createSpecStreamCompiler, resolveAction } from '@json-render/core';
+import { useRecoilValue } from 'recoil';
 import {
   generativePrompts,
   getTokenHeader,
@@ -11,6 +12,8 @@ import {
 import { usePreferencesQuery } from '~/data-provider';
 import { useAuthContext } from '~/hooks';
 import { cn } from '~/utils';
+import store from '~/store';
+import { getPromptRailClass } from '../landingLayout';
 
 type GenerativePromptsProps = {
   enabled: boolean;
@@ -159,20 +162,20 @@ function SuggestionLink({
         }
       }}
       className={cn(
-        'group inline-flex min-h-8 shrink-0 items-center whitespace-nowrap rounded-full border border-white/10 bg-white/[0.025] px-2.5 py-1.5 text-left transition-colors duration-150',
-        'min-[769px]:mx-auto min-[769px]:block min-[769px]:min-h-0 min-[769px]:w-full min-[769px]:max-w-xl min-[769px]:whitespace-normal min-[769px]:rounded-none min-[769px]:border-0 min-[769px]:bg-transparent min-[769px]:px-0 min-[769px]:py-0',
-        'hover:border-white/20 hover:bg-white/[0.06] hover:text-gray-50 min-[769px]:hover:bg-transparent min-[769px]:hover:underline min-[769px]:hover:decoration-gray-300/40 min-[769px]:hover:underline-offset-4',
-        'focus-visible:border-white/30 focus-visible:bg-white/[0.06] focus-visible:text-gray-50 focus-visible:outline-none min-[769px]:focus-visible:bg-transparent min-[769px]:focus-visible:underline min-[769px]:focus-visible:underline-offset-4',
+        'group inline-flex min-h-8 shrink-0 items-center whitespace-nowrap rounded-full border border-black/10 bg-black/[0.02] px-2.5 py-1.5 text-left transition-colors duration-150 dark:border-white/10 dark:bg-white/[0.025]',
+        'min-[769px]:mx-auto min-[769px]:block min-[769px]:min-h-0 min-[769px]:w-full min-[769px]:max-w-xl min-[769px]:whitespace-normal min-[769px]:rounded-none min-[769px]:border-0 min-[769px]:bg-transparent min-[769px]:px-0 min-[769px]:py-0 dark:min-[769px]:bg-transparent',
+        'hover:border-[#c1121f]/20 hover:bg-[#c1121f]/[0.04] hover:text-text-primary dark:hover:border-[#c1121f]/25 dark:hover:bg-[#c1121f]/[0.07] dark:hover:text-gray-50 min-[769px]:hover:bg-transparent min-[769px]:hover:underline min-[769px]:hover:decoration-[#c1121f]/35 min-[769px]:hover:underline-offset-4 dark:min-[769px]:hover:bg-transparent dark:min-[769px]:hover:decoration-[#c1121f]/45',
+        'focus-visible:border-[#c1121f]/25 focus-visible:bg-[#c1121f]/[0.05] focus-visible:text-text-primary focus-visible:outline-none dark:focus-visible:border-[#c1121f]/35 dark:focus-visible:bg-[#c1121f]/[0.08] dark:focus-visible:text-gray-50 min-[769px]:focus-visible:bg-transparent min-[769px]:focus-visible:underline min-[769px]:focus-visible:decoration-[#c1121f]/40 min-[769px]:focus-visible:underline-offset-4 dark:min-[769px]:focus-visible:bg-transparent',
         disabled && 'cursor-not-allowed opacity-50 hover:no-underline',
       )}
     >
-      <span className="hidden text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-500 transition-colors duration-150 group-hover:text-gray-400 min-[769px]:mb-1 min-[769px]:block">
+      <span className="hidden text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary transition-colors duration-150 group-hover:text-[#c1121f] dark:text-gray-500 dark:group-hover:text-[#e63946] min-[769px]:mb-1 min-[769px]:block">
         {slotLabels[element.props.slot]}
       </span>
-      <span className="block text-[11px] font-medium leading-4 text-gray-200/90 transition-colors duration-150 group-hover:text-gray-50 min-[769px]:hidden">
+      <span className="block text-[11px] font-medium leading-4 text-text-secondary transition-colors duration-150 group-hover:text-text-primary dark:text-gray-200/90 dark:group-hover:text-gray-50 min-[769px]:hidden">
         {title}
       </span>
-      <span className="mt-1 hidden min-w-0 text-[14px] leading-6 text-gray-300/75 transition-colors duration-150 group-hover:text-gray-50 min-[769px]:block">
+      <span className="mt-1 hidden min-w-0 text-[14px] leading-6 text-text-secondary transition-colors duration-150 group-hover:text-text-primary dark:text-gray-300/75 dark:group-hover:text-gray-50 min-[769px]:block">
         {text}
       </span>
     </button>
@@ -180,15 +183,14 @@ function SuggestionLink({
 }
 
 function PromptRail({ children, loading = false }: { children: ReactNode; loading?: boolean }) {
+  const sidebarExpanded = useRecoilValue(store.sidebarExpanded);
+
   return (
     <div
-      className={cn(
-        'relative mx-auto mb-3 mt-0 flex w-full max-w-sm flex-row flex-wrap items-center justify-center gap-1.5 pb-0 min-[769px]:mt-5 min-[769px]:max-w-3xl min-[769px]:flex-col min-[769px]:items-center min-[769px]:gap-2.5 min-[769px]:px-4 min-[769px]:pb-2',
-        'xl:fixed xl:left-auto xl:right-12 xl:top-1/2 xl:z-20 xl:mt-0 xl:w-[280px] xl:max-w-none xl:-translate-y-1/2 xl:items-stretch xl:gap-5 xl:border-l xl:border-white/10 xl:px-0 xl:pl-5',
-        '2xl:right-16',
-        loading && 'opacity-70',
-      )}
+      className={getPromptRailClass(sidebarExpanded, loading)}
       data-testid="generative-prompts"
+      aria-hidden={sidebarExpanded ? 'true' : undefined}
+      inert={sidebarExpanded ? '' : undefined}
     >
       {children}
     </div>
@@ -201,12 +203,12 @@ function PromptSkeleton() {
       {[0, 1, 2].map((index) => (
         <div
           key={index}
-          className="h-8 w-20 rounded-full border border-white/10 bg-white/[0.025] px-2.5 py-1.5 min-[769px]:h-auto min-[769px]:w-full min-[769px]:max-w-xl min-[769px]:rounded-none min-[769px]:border-0 min-[769px]:bg-transparent min-[769px]:px-0 min-[769px]:py-0 xl:max-w-none"
+          className="h-8 w-20 rounded-full border border-black/10 bg-black/[0.02] px-2.5 py-1.5 dark:border-white/10 dark:bg-white/[0.025] min-[769px]:h-auto min-[769px]:w-full min-[769px]:max-w-xl min-[769px]:rounded-none min-[769px]:border-0 min-[769px]:bg-transparent min-[769px]:px-0 min-[769px]:py-0 dark:min-[769px]:bg-transparent xl:max-w-none"
           aria-hidden="true"
         >
-          <span className="mx-auto block h-3 w-16 rounded-full bg-gray-400/10 min-[769px]:mx-0 min-[769px]:mb-2 min-[769px]:h-2 min-[769px]:w-12" />
-          <span className="hidden h-3 w-full rounded-full bg-gray-400/10 min-[769px]:block" />
-          <span className="mt-2 hidden h-3 w-4/5 rounded-full bg-gray-400/10 min-[769px]:block" />
+          <span className="mx-auto block h-3 w-16 rounded-full bg-black/10 dark:bg-gray-400/10 min-[769px]:mx-0 min-[769px]:mb-2 min-[769px]:h-2 min-[769px]:w-12" />
+          <span className="hidden h-3 w-full rounded-full bg-black/10 dark:bg-gray-400/10 min-[769px]:block" />
+          <span className="mt-2 hidden h-3 w-4/5 rounded-full bg-black/10 dark:bg-gray-400/10 min-[769px]:block" />
         </div>
       ))}
     </PromptRail>

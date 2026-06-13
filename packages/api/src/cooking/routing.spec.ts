@@ -3,6 +3,7 @@ import { routeCookingModels, routeCookingPlanner } from './routing';
 
 function plan(overrides: Partial<CookingTurnPlan> = {}): CookingTurnPlan {
   return {
+    category: 'cooking_help',
     intent: 'general_cooking_question',
     action: 'direct_answer',
     confidence: 'high',
@@ -10,6 +11,7 @@ function plan(overrides: Partial<CookingTurnPlan> = {}): CookingTurnPlan {
     selectedContextCategories: ['hard_constraints'],
     withheldContextCategories: [],
     promptProfile: 'routine_direct',
+    deliveryMode: 'standard',
     clarification: { needed: false },
     privacySafeRationaleLabels: [],
     toolPolicy: { allowDocumentTools: false, allowResearchRequestTool: false },

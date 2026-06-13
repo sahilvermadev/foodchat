@@ -1555,6 +1555,61 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(result.text).not.toContain('I could not validate the first draft');
   });
 
+  test('advisory delivery labels do not hide a useful active-canvas answer', async () => {
+    const usefulAnswer =
+      'Yes, mixing cream with drained yogurt can work here if you keep the heat gentle. Use hung curd so it does not water out, whisk it smooth with cream off the heat, then fold it into the buttery pan juices after the chicken has charred. The yogurt adds tang and thickness, but it can split if boiled hard. Keep the sauce glossy and warm, not bubbling, and finish with chaat masala only after tasting.';
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: usefulAnswer } }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: 'Should I update the canvas?' } }],
+        }),
+      });
+
+    setFetch(
+      fetchMock,
+      JSON.stringify({
+        intent: 'document_question',
+        action: 'direct_answer',
+        confidence: 'medium',
+        selectedContextCategories: ['hard_constraints', 'document', 'taste'],
+        withheldContextCategories: ['research'],
+        promptProfile: 'active_canvas_discussion',
+        clarificationNeeded: false,
+        rationaleLabels: ['active_canvas_question'],
+      }),
+      [
+        JSON.stringify({
+          passes: false,
+          failureLabels: ['overlong_for_delivery_mode', 'needless_clarification'],
+          rationaleLabels: ['too_verbose', 'unnecessary_closing_question'],
+        }),
+        JSON.stringify({
+          passes: false,
+          failureLabels: ['needless_clarification'],
+          rationaleLabels: ['repair_still_asks_question'],
+        }),
+      ],
+    );
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'i have heard some people mix the cream with drained yoghurt, would that work in this?',
+      activeDraft: activeDraft(),
+    });
+
+    expect(result.text).toContain('mixing cream with drained yogurt can work');
+    expect(result.text).not.toContain('I could not validate');
+  });
+
   test('quality gate repairs false canvas mutation claims when no draft changed', async () => {
     const fetchMock = jest
       .fn()
@@ -4185,5 +4240,84 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     const messages = JSON.parse(toolCallBody[1].body).messages;
     const toolMsg = messages.find((m: { role: string }) => m.role === 'tool');
     expect(toolMsg.content).toContain('The flavor database is temporarily unavailable');
+  });
+
+  test('stops retrying optional tools after repeated execution failures', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'epicure-fail-1',
+                    type: 'function',
+                    function: {
+                      name: 'neighbors',
+                      arguments: JSON.stringify({ ingredient: 'heavy cream', top_k: 5 }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'epicure-fail-2',
+                    type: 'function',
+                    function: {
+                      name: 'neighbors',
+                      arguments: JSON.stringify({ ingredient: 'heavy cream', top_k: 5 }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  'Yes. Hung curd plus cream can work if you add it off heat and keep the sauce warm, not boiling.',
+              },
+            },
+          ],
+        }),
+      });
+
+    setFetch(fetchMock);
+
+    const result = await runCookingChat({
+      user: 'user-1',
+      conversationId: 'conversation-1',
+      text: 'would cream mixed with drained yogurt work in this chicken?',
+    });
+
+    expect(result.text).toContain('Hung curd plus cream can work');
+
+    const thirdProviderBody = JSON.parse(fetchMock.mock.calls[2][1].body);
+    expect(thirdProviderBody.tools).toEqual([]);
+    expect(JSON.stringify(thirdProviderBody.messages)).toContain('Stop calling tools');
   });
 });

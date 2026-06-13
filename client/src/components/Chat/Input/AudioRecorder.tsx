@@ -1,31 +1,31 @@
 import { memo, useCallback, useRef } from 'react';
 import { MicOff } from 'lucide-react';
 import { useToastContext, TooltipAnchor, ListeningIcon, Spinner } from '@librechat/client';
-import { useLocalize, useSpeechToText, useGetAudioSettings } from '~/hooks';
+import { useLocalize, useSpeechToText } from '~/hooks';
 import { useChatFormContext } from '~/Providers';
 import { globalAudioId } from '~/common';
 import { cn } from '~/utils';
+import {
+  createTranscriptionSession,
+  type TranscriptionSession,
+} from '~/hooks/Input/transcriptionSession';
 
-const isExternalSTT = (speechToTextEndpoint: string) => speechToTextEndpoint === 'external';
 export default memo(function AudioRecorder({
   disabled,
   ask,
   methods,
-  textAreaRef,
   isSubmitting,
 }: {
   disabled: boolean;
   ask: (data: { text: string }) => void;
   methods: ReturnType<typeof useChatFormContext>;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
   isSubmitting: boolean;
 }) {
   const { setValue, reset, getValues } = methods;
   const localize = useLocalize();
   const { showToast } = useToastContext();
-  const { speechToTextEndpoint } = useGetAudioSettings();
 
-  const existingTextRef = useRef<string>('');
+  const sessionRef = useRef<TranscriptionSession>(createTranscriptionSession(''));
   const isSubmittingRef = useRef(isSubmitting);
   isSubmittingRef.current = isSubmitting;
 
@@ -44,57 +44,45 @@ export default memo(function AudioRecorder({
           console.log('Unmuting global audio');
           globalAudio.muted = false;
         }
-        /** For external STT, append existing text to the transcription */
-        const finalText =
-          isExternalSTT(speechToTextEndpoint) && existingTextRef.current
-            ? `${existingTextRef.current} ${text}`
-            : text;
+        const finalText = sessionRef.current.complete(text);
         ask({ text: finalText });
         reset({ text: '' });
-        existingTextRef.current = '';
+        sessionRef.current = createTranscriptionSession('');
       }
     },
-    [ask, reset, showToast, localize, speechToTextEndpoint],
+    [ask, reset, showToast, localize],
   );
 
-  const setText = useCallback(
+  const handleRecordingStart = useCallback(() => {
+    sessionRef.current = createTranscriptionSession(getValues('text') || '');
+  }, [getValues]);
+
+  const handleTranscript = useCallback(
     (text: string) => {
-      let newText = text;
-      if (isExternalSTT(speechToTextEndpoint)) {
-        /** For external STT, the text comes as a complete transcription, so append to existing */
-        newText = existingTextRef.current ? `${existingTextRef.current} ${text}` : text;
-      } else {
-        /** For browser STT, the transcript is cumulative, so we only need to prepend the existing text once */
-        newText = existingTextRef.current ? `${existingTextRef.current} ${text}` : text;
-      }
-      setValue('text', newText, {
+      setValue('text', sessionRef.current.display(text), {
         shouldValidate: true,
       });
     },
-    [setValue, speechToTextEndpoint],
+    [setValue],
   );
 
   const { isListening, isLoading, startRecording, stopRecording } = useSpeechToText(
-    setText,
+    handleRecordingStart,
+    handleTranscript,
     onTranscriptionComplete,
   );
 
-  const handleStartRecording = async () => {
-    existingTextRef.current = getValues('text') || '';
+  const handleStartRecording = () => {
     startRecording();
   };
 
-  const handleStopRecording = async () => {
+  const handleStopRecording = () => {
     stopRecording();
-    /** For browser STT, clear the reference since text was already being updated */
-    if (!isExternalSTT(speechToTextEndpoint)) {
-      existingTextRef.current = '';
-    }
   };
 
   const renderIcon = () => {
     if (isListening === true) {
-      return <MicOff className="stroke-red-500" />;
+      return <MicOff className="stroke-[#c1121f]" />;
     }
     if (isLoading === true) {
       return <Spinner className="stroke-text-secondary" />;
@@ -114,6 +102,8 @@ export default memo(function AudioRecorder({
           disabled={disabled}
           className={cn(
             'flex size-11 items-center justify-center rounded-full p-1 transition-colors hover:bg-surface-hover',
+            isListening &&
+              'bg-[#c1121f]/10 shadow-[0_0_0_6px_rgba(193,18,31,0.08)] hover:bg-[#c1121f]/15',
           )}
           title={localize('com_ui_use_micrphone')}
           aria-pressed={isListening}

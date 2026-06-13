@@ -371,18 +371,18 @@ export default function LocationWeather() {
   }
 
   return (
-    <div className="pointer-events-none fixed right-8 top-[calc(env(safe-area-inset-top)+1.35rem)] z-30 hidden max-w-[16rem] items-center justify-end gap-1.5 text-right text-[12px] leading-none text-gray-300/80 md:flex xl:right-12">
+    <div className="pointer-events-none fixed right-8 top-[calc(env(safe-area-inset-top)+1.35rem)] z-30 hidden max-w-[16rem] items-center justify-end gap-1.5 text-right text-[12px] leading-none text-text-secondary dark:text-gray-300/80 md:flex xl:right-12">
       <span className="truncate">{display.town}</span>
       {typeof display.temperature === 'number' ? (
         <>
-          <span className="text-gray-500/70">/</span>
-          <span className="whitespace-nowrap text-gray-100/90">
+          <span className="text-text-tertiary/70 dark:text-gray-500/70">/</span>
+          <span className="text-text-primary/80 whitespace-nowrap dark:text-gray-100/90">
             {display.temperature}°{display.unit}
           </span>
         </>
       ) : null}
       {typeof display.code === 'number' ? (
-        <span className="hidden whitespace-nowrap text-gray-400/70 md:inline">
+        <span className="hidden whitespace-nowrap text-text-tertiary dark:text-gray-400/70 md:inline">
           {localize(weatherLabelKey(display.code))}
         </span>
       ) : null}

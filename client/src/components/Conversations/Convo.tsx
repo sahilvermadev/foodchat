@@ -3,11 +3,10 @@ import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { useParams } from 'react-router-dom';
 import { Constants } from 'librechat-data-provider';
 import { useToastContext, useMediaQuery } from '@librechat/client';
-import type { TConversation } from 'librechat-data-provider';
+import type { CookingChatCategory, TConversation } from 'librechat-data-provider';
 import { useUpdateConversationMutation } from '~/data-provider';
-import EndpointIcon from '~/components/Endpoints/EndpointIcon';
 import { useNavigateToConvo, useLocalize, useShiftKey } from '~/hooks';
-import { useGetEndpointsQuery } from '~/data-provider';
+import type { TranslationKeys } from '~/hooks';
 import { NotificationSeverity } from '~/common';
 import { ConvoOptions } from './ConvoOptions';
 import RenameForm from './RenameForm';
@@ -22,6 +21,61 @@ interface ConversationProps {
   isGenerating?: boolean;
 }
 
+const categoryDotClasses: Record<CookingChatCategory, string> = {
+  ideas: 'bg-[#d97706] dark:bg-[#f59e0b]',
+  recipes: 'bg-[#c1121f] dark:bg-[#e63946]',
+  saved_recipe: 'bg-[#7c3aed] dark:bg-[#a78bfa]',
+  adjustments: 'bg-[#2563eb] dark:bg-[#60a5fa]',
+  cooking_help: 'bg-[#15803d] dark:bg-[#4ade80]',
+};
+
+const categoryLabelKeys: Record<CookingChatCategory, TranslationKeys> = {
+  ideas: 'com_cooking_chat_category_ideas',
+  recipes: 'com_cooking_chat_category_recipes',
+  saved_recipe: 'com_cooking_chat_category_saved_recipe',
+  adjustments: 'com_cooking_chat_category_adjustments',
+  cooking_help: 'com_cooking_chat_category_cooking_help',
+};
+
+function CategoryDot({
+  category,
+  isGenerating,
+}: {
+  category?: CookingChatCategory;
+  isGenerating: boolean;
+}) {
+  const localize = useLocalize();
+  const label = category
+    ? localize(categoryLabelKeys[category])
+    : localize('com_cooking_chat_category_uncategorized');
+
+  return (
+    <span
+      className="relative flex size-5 shrink-0 items-center justify-center"
+      role="img"
+      aria-label={label}
+      title={label}
+    >
+      {isGenerating ? (
+        <span
+          className={cn(
+            'absolute size-4 animate-ping rounded-full opacity-20',
+            category ? categoryDotClasses[category] : 'bg-gray-400 dark:bg-gray-500',
+          )}
+          aria-hidden="true"
+        />
+      ) : null}
+      <span
+        className={cn(
+          'relative size-2.5 rounded-full ring-1 ring-black/10 dark:ring-white/15',
+          category ? categoryDotClasses[category] : 'bg-gray-400 dark:bg-gray-500',
+        )}
+        aria-hidden="true"
+      />
+    </span>
+  );
+}
+
 export default function Conversation({
   conversation,
   retainView,
@@ -32,7 +86,6 @@ export default function Conversation({
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const { navigateToConvo } = useNavigateToConvo();
-  const { data: endpointsConfig } = useGetEndpointsQuery();
   const currentConvoId = useMemo(() => params.conversationId, [params.conversationId]);
   const updateConvoMutation = useUpdateConversationMutation(currentConvoId ?? '');
   const activeConvos = useRecoilValue(store.allConversationsSelector);
@@ -188,10 +241,10 @@ export default function Conversation({
     <div
       ref={containerRef}
       className={cn(
-        'group relative flex h-12 w-full items-center rounded-lg outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring-primary md:h-9',
+        'group relative flex h-11 w-full items-center rounded-md outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring-primary md:h-8',
         isActiveConvo || isPopoverActive
-          ? 'bg-surface-active-alt text-surface-submit before:absolute before:bottom-1 before:left-0 before:top-1 before:w-0.5 before:rounded-full before:bg-surface-submit'
-          : 'hover:bg-surface-active-alt',
+          ? 'bg-[#c1121f]/[0.08] text-[#c1121f] before:absolute before:bottom-1 before:left-0 before:top-1 before:w-0.5 before:rounded-full before:bg-[#c1121f] dark:bg-[#c1121f]/10 dark:text-[#e63946]'
+          : 'hover:bg-black/[0.035] dark:hover:bg-surface-active-alt',
       )}
       role="button"
       tabIndex={renaming ? -1 : 0}
@@ -242,35 +295,7 @@ export default function Conversation({
           isSmallScreen={isSmallScreen}
           localize={localize}
         >
-          {isGenerating ? (
-            <svg
-              className="h-5 w-5 flex-shrink-0 animate-spin text-current"
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-label={localize('com_ui_generating')}
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="3"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              />
-            </svg>
-          ) : (
-            <EndpointIcon
-              conversation={conversation}
-              endpointsConfig={endpointsConfig}
-              size={20}
-              context="menu-item"
-            />
-          )}
+          <CategoryDot category={conversation.cookingCategory} isGenerating={isGenerating} />
         </ConvoLink>
       )}
       <div

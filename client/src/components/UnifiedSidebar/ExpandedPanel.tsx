@@ -1,58 +1,70 @@
 import { memo, useCallback, lazy, Suspense } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilValue } from 'recoil';
 import { useLocation } from 'react-router-dom';
 import { SquarePen } from 'lucide-react';
-import { QueryKeys } from 'librechat-data-provider';
 import { Skeleton, Button, TooltipAnchor, ThemeSelector } from '@librechat/client';
 import type { NavLink } from '~/common';
 import { useActivePanel, DEFAULT_PANEL } from '~/Providers/ActivePanelContext';
-import { useLocalize, useNewConvo } from '~/hooks';
-import { clearMessagesCache, cn } from '~/utils';
+import { useLocalize } from '~/hooks';
+import { cn } from '~/utils';
 import store from '~/store';
 import { resolveRenderedPanel } from '~/components/SidePanel/panelSelection';
+import useStartCookingConversation from '~/hooks/Chat/useStartCookingConversation';
 
 const AccountSettings = lazy(() => import('~/components/Nav/AccountSettings'));
 
-const NewChatButton = memo(function NewChatButton({
-  collapseOnNavigate,
-  onCollapse,
-  setActive,
+const BrandButton = memo(function BrandButton({
+  onStartConversation,
 }: {
-  collapseOnNavigate?: boolean;
-  onCollapse?: () => void;
-  setActive: (id: string) => void;
+  onStartConversation: () => void;
 }) {
   const localize = useLocalize();
-  const queryClient = useQueryClient();
-  const { newConversation } = useNewConvo();
-  const conversation = useRecoilValue(store.conversationByIndex(0));
-  const switchToHistory = useRecoilValue(store.newChatSwitchToHistory);
 
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLAnchorElement>) => {
       if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
-        clearMessagesCache(queryClient, conversation?.conversationId);
-        queryClient.invalidateQueries([QueryKeys.messages]);
-        newConversation({ routeBase: '/cook' });
-        if (switchToHistory) {
-          setActive(DEFAULT_PANEL);
-        }
-        if (collapseOnNavigate) {
-          onCollapse?.();
-        }
+        onStartConversation();
       }
     },
-    [
-      collapseOnNavigate,
-      conversation?.conversationId,
-      newConversation,
-      onCollapse,
-      queryClient,
-      setActive,
-      switchToHistory,
-    ],
+    [onStartConversation],
+  );
+
+  return (
+    <TooltipAnchor
+      side="right"
+      description={localize('com_ui_app_name')}
+      render={
+        <a
+          href="/cook"
+          className="flex h-12 w-14 items-center justify-center rounded-lg transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+          aria-label={localize('com_ui_app_name')}
+          onClick={handleClick}
+        >
+          <span className="rekky-sidebar-wordmark select-none text-[#c1121f] transition-colors hover:text-[#e63946]">
+            {localize('com_ui_app_name')}
+          </span>
+        </a>
+      }
+    />
+  );
+});
+
+const NewChatButton = memo(function NewChatButton({
+  onStartConversation,
+}: {
+  onStartConversation: () => void;
+}) {
+  const localize = useLocalize();
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        onStartConversation();
+      }
+    },
+    [onStartConversation],
   );
 
   return (
@@ -130,7 +142,9 @@ const NavIconButton = memo(function NavIconButton({
           aria-pressed={isActive}
           className={cn(
             'h-11 w-11 rounded-lg',
-            isActive ? 'bg-surface-active-alt text-surface-submit' : 'text-text-secondary',
+            isActive
+              ? 'bg-[#c1121f]/10 text-[#c1121f] hover:bg-[#c1121f]/15 dark:bg-[#c1121f]/[0.12] dark:text-[#e63946]'
+              : 'text-text-secondary hover:text-text-primary',
           )}
           onClick={handleClick}
         >
@@ -156,10 +170,20 @@ function ExpandedPanel({
   onCollapse?: () => void;
   onExpand?: () => void;
 }) {
-  const localize = useLocalize();
   const location = useLocation();
   const { active, setActive } = useActivePanel();
   const renderedPanel = resolveRenderedPanel(active, links, location.pathname);
+  const switchToHistory = useRecoilValue(store.newChatSwitchToHistory);
+  const startConversation = useStartCookingConversation();
+  const handleStartConversation = useCallback(() => {
+    startConversation();
+    if (switchToHistory) {
+      setActive(DEFAULT_PANEL);
+    }
+    if (collapseOnNavigate) {
+      onCollapse?.();
+    }
+  }, [collapseOnNavigate, onCollapse, setActive, startConversation, switchToHistory]);
 
   return (
     <div
@@ -171,29 +195,12 @@ function ExpandedPanel({
       )}
     >
       <div className="flex h-14 items-center justify-center">
-        <TooltipAnchor
-          side="right"
-          description={localize('com_ui_app_name')}
-          render={
-            <div
-              className="flex h-12 w-14 items-center justify-center rounded-lg"
-              aria-label={localize('com_ui_app_name')}
-            >
-              <span className="rekky-sidebar-wordmark select-none text-text-primary">
-                {localize('com_ui_app_name')}
-              </span>
-            </div>
-          }
-        />
+        <BrandButton onStartConversation={handleStartConversation} />
       </div>
 
       <div className="flex min-h-0 flex-1 items-center justify-center py-3">
         <div className="flex max-h-full flex-col items-center gap-2 overflow-y-auto">
-          <NewChatButton
-            collapseOnNavigate={collapseOnNavigate}
-            onCollapse={onCollapse}
-            setActive={setActive}
-          />
+          <NewChatButton onStartConversation={handleStartConversation} />
           <div className="my-1 h-px w-7 bg-border-light" />
           {links.map((link) => (
             <NavIconButton

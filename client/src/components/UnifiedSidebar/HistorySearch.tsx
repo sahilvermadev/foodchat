@@ -35,7 +35,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
         queryTokens.has(part.toLocaleLowerCase()) ? (
           <mark
             key={`${part}-${index}`}
-            className="bg-yellow-200/70 text-inherit dark:bg-yellow-700/50"
+            className="bg-[#c1121f]/15 text-inherit dark:bg-[#c1121f]/25"
           >
             {part}
           </mark>
@@ -132,14 +132,14 @@ export default function HistorySearch({
 
   return (
     <div className={cn('flex min-h-0 flex-col', isSearchActive && 'flex-1')}>
-      <div className="relative px-3 pb-2 pt-1">
+      <div className="relative px-3 pb-3 pt-4">
         <Search
           aria-hidden="true"
-          className="pointer-events-none absolute left-5 top-3.5 h-4 w-4 text-text-secondary"
+          className="pointer-events-none absolute left-5 top-[1.65rem] h-4 w-4 text-text-tertiary"
         />
         <input
           ref={inputRef}
-          type="search"
+          type="text"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleKeyDown}
@@ -148,7 +148,7 @@ export default function HistorySearch({
           role="combobox"
           aria-controls="chat-history-search-results"
           aria-expanded={isSearchActive}
-          className="h-9 w-full rounded-md border border-border-medium bg-surface-secondary pl-9 pr-9 text-sm text-text-primary outline-none placeholder:text-text-secondary focus:border-border-heavy focus:ring-1 focus:ring-border-heavy"
+          className="rekky-history-search-input dark:hover:border-white/12 h-10 w-full rounded-xl border border-black/10 bg-white/45 pl-9 pr-9 text-sm text-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] outline-none transition-colors placeholder:text-text-secondary hover:bg-white/60 focus:border-black/10 focus:bg-white/60 dark:border-white/10 dark:bg-white/[0.055] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] dark:hover:bg-white/[0.075] dark:focus:border-white/10 dark:focus:bg-white/[0.075]"
         />
         {isSearchActive && (
           <button
@@ -156,7 +156,7 @@ export default function HistorySearch({
             title={localize('com_ui_clear_search')}
             aria-label={localize('com_ui_clear_search')}
             onClick={() => setQuery('')}
-            className="absolute right-5 top-2.5 flex h-6 w-6 items-center justify-center rounded-md text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+            className="absolute right-5 top-[1.45rem] flex h-6 w-6 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-black/[0.045] hover:text-text-primary dark:hover:bg-white/10"
           >
             <X className="h-4 w-4" />
           </button>

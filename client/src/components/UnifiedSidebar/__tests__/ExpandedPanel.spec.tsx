@@ -9,8 +9,7 @@ import type { MutableSnapshot } from 'recoil';
 import type { NavLink } from '~/common';
 import { ActivePanelProvider, DEFAULT_PANEL } from '~/Providers/ActivePanelContext';
 
-const mockNewConversation = jest.fn();
-const mockClearMessagesCache = jest.fn();
+const mockStartCookingConversation = jest.fn();
 
 jest.mock('~/store', () => {
   const { atom } = jest.requireActual('recoil');
@@ -31,12 +30,15 @@ jest.mock('~/store', () => {
 
 jest.mock('~/hooks', () => ({
   useLocalize: () => (key: string) => key,
-  useNewConvo: () => ({ newConversation: mockNewConversation }),
 }));
 
 jest.mock('~/utils', () => ({
-  clearMessagesCache: (...args: unknown[]) => mockClearMessagesCache(...args),
   cn: (...classes: unknown[]) => classes.filter(Boolean).join(' '),
+}));
+
+jest.mock('~/hooks/Chat/useStartCookingConversation', () => ({
+  __esModule: true,
+  default: () => mockStartCookingConversation,
 }));
 
 jest.mock('~/components/Chat/Menus/OpenSidebar', () => ({
@@ -209,7 +211,7 @@ describe('ExpandedPanel', () => {
       const newChatLink = screen.getByTestId('new-chat-button');
       fireEvent.click(newChatLink);
 
-      expect(mockNewConversation).toHaveBeenCalledWith({ routeBase: '/cook' });
+      expect(mockStartCookingConversation).toHaveBeenCalledTimes(1);
       expect(onCollapse).not.toHaveBeenCalled();
       expect(localStorage.getItem('side:active-panel')).toBe(DEFAULT_PANEL);
     });
@@ -223,7 +225,7 @@ describe('ExpandedPanel', () => {
 
       fireEvent.click(screen.getByTestId('new-chat-button'));
 
-      expect(mockNewConversation).toHaveBeenCalledWith({ routeBase: '/cook' });
+      expect(mockStartCookingConversation).toHaveBeenCalledTimes(1);
       expect(onCollapse).toHaveBeenCalledTimes(1);
     });
 
@@ -239,8 +241,16 @@ describe('ExpandedPanel', () => {
       const newChatLink = screen.getByTestId('new-chat-button');
       fireEvent.click(newChatLink);
 
-      expect(mockNewConversation).toHaveBeenCalledWith({ routeBase: '/cook' });
+      expect(mockStartCookingConversation).toHaveBeenCalledTimes(1);
       expect(localStorage.getItem('side:active-panel')).toBe('prompts');
+    });
+
+    it('uses the same conversation-start operation from the brand link', async () => {
+      await renderPanel();
+
+      fireEvent.click(screen.getByRole('link', { name: 'com_ui_app_name' }));
+
+      expect(mockStartCookingConversation).toHaveBeenCalledTimes(1);
     });
   });
 });

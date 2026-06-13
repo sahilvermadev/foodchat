@@ -8,6 +8,7 @@ import {
   deleteSavedRecipe,
   getRecipe,
   listRecipes,
+  ownsRecipe,
   saveRecipe,
   updateSavedRecipe,
   parseServingsFromMarkdown,
@@ -140,6 +141,19 @@ describe('saved recipe title integrity', () => {
     const repaired = await mongoose.models.SavedRecipe.findById(created._id).lean();
     expect(repaired?.title).toBe('Thai Iced Tea');
     expect(repaired?.recipe.title).toBe('Thai Iced Tea');
+  });
+});
+
+describe('saved recipe ownership', () => {
+  test('checks ownership without loading or repairing the recipe', async () => {
+    const saved = await saveRecipe('owner-user', {
+      title: 'Owned recipe',
+      documentMarkdown: markdown,
+      recipe: recipe('Owned recipe'),
+    });
+
+    await expect(ownsRecipe('owner-user', saved._id)).resolves.toBe(true);
+    await expect(ownsRecipe('different-user', saved._id)).resolves.toBe(false);
   });
 });
 

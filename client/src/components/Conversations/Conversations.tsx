@@ -71,7 +71,10 @@ const DateLabel: FC<{ groupName: string; isFirst?: boolean }> = memo(({ groupNam
       aria-label={localize('com_a11y_chats_date_section', {
         date: localize(groupName as TranslationKeys) || groupName,
       })}
-      className={cn('pl-1 pt-1 text-text-secondary', isFirst === true ? 'mt-0' : 'mt-2')}
+      className={cn(
+        'pl-1.5 pt-2 font-medium uppercase tracking-[0.08em] text-text-tertiary',
+        isFirst === true ? 'mt-0' : 'mt-2',
+      )}
       style={{ fontSize: '0.7rem' }}
     >
       {localize(groupName as TranslationKeys) || groupName}
@@ -112,6 +115,7 @@ const MemoizedConvo = memo(
       prevProps.conversation.conversationId === nextProps.conversation.conversationId &&
       prevProps.conversation.title === nextProps.conversation.title &&
       prevProps.conversation.endpoint === nextProps.conversation.endpoint &&
+      prevProps.conversation.cookingCategory === nextProps.conversation.cookingCategory &&
       prevProps.isGenerating === nextProps.isGenerating
     );
   },
@@ -236,13 +240,7 @@ const Conversations: FC<ConversationsProps> = ({
 
       return null;
     },
-    [
-      cache,
-      flattenedItems,
-      moveToTop,
-      toggleNav,
-      activeJobIds,
-    ],
+    [cache, flattenedItems, moveToTop, toggleNav, activeJobIds],
   );
 
   const getRowHeight = useCallback(

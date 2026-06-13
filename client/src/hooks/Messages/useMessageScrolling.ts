@@ -9,12 +9,38 @@ import store from '~/store';
 const threshold = 0.85;
 const debounceRate = 150;
 
+export function latestCookingAssistantMessageId(messagesTree?: TMessage[] | null): string | null {
+  if (!messagesTree?.length) {
+    return null;
+  }
+
+  let latestId: string | null = null;
+  const visit = (messages: TMessage[]) => {
+    for (const message of messages) {
+      if (
+        !message.isCreatedByUser &&
+        message.metadata?.cookingScrollAnchor === true &&
+        message.messageId
+      ) {
+        latestId = message.messageId;
+      }
+      if (message.children?.length) {
+        visit(message.children);
+      }
+    }
+  };
+
+  visit(messagesTree);
+  return latestId;
+}
+
 export default function useMessageScrolling(messagesTree?: TMessage[] | null) {
   const autoScroll = useRecoilValue(store.autoScroll);
 
   const scrollableRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const initialScrollConversationRef = useRef<string | null>(null);
+  const anchoredResponseRef = useRef<string | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const { conversation, conversationId } = useMessagesConversation();
   const { setAbortScroll, isSubmitting, abortScroll } = useMessagesSubmission();
@@ -137,16 +163,36 @@ export default function useMessageScrolling(messagesTree?: TMessage[] | null) {
       return;
     }
 
-    if (isSubmitting && scrollToBottom && abortScroll !== true) {
-      scrollToBottom();
+    if (!isSubmitting) {
+      anchoredResponseRef.current = null;
+      return;
     }
 
+    if (abortScroll === true) {
+      return;
+    }
+
+    const latestResponseId = latestCookingAssistantMessageId(messagesTree);
+    if (!latestResponseId || anchoredResponseRef.current === latestResponseId) {
+      return;
+    }
+
+    let frameId: number | null = requestAnimationFrame(() => {
+      const target = document.getElementById(latestResponseId);
+      if (!target) {
+        return;
+      }
+      anchoredResponseRef.current = latestResponseId;
+      target.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+    });
+
     return () => {
-      if (abortScroll === true) {
-        scrollToBottom && scrollToBottom.cancel();
+      if (frameId != null) {
+        cancelAnimationFrame(frameId);
+        frameId = null;
       }
     };
-  }, [isSubmitting, messagesTree, scrollToBottom, abortScroll]);
+  }, [isSubmitting, messagesTree, abortScroll]);
 
   useEffect(() => {
     if (!messagesEndRef.current || !scrollableRef.current) {

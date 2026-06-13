@@ -50,6 +50,14 @@ export type StructuredRecipe = {
 
 export type CookingDraftStatus = 'active' | 'archived';
 export type CookingDocumentType = 'recipe' | 'guide' | 'prep_plan';
+export const CookingChatCategories = [
+  'ideas',
+  'recipes',
+  'saved_recipe',
+  'adjustments',
+  'cooking_help',
+] as const;
+export type CookingChatCategory = (typeof CookingChatCategories)[number];
 export type CookingSessionStatus = 'active' | 'completed';
 export type RecipeCategorizationStatus = 'pending' | 'complete' | 'failed';
 export type RecipeIllustrationStatus = 'pending' | 'generating' | 'complete' | 'failed';
@@ -203,7 +211,9 @@ export type UpdateCookingDraftRequest = {
   documentMarkdown?: string;
 };
 
-export type CreateCookingDocumentRequest = GenerateCookingDraftRequest;
+export type CreateCookingDocumentRequest = GenerateCookingDraftRequest & {
+  savedRecipeId?: string;
+};
 
 export type UpdateCookingDocumentRequest = UpdateCookingDraftRequest;
 

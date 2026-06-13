@@ -1,9 +1,10 @@
 const express = require('express');
 const crypto = require('crypto');
-const { logger } = require('@librechat/data-schemas');
+const { isValidObjectIdString, logger } = require('@librechat/data-schemas');
 const {
   CookingValidationError,
   runCookingChat,
+  resolveCookingChatCategory,
   curatePendingPreferences,
   withPendingPreferenceBatch,
   getExistingPreferences,
@@ -13,6 +14,7 @@ const {
   selectCookingDocument,
   deleteCookingDocument,
   updateCookingDocument,
+  startSavedRecipeDiscussion,
   generateCookingDraft,
   updateCookingDraft,
   startCookingSession,
@@ -46,6 +48,13 @@ function assertText(value, message) {
 
 function assertOptionalText(value, message) {
   if (value != null && typeof value !== 'string') {
+    throw new CookingValidationError(message);
+  }
+}
+
+function assertOptionalObjectId(value, message) {
+  assertOptionalText(value, message);
+  if (value != null && !isValidObjectIdString(value.trim())) {
     throw new CookingValidationError(message);
   }
 }
@@ -183,6 +192,51 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function splitAssistantTextBlocks(text) {
+  const content = typeof text === 'string' ? text : '';
+  if (!content.trim()) {
+    return [];
+  }
+
+  const parts = content.split(/(\n{2,})/);
+  const blocks = [];
+  let pendingSeparator = '';
+  for (const part of parts) {
+    if (!part) {
+      continue;
+    }
+    if (/^\n{2,}$/.test(part)) {
+      pendingSeparator += part;
+      continue;
+    }
+
+    const lines = part.split('\n');
+    const allSemanticLines =
+      lines.length > 1 &&
+      lines.every((line) => {
+        const trimmed = line.trim();
+        return !trimmed || /^(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s)/.test(trimmed);
+      });
+
+    if (!allSemanticLines) {
+      blocks.push(`${pendingSeparator}${part}`);
+      pendingSeparator = '';
+      continue;
+    }
+
+    for (const line of lines) {
+      if (!line.trim()) {
+        pendingSeparator += '\n';
+        continue;
+      }
+      blocks.push(`${pendingSeparator}${line}`);
+      pendingSeparator = '\n';
+    }
+  }
+
+  return blocks.length > 0 ? blocks : [content];
+}
+
 async function streamAssistantText(
   res,
   { text, messageId, parentMessageId, conversationId, onFirstChunk },
@@ -192,25 +246,14 @@ async function streamAssistantText(
     return;
   }
 
-  const chars = Array.from(content);
-  let cursor = 0;
+  const blocks = splitAssistantTextBlocks(content);
+  let cumulative = '';
   let firstChunkSent = false;
-  while (cursor < chars.length) {
-    const remaining = chars.length - cursor;
-    let chunkSize = 6;
-    let delayMs = 25;
-    if (remaining > 600) {
-      chunkSize = 16;
-      delayMs = 20;
-    } else if (remaining > 200) {
-      chunkSize = 10;
-      delayMs = 25;
-    }
-
-    cursor += chunkSize;
+  for (let index = 0; index < blocks.length; index += 1) {
+    cumulative += blocks[index];
     sendEvent(res, {
       message: true,
-      text: chars.slice(0, cursor).join(''),
+      text: cumulative,
       messageId,
       parentMessageId,
       conversationId,
@@ -219,7 +262,9 @@ async function streamAssistantText(
       firstChunkSent = true;
       onFirstChunk?.();
     }
-    await delay(delayMs);
+    if (index < blocks.length - 1) {
+      await delay(90);
+    }
   }
 }
 
@@ -357,15 +402,16 @@ router.post('/chat', async (req, res) => {
   delete requestMessage.responseMessageId;
   delete requestMessage.overrideParentMessageId;
 
-  sendEvent(res, { message: requestMessage, created: true });
+  sendEvent(res, { message: requestMessage, created: true, cooking: true });
   perf.mark('request_message_event_sent');
 
   try {
     const db = models();
     const contextStartedAt = Date.now();
-    const [preferences, documentCollection] = await Promise.all([
+    const [preferences, documentCollection, existingConversation] = await Promise.all([
       getExistingPreferences(userId(req)),
       listCookingDocuments(userId(req), conversationId),
+      isNewConvo ? Promise.resolve(null) : db.getConvo(userId(req), conversationId),
     ]);
     const activeDraft = documentCollection.documents.find(
       (document) => document._id === documentCollection.selectedDocumentId,
@@ -484,6 +530,15 @@ router.post('/chat', async (req, res) => {
       webSourceCount: result.webSources?.length ?? 0,
       agentTiming,
     });
+    const cookingCategory = resolveCookingChatCategory({
+      currentCategory: existingConversation?.cookingCategory,
+      proposedCategory: result.activeCategory,
+      text,
+      intent: result.activeIntent || 'general_cooking_question',
+      action: result.activeAction || 'direct_answer',
+      existingDocumentTypes: documentCollection.documents.map((document) => document.documentType),
+      changedDocumentType: result.draftChanged ? result.draft?.documentType : undefined,
+    });
     const metadata = {
       ...(result.promptSuggestions?.length
         ? { cookingPromptSuggestions: result.promptSuggestions }
@@ -491,6 +546,7 @@ router.post('/chat', async (req, res) => {
       ...(result.webSources?.length ? { cookingWebSources: result.webSources } : {}),
       ...(result.activeIntent ? { cookingActiveIntent: result.activeIntent } : {}),
       ...(result.activeAction ? { cookingActiveAction: result.activeAction } : {}),
+      cookingCategory,
     };
     const responseMessage = {
       messageId: responseMessageId,
@@ -511,6 +567,7 @@ router.post('/chat', async (req, res) => {
       conversationId,
       endpoint,
       model,
+      cookingCategory,
       title: isNewConvo ? conversationTitle(text) : req.body?.title || conversationTitle(text),
     };
 
@@ -650,30 +707,57 @@ router.post('/documents', async (req, res) => {
     assertText(req.body?.prompt, 'Prompt is required.');
     assertOptionalText(req.body?.conversationId, 'Conversation id is malformed.');
     assertOptionalText(req.body?.documentMarkdown, 'Cooking document is malformed.');
+    assertOptionalObjectId(req.body?.savedRecipeId, 'Saved recipe id is malformed.');
     assertDocumentType(req.body?.documentType);
     if (req.body?.recipe != null) {
       assertRecipe(req.body.recipe);
     }
-    const document = await createCookingDocument(
-      userId(req),
-      req.body.prompt,
-      req.body.conversationId,
-      req.body.documentMarkdown,
-      req.body.documentType,
-      req.body.recipe,
-    );
+    const savedRecipeId = req.body?.savedRecipeId?.trim();
+    if (savedRecipeId && !req.body.conversationId) {
+      throw new CookingValidationError('Conversation id is required for a saved recipe chat.');
+    }
+    const db = models();
+    const reqCtx = requestContext(req);
+    const document = savedRecipeId
+      ? await startSavedRecipeDiscussion(
+          {
+            user: userId(req),
+            savedRecipeId,
+            conversationId: req.body.conversationId,
+            prompt: req.body.prompt,
+            title: conversationTitle(req.body.prompt),
+            documentMarkdown: req.body.documentMarkdown,
+            documentType: req.body.documentType,
+            recipe: req.body.recipe,
+          },
+          (conversation) =>
+            db.saveConvo(reqCtx, conversation, {
+              context: 'POST /api/cooking/documents - start saved recipe discussion',
+            }),
+        )
+      : await createCookingDocument(
+          userId(req),
+          req.body.prompt,
+          req.body.conversationId,
+          req.body.documentMarkdown,
+          req.body.documentType,
+          req.body.recipe,
+        );
+    if (!document) {
+      return res.sendStatus(404);
+    }
     if (req.body.conversationId) {
-      const db = models();
-      const reqCtx = requestContext(req);
-      await db.saveConvo(
-        reqCtx,
-        {
-          conversationId: req.body.conversationId,
-          endpoint: 'agents',
-          title: conversationTitle(req.body.prompt),
-        },
-        { context: 'POST /api/cooking/documents - precreate conversation' },
-      );
+      if (!savedRecipeId) {
+        await db.saveConvo(
+          reqCtx,
+          {
+            conversationId: req.body.conversationId,
+            endpoint: 'agents',
+            title: conversationTitle(req.body.prompt),
+          },
+          { context: 'POST /api/cooking/documents - precreate conversation' },
+        );
+      }
     }
     res.status(201).json(document);
   } catch (error) {

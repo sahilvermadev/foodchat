@@ -826,6 +826,10 @@ export async function getRecipe(user: string, recipeId: string): Promise<SavedRe
   return recipe ? serializeSavedRecipe(recipe) : null;
 }
 
+export async function ownsRecipe(user: string, recipeId: string): Promise<boolean> {
+  return Boolean(await model().exists({ _id: recipeId, user }));
+}
+
 export async function getRecipeByDraft(user: string, draftId: string): Promise<SavedRecipe | null> {
   await repairLegacyWrapperTitles(user);
   await repairLegacySaveLists(user);
