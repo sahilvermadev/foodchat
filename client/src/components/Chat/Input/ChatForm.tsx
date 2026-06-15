@@ -33,6 +33,7 @@ import EditBadges from './EditBadges';
 import BadgeRow from './BadgeRow';
 import Mention from './Mention';
 import store from '~/store';
+import { getChatFormLayoutClass } from '../landingLayout';
 
 interface ChatFormProps {
   index: number;
@@ -228,7 +229,7 @@ const ChatForm = memo(function ChatForm({
     <form
       onSubmit={methods.handleSubmit(submitMessage)}
       className={cn(
-        'mx-auto flex w-full flex-row gap-3 transition-[max-width] duration-300',
+        getChatFormLayoutClass(isFreshLanding),
         maximizeChatSpace ? 'max-w-full' : 'md:max-w-3xl xl:max-w-4xl',
         isFreshLanding
           ? 'px-0 transition-all duration-200 min-[769px]:mb-28 min-[769px]:px-2'
