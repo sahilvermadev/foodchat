@@ -7,9 +7,29 @@ import store from '~/store';
 
 const user = { id: 'user-1' };
 const preferences = { updatedAt: '2026-06-07T10:00:00.000Z' };
+let mockAuthContext: { user?: typeof user; isAuthenticated: boolean } = {
+  user,
+  isAuthenticated: true,
+};
+
+const guestTranslations = {
+  com_cooking_guest_prompt_quick_title: '20-minute dinner',
+  com_cooking_guest_prompt_quick_text:
+    'Cook a complete one-pan dinner for two with common pantry staples.',
+  com_cooking_guest_prompt_quick_prompt:
+    'Create a complete 20-minute one-pan dinner for two using common pantry ingredients. Include exact quantities, numbered steps, and substitutions for anything less common.',
+  com_cooking_guest_prompt_seasonal_title: '3-night dinner plan',
+  com_cooking_guest_prompt_seasonal_text:
+    'Plan three easy meals that share ingredients and reduce food waste.',
+  com_cooking_guest_prompt_explore_title: 'Try a new cuisine',
+  com_cooking_guest_prompt_explore_text:
+    'Make an approachable global dinner with supermarket ingredients.',
+} as const;
 
 jest.mock('~/hooks', () => ({
-  useAuthContext: () => ({ user }),
+  useAuthContext: () => mockAuthContext,
+  useLocalize: () => (key: string) =>
+    guestTranslations[key as keyof typeof guestTranslations] ?? key,
 }));
 
 jest.mock('~/data-provider', () => ({
@@ -73,6 +93,7 @@ function renderPrompts(sidebarExpanded = false) {
 
 describe('GenerativePrompts', () => {
   beforeEach(() => {
+    mockAuthContext = { user, isAuthenticated: true };
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const localDate = new Date().toLocaleDateString('en-CA');
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
@@ -155,5 +176,31 @@ describe('GenerativePrompts', () => {
     expect(rail).toHaveClass('pointer-events-none', 'opacity-0');
     expect(rail).toHaveAttribute('aria-hidden', 'true');
     expect(rail).toHaveAttribute('inert');
+  });
+
+  it('renders deterministic local suggestions for guests without fetching', async () => {
+    mockAuthContext = { user: undefined, isAuthenticated: false };
+    const onSubmitPrompt = jest.fn();
+    global.fetch = Object.assign(jest.fn(), { preconnect: jest.fn() }) as typeof fetch;
+
+    render(
+      <RecoilRoot initializeState={({ set }) => set(store.sidebarExpanded, false)}>
+        <GenerativePrompts enabled disabled={false} onSubmitPrompt={onSubmitPrompt} />
+      </RecoilRoot>,
+    );
+
+    const quickPrompt = await screen.findByRole('button', { name: /20-minute dinner/i });
+
+    fireEvent.click(quickPrompt);
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(screen.getAllByText('3-night dinner plan')[0]).toHaveClass(
+      'hidden',
+      'min-[769px]:block',
+    );
+    expect(screen.getAllByText('Try a new cuisine')[0]).toHaveClass('hidden', 'min-[769px]:block');
+    expect(onSubmitPrompt).toHaveBeenCalledWith(
+      guestTranslations.com_cooking_guest_prompt_quick_prompt,
+    );
   });
 });

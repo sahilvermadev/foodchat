@@ -11,10 +11,12 @@ function Sidebar({
   onExpand,
   onResizeStart,
   onResizeKeyboard,
+  contentWidth,
   transparent = false,
 }: {
   links: NavLink[];
   expanded: boolean;
+  contentWidth: number;
   transparent?: boolean;
   onCollapse: () => void;
   onExpand: () => void;
@@ -23,7 +25,11 @@ function Sidebar({
 }) {
   return (
     <>
-      <div className="flex h-full w-full overflow-hidden">
+      <div
+        data-testid="desktop-sidebar-content"
+        className="flex h-full flex-none overflow-hidden"
+        style={{ width: contentWidth }}
+      >
         <ExpandedPanel
           links={links}
           expanded={expanded}

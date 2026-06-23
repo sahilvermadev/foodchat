@@ -7,6 +7,12 @@ jest.mock('~/components/UnifiedSidebar/ConversationsSection', () => ({
   default: () => null,
 }));
 
+let mockIsAuthenticated = true;
+
+jest.mock('~/hooks/AuthContext', () => ({
+  useAuthContext: () => ({ isAuthenticated: mockIsAuthenticated }),
+}));
+
 describe('useUnifiedSidebarLinks', () => {
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -15,6 +21,7 @@ describe('useUnifiedSidebarLinks', () => {
   );
 
   it('only exposes cooking-relevant sidebar panels', () => {
+    mockIsAuthenticated = true;
     const { result } = renderHook(() => useUnifiedSidebarLinks(), { wrapper });
 
     expect(result.current.map((link) => link.id)).toEqual([
@@ -30,6 +37,7 @@ describe('useUnifiedSidebarLinks', () => {
   });
 
   it('does not expose generic LibreChat workbench panels', () => {
+    mockIsAuthenticated = true;
     const { result } = renderHook(() => useUnifiedSidebarLinks(), { wrapper });
     const ids = result.current.map((link) => link.id);
 
@@ -37,6 +45,7 @@ describe('useUnifiedSidebarLinks', () => {
   });
 
   it('marks only route-matching sidebar links active', () => {
+    mockIsAuthenticated = true;
     const { result } = renderHook(() => useUnifiedSidebarLinks(), { wrapper });
     const links = Object.fromEntries(result.current.map((link) => [link.id, link]));
 
@@ -48,5 +57,16 @@ describe('useUnifiedSidebarLinks', () => {
     expect(links.recipes.isActive?.('/recipes')).toBe(true);
     expect(links.recipes.isActive?.('/recipes/recipe-1')).toBe(true);
     expect(links.preferences.isActive?.('/preferences')).toBe(true);
+  });
+
+  it('uses preview panels instead of protected navigation for guests', () => {
+    mockIsAuthenticated = false;
+    const { result } = renderHook(() => useUnifiedSidebarLinks(), { wrapper });
+    const links = Object.fromEntries(result.current.map((link) => [link.id, link]));
+
+    expect(links.recipes.Component).toBeDefined();
+    expect(links.recipes.onClick).toBeUndefined();
+    expect(links.preferences.Component).toBeDefined();
+    expect(links.preferences.onClick).toBeUndefined();
   });
 });

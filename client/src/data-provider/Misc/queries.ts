@@ -22,12 +22,13 @@ export const useGetUserBalance = (
   config?: UseQueryOptions<t.TBalanceResponse>,
 ): QueryObserverResult<t.TBalanceResponse> => {
   const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
+  const user = useRecoilValue<t.TUser | undefined>(store.user);
   return useQuery<t.TBalanceResponse>([QueryKeys.balance], () => dataService.getUserBalance(), {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchOnMount: true,
     ...config,
-    enabled: (config?.enabled ?? true) === true && queriesEnabled,
+    enabled: (config?.enabled ?? true) === true && queriesEnabled && !!user,
   });
 };
 

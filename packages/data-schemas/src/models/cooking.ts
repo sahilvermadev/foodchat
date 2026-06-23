@@ -5,6 +5,7 @@ import {
   savedRecipeSchema,
   cookingSessionSchema,
   cookingSessionEventSchema,
+  guestLimitSchema,
 } from '~/schema/cooking';
 
 export function createCookingDraftModel(mongoose: typeof import('mongoose')) {
@@ -35,5 +36,11 @@ export function createSavedRecipeModel(mongoose: typeof import('mongoose')) {
   applyTenantIsolation(savedRecipeSchema);
   return (
     mongoose.models.SavedRecipe || mongoose.model<t.ISavedRecipe>('SavedRecipe', savedRecipeSchema)
+  );
+}
+
+export function createGuestLimitModel(mongoose: typeof import('mongoose')) {
+  return (
+    mongoose.models.GuestLimit || mongoose.model<t.IGuestLimit>('GuestLimit', guestLimitSchema)
   );
 }

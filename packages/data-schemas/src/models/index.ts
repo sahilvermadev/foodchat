@@ -37,6 +37,7 @@ import {
   createCookingDraftModel,
   createCookingSessionModel,
   createCookingSessionEventModel,
+  createGuestLimitModel,
 } from './cooking';
 
 /**
@@ -82,5 +83,6 @@ export function createModels(mongoose: typeof import('mongoose')) {
     CookingDraft: createCookingDraftModel(mongoose),
     CookingSession: createCookingSessionModel(mongoose),
     CookingSessionEvent: createCookingSessionEventModel(mongoose),
+    GuestLimit: createGuestLimitModel(mongoose),
   };
 }

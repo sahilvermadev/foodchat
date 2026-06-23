@@ -10,7 +10,8 @@ import {
   type GenerativePromptSpec,
 } from 'librechat-data-provider';
 import { usePreferencesQuery } from '~/data-provider';
-import { useAuthContext } from '~/hooks';
+import { useAuthContext, useLocalize } from '~/hooks';
+import type { TranslationKeys } from '~/hooks';
 import { cn } from '~/utils';
 import store from '~/store';
 import { getPromptRailClass } from '../landingLayout';
@@ -49,6 +50,34 @@ const seasonByMonth = [
 const promptCachePrefix = 'rekky:generative-prompts:v5';
 const promptCacheTtlMs = 6 * 60 * 60 * 1000;
 const promptStreamTimeoutMs = 25000;
+const guestPromptKeys = {
+  quick: {
+    slot: 'efficient',
+    title: 'com_cooking_guest_prompt_quick_title',
+    text: 'com_cooking_guest_prompt_quick_text',
+    prompt: 'com_cooking_guest_prompt_quick_prompt',
+  },
+  seasonal: {
+    slot: 'seasonal',
+    title: 'com_cooking_guest_prompt_seasonal_title',
+    text: 'com_cooking_guest_prompt_seasonal_text',
+    prompt: 'com_cooking_guest_prompt_seasonal_prompt',
+  },
+  explore: {
+    slot: 'experimental',
+    title: 'com_cooking_guest_prompt_explore_title',
+    text: 'com_cooking_guest_prompt_explore_text',
+    prompt: 'com_cooking_guest_prompt_explore_prompt',
+  },
+} as const satisfies Record<
+  string,
+  {
+    slot: 'efficient' | 'seasonal' | 'experimental';
+    title: TranslationKeys;
+    text: TranslationKeys;
+    prompt: TranslationKeys;
+  }
+>;
 
 const slotLabels: Record<'efficient' | 'seasonal' | 'experimental', string> = {
   efficient: 'Quick',
@@ -118,6 +147,39 @@ function writePromptCache(scope: string, spec: GenerativePromptSpec) {
   }
 }
 
+function guestPromptSpec(localize: (key: TranslationKeys) => string): GenerativePromptSpec {
+  return {
+    root: 'suggestions',
+    elements: {
+      suggestions: {
+        type: 'SuggestionList',
+        props: {},
+        children: ['quick', 'seasonal', 'explore'],
+      },
+      ...Object.fromEntries(
+        Object.entries(guestPromptKeys).map(([key, config]) => [
+          key,
+          {
+            type: 'SuggestionLink',
+            props: {
+              slot: config.slot,
+              title: localize(config.title),
+              text: localize(config.text),
+            },
+            children: [],
+            on: {
+              click: {
+                action: 'SET_INPUT',
+                params: { prompt_injection: localize(config.prompt) },
+              },
+            },
+          } satisfies GenerativePromptElement,
+        ]),
+      ),
+    },
+  };
+}
+
 function promptFromElement(element: GenerativePromptElement): string | null {
   if (element.type !== 'SuggestionLink') {
     return null;
@@ -138,10 +200,12 @@ function SuggestionLink({
   element,
   disabled,
   onSubmitPrompt,
+  useTitleLabel,
 }: {
   element: Extract<GenerativePromptElement, { type: 'SuggestionLink' }>;
   disabled: boolean;
   onSubmitPrompt: (prompt: string) => void;
+  useTitleLabel: boolean;
 }) {
   const prompt = useMemo(() => promptFromElement(element), [element]);
   const text = element.props.text.trim();
@@ -154,7 +218,7 @@ function SuggestionLink({
   return (
     <button
       type="button"
-      aria-label={`${slotLabels[element.props.slot]}: ${title}`}
+      aria-label={useTitleLabel ? title : `${slotLabels[element.props.slot]}: ${title}`}
       disabled={disabled || !prompt}
       onClick={() => {
         if (prompt) {
@@ -170,7 +234,7 @@ function SuggestionLink({
       )}
     >
       <span className="hidden text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary transition-colors duration-150 group-hover:text-[#c1121f] dark:text-gray-500 dark:group-hover:text-[#e63946] min-[769px]:mb-1 min-[769px]:block">
-        {slotLabels[element.props.slot]}
+        {useTitleLabel ? title : slotLabels[element.props.slot]}
       </span>
       <span className="block text-[11px] font-medium leading-4 text-text-secondary transition-colors duration-150 group-hover:text-text-primary dark:text-gray-200/90 dark:group-hover:text-gray-50 min-[769px]:hidden">
         {title}
@@ -219,10 +283,12 @@ function PromptSpecRenderer({
   spec,
   disabled,
   onSubmitPrompt,
+  useTitleLabels = false,
 }: {
   spec: GenerativePromptSpec;
   disabled: boolean;
   onSubmitPrompt: (prompt: string) => void;
+  useTitleLabels?: boolean;
 }) {
   const root = spec.elements[spec.root];
   if (!root || root.type !== 'SuggestionList') {
@@ -242,6 +308,7 @@ function PromptSpecRenderer({
             element={element}
             disabled={disabled}
             onSubmitPrompt={onSubmitPrompt}
+            useTitleLabel={useTitleLabels}
           />
         );
       })}
@@ -254,8 +321,9 @@ export default function GenerativePrompts({
   disabled,
   onSubmitPrompt,
 }: GenerativePromptsProps) {
-  const { user } = useAuthContext();
-  const { data: preferences } = usePreferencesQuery();
+  const localize = useLocalize();
+  const { user, isAuthenticated } = useAuthContext();
+  const { data: preferences } = usePreferencesQuery({ enabled: isAuthenticated });
   const abortRef = useRef<AbortController | null>(null);
   const [spec, setSpec] = useState<PartialPromptSpec>({});
   const [status, setStatus] = useState<PromptStatus>('idle');
@@ -267,6 +335,9 @@ export default function GenerativePrompts({
       : null;
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      return undefined;
+    }
     if (!enabled || !cacheScope) {
       abortRef.current?.abort();
       setSpec({});
@@ -370,7 +441,7 @@ export default function GenerativePrompts({
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [cacheScope, enabled]);
+  }, [cacheScope, enabled, isAuthenticated]);
 
   const handleSubmitPrompt = useCallback(
     (prompt: string) => {
@@ -382,6 +453,17 @@ export default function GenerativePrompts({
 
   if (!enabled) {
     return null;
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <PromptSpecRenderer
+        spec={guestPromptSpec(localize)}
+        disabled={disabled}
+        onSubmitPrompt={handleSubmitPrompt}
+        useTitleLabels
+      />
+    );
   }
 
   if (status === 'loading') {

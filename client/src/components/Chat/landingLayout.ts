@@ -35,6 +35,14 @@ export function getChatFormLayoutClass(isFreshLanding: boolean): string {
   });
 }
 
+export function getChatInputLayoutClass(isRTL: boolean, guestComposerLocked: boolean): string {
+  return cn(
+    'order-2 flex w-full min-[769px]:order-1',
+    guestComposerLocked ? 'flex-col items-stretch' : 'items-center',
+    isRTL && !guestComposerLocked && 'flex-row-reverse',
+  );
+}
+
 export function getPromptRailClass(sidebarExpanded: boolean, loading: boolean): string {
   return cn(
     'relative mx-auto mb-3 mt-3 flex w-full max-w-sm flex-row flex-wrap items-center justify-center gap-1.5 pb-0 transition-[opacity,transform] duration-200 ease-out min-[769px]:mt-4 min-[769px]:max-w-3xl min-[769px]:flex-col min-[769px]:items-start min-[769px]:gap-3 min-[769px]:px-1 min-[769px]:pb-2 min-[1024px]:grid min-[1024px]:grid-cols-3 min-[1024px]:items-start min-[1024px]:gap-5 xl:max-w-4xl xl:px-0',

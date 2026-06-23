@@ -1,4 +1,4 @@
-import { useDragHelpers } from '~/hooks';
+import { useAuthContext, useDragHelpers } from '~/hooks';
 import DragDropOverlay from '~/components/Chat/Input/Files/DragDropOverlay';
 import DragDropModal from '~/components/Chat/Input/Files/DragDropModal';
 import { DragDropProvider } from '~/Providers';
@@ -10,8 +10,9 @@ interface DragDropWrapperProps {
 }
 
 export default function DragDropWrapper({ children, className }: DragDropWrapperProps) {
+  const { isAuthenticated } = useAuthContext();
   const { isOver, canDrop, drop, showModal, setShowModal, draggedFiles, handleOptionSelect } =
-    useDragHelpers();
+    useDragHelpers({ enabled: isAuthenticated });
 
   const isActive = canDrop && isOver;
 

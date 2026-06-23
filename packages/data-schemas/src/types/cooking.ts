@@ -77,3 +77,11 @@ export interface ISavedRecipe extends Document {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+export interface IGuestLimit extends Document {
+  _id: string;
+  count: number;
+  expiresAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}

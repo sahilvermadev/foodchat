@@ -68,7 +68,7 @@ export default function useChatFunctions({
   const navigate = useNavigate();
   const location = useLocation();
   const getSender = useGetSender();
-  const { user } = useAuthContext();
+  const { user, isAuthenticated } = useAuthContext();
   const queryClient = useQueryClient();
   const setFilesToDelete = useSetFilesToDelete();
   const getEphemeralAgent = useGetEphemeralAgent();
@@ -221,8 +221,13 @@ export default function useChatFunctions({
     }
 
     const endpointsConfig = queryClient.getQueryData<TEndpointsConfig>([QueryKeys.endpoints]);
-    const startupConfig = queryClient.getQueryData<TStartupConfig>(startupConfigKey(true));
-    const endpointType = getEndpointField(endpointsConfig, endpoint, 'type');
+    const startupConfig = queryClient.getQueryData<TStartupConfig>(
+      startupConfigKey(isAuthenticated),
+    );
+    const isGuestCooking = location.pathname.startsWith('/cook') && !isAuthenticated;
+    const endpointType = isGuestCooking
+      ? (conversation?.endpointType ?? EModelEndpoint.custom)
+      : getEndpointField(endpointsConfig, endpoint, 'type');
     const iconURL = conversation?.iconURL;
     const defaultParamsEndpoint = getDefaultParamsEndpoint(endpointsConfig, endpoint);
 
@@ -247,7 +252,7 @@ export default function useChatFunctions({
     if (location.pathname.startsWith('/cook')) {
       endpointOption.clientOptions = {
         ...endpointOption.clientOptions,
-        cookingBridge: true,
+        ...(isGuestCooking ? { guestCookingBridge: true } : { cookingBridge: true }),
       };
     }
     if (endpoint !== EModelEndpoint.agents) {
@@ -390,7 +395,7 @@ export default function useChatFunctions({
       isContinued,
       isRegenerate,
       initialResponse,
-      isTemporary,
+      isTemporary: isAuthenticated ? isTemporary : true,
       ephemeralAgent,
       editedContent,
       addedConvo,

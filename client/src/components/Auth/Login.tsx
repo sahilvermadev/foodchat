@@ -9,6 +9,7 @@ import SocialButton from '~/components/Auth/SocialButton';
 import { useLocalize } from '~/hooks';
 import usePublicLogin from '~/hooks/usePublicLogin';
 import LoginForm from './LoginForm';
+import { authInlineLinkClass } from './styles';
 
 interface LoginLocationState {
   redirect_to?: string;
@@ -111,13 +112,10 @@ function Login() {
         />
       )}
       {startupConfig?.registrationEnabled === true && (
-        <p className="my-4 text-center font-sans text-sm font-light text-[var(--rekky-umber)] dark:text-[var(--rekky-cream-muted)]">
+        <p className="my-4 text-center text-sm text-text-secondary">
           {' '}
           {localize('com_auth_no_account')}{' '}
-          <a
-            href={registerPage()}
-            className="inline-flex p-1 text-sm font-medium text-[var(--rekky-terracotta)] underline decoration-transparent transition-all duration-200 hover:text-[var(--rekky-terracotta-hover)] hover:decoration-[var(--rekky-terracotta-hover)] focus:text-[var(--rekky-terracotta-hover)] focus:decoration-[var(--rekky-terracotta-hover)]"
-          >
+          <a href={registerPage()} className={authInlineLinkClass}>
             {localize('com_auth_sign_up')}
           </a>
         </p>

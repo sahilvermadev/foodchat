@@ -55,10 +55,12 @@ export default function HistorySearch({
   query,
   setQuery,
   toggleNav,
+  enabled = true,
 }: {
   query: string;
   setQuery: (query: string) => void;
   toggleNav: () => void;
+  enabled?: boolean;
 }) {
   const localize = useLocalize();
   const { conversationId: currentConvoId } = useParams();
@@ -73,7 +75,9 @@ export default function HistorySearch({
     return () => window.clearTimeout(timeout);
   }, [query]);
 
-  const { data, isFetching, isError } = useChatHistorySearchQuery(debouncedQuery);
+  const { data, isFetching, isError } = useChatHistorySearchQuery(debouncedQuery, {
+    enabled: enabled && debouncedQuery.length >= 2,
+  });
   const results = data?.results ?? [];
   const isSearchActive = query.length > 0;
 
@@ -174,22 +178,31 @@ export default function HistorySearch({
               {localize('com_ui_history_search_hint')}
             </p>
           )}
+          {debouncedQuery.length >= 2 && !enabled && (
+            <p className="px-3 py-4 text-sm leading-6 text-text-secondary">
+              {localize('com_cooking_guest_history_search_body')}
+            </p>
+          )}
           {debouncedQuery.length >= 2 && isFetching && results.length === 0 && (
             <div className="flex items-center gap-2 px-3 py-4 text-sm text-text-secondary">
               <LoaderCircle className="h-4 w-4 animate-spin" />
               {localize('com_ui_history_search_searching')}
             </div>
           )}
-          {debouncedQuery.length >= 2 && isError && (
+          {debouncedQuery.length >= 2 && enabled && isError && (
             <p className="px-3 py-4 text-sm text-red-600 dark:text-red-400">
               {localize('com_ui_history_search_error')}
             </p>
           )}
-          {debouncedQuery.length >= 2 && !isFetching && !isError && results.length === 0 && (
-            <p className="px-3 py-4 text-sm text-text-secondary">
-              {localize('com_ui_history_search_no_results')}
-            </p>
-          )}
+          {debouncedQuery.length >= 2 &&
+            enabled &&
+            !isFetching &&
+            !isError &&
+            results.length === 0 && (
+              <p className="px-3 py-4 text-sm text-text-secondary">
+                {localize('com_ui_history_search_no_results')}
+              </p>
+            )}
           {results.map((result, index) => {
             const match = getPrimaryMatch(result);
             if (!match) {

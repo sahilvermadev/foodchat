@@ -7,6 +7,13 @@ import type { TAuthContext } from '~/common';
 import { useResendVerificationEmail, useGetStartupConfig } from '~/data-provider';
 import { validateEmail } from '~/utils';
 import { useLocalize } from '~/hooks';
+import {
+  authInlineLinkClass,
+  authInputClass,
+  authLabelClass,
+  authPrimaryButtonClass,
+} from './styles';
+import PasswordField from './PasswordField';
 
 type TLoginFormProps = {
   onSubmit: (data: TLoginUser) => void;
@@ -14,12 +21,6 @@ type TLoginFormProps = {
   error: Pick<TAuthContext, 'error'>['error'];
   setError: Pick<TAuthContext, 'setError'>['setError'];
 };
-
-const authInputClass =
-  'auth-input peer w-full rounded-2xl border border-[var(--rekky-linen)] bg-[var(--rekky-alabaster)] px-3.5 pb-2.5 pt-3 font-sans text-[var(--rekky-charcoal)] caret-[var(--rekky-terracotta)] shadow-sm transition-colors duration-200 [color-scheme:light] focus:border-[var(--rekky-terracotta)] focus:outline-none focus:ring-2 focus:ring-[var(--rekky-terracotta)]/15 dark:border-white/10 dark:bg-[var(--rekky-plum-850)] dark:text-[var(--rekky-cream-text)] dark:caret-[var(--rekky-terracotta)] dark:[color-scheme:dark] dark:focus:border-[var(--rekky-terracotta)]';
-
-const authLabelClass =
-  'pointer-events-none absolute start-3 top-0 z-10 origin-[0] -translate-y-1/2 scale-75 transform rounded-md bg-[var(--rekky-alabaster)] px-2 font-sans text-sm text-[var(--rekky-umber)] transition-colors duration-200 peer-focus:text-[var(--rekky-terracotta)] dark:bg-[var(--rekky-plum-850)] dark:text-[var(--rekky-cream-muted)]';
 
 const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, setError }) => {
   const localize = useLocalize();
@@ -120,35 +121,25 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
           {renderError('email')}
         </div>
         <div className="mb-2">
-          <div className="relative">
-            <input
-              type="password"
-              id="password"
-              autoComplete="current-password"
-              aria-label={localize('com_auth_password')}
-              {...register('password', {
-                required: localize('com_auth_password_required'),
-                minLength: {
-                  value: startupConfig?.minPasswordLength || 8,
-                  message: localize('com_auth_password_min_length'),
-                },
-                maxLength: { value: 128, message: localize('com_auth_password_max_length') },
-              })}
-              aria-invalid={!!errors.password}
-              className={authInputClass}
-              placeholder=" "
-            />
-            <label htmlFor="password" className={authLabelClass}>
-              {localize('com_auth_password')}
-            </label>
-          </div>
+          <PasswordField
+            id="password"
+            autoComplete="current-password"
+            aria-label={localize('com_auth_password')}
+            label={localize('com_auth_password')}
+            {...register('password', {
+              required: localize('com_auth_password_required'),
+              minLength: {
+                value: startupConfig?.minPasswordLength || 8,
+                message: localize('com_auth_password_min_length'),
+              },
+              maxLength: { value: 128, message: localize('com_auth_password_max_length') },
+            })}
+            aria-invalid={!!errors.password}
+          />
           {renderError('password')}
         </div>
         {startupConfig.passwordResetEnabled && (
-          <a
-            href="/forgot-password"
-            className="inline-flex p-1 text-sm font-medium text-[var(--rekky-terracotta)] underline decoration-transparent transition-all duration-200 hover:text-[var(--rekky-terracotta-hover)] hover:decoration-[var(--rekky-terracotta-hover)] focus:text-[var(--rekky-terracotta-hover)] focus:decoration-[var(--rekky-terracotta-hover)]"
-          >
+          <a href="/forgot-password" className={authInlineLinkClass}>
             {localize('com_auth_password_forgot')}
           </a>
         )}
@@ -175,7 +166,7 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
             type="submit"
             disabled={(requireCaptcha && !turnstileToken) || isSubmitting}
             variant="submit"
-            className="h-12 w-full rounded-2xl bg-[var(--rekky-terracotta)] font-sans text-white hover:bg-[var(--rekky-terracotta-hover)]"
+            className={authPrimaryButtonClass}
           >
             {isSubmitting ? <Spinner /> : localize('com_auth_continue')}
           </Button>

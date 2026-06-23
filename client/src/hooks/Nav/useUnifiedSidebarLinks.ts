@@ -3,9 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { BookOpen, MessagesSquare, SlidersHorizontal } from 'lucide-react';
 import type { NavLink } from '~/common';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
+import {
+  GuestPreferencesPreviewPanel,
+  GuestRecipesPreviewPanel,
+} from '~/components/UnifiedSidebar/Guest';
+import { useAuthContext } from '~/hooks/AuthContext';
 
 export default function useUnifiedSidebarLinks() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuthContext();
 
   return useMemo<NavLink[]>(
     () => [
@@ -23,9 +29,13 @@ export default function useUnifiedSidebarLinks() {
         label: '',
         icon: BookOpen,
         id: 'recipes',
-        onClick: () => {
-          navigate('/recipes');
-        },
+        ...(isAuthenticated
+          ? {
+              onClick: () => {
+                navigate('/recipes');
+              },
+            }
+          : { Component: GuestRecipesPreviewPanel }),
         isActive: (pathname) => pathname === '/recipes' || pathname.startsWith('/recipes/'),
       },
       {
@@ -33,12 +43,16 @@ export default function useUnifiedSidebarLinks() {
         label: '',
         icon: SlidersHorizontal,
         id: 'preferences',
-        onClick: () => {
-          navigate('/preferences');
-        },
+        ...(isAuthenticated
+          ? {
+              onClick: () => {
+                navigate('/preferences');
+              },
+            }
+          : { Component: GuestPreferencesPreviewPanel }),
         isActive: (pathname) => pathname === '/preferences',
       },
     ],
-    [navigate],
+    [isAuthenticated, navigate],
   );
 }

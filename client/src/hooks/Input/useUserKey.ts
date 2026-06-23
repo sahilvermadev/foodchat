@@ -2,8 +2,10 @@ import { useMemo, useCallback } from 'react';
 import { EModelEndpoint } from 'librechat-data-provider';
 import { useUserKeyQuery, useUpdateUserKeysMutation } from 'librechat-data-provider/react-query';
 import { useGetEndpointsQuery } from '~/data-provider';
+import { useAuthContext } from '~/hooks';
 
 const useUserKey = (endpoint: string) => {
+  const { isAuthenticated } = useAuthContext();
   const { data: endpointsConfig } = useGetEndpointsQuery();
   const config = endpointsConfig?.[endpoint ?? ''];
 
@@ -15,7 +17,7 @@ const useUserKey = (endpoint: string) => {
   }
 
   const updateKey = useUpdateUserKeysMutation();
-  const checkUserKey = useUserKeyQuery(keyName);
+  const checkUserKey = useUserKeyQuery(keyName, { enabled: isAuthenticated });
 
   const getExpiry = useCallback(() => {
     if (checkUserKey.data) {

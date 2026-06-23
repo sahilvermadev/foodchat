@@ -1,6 +1,8 @@
 const express = require('express');
 const request = require('supertest');
 
+process.env.REKKY_GUEST_BURST_LIMIT = '100';
+
 let mockCurrentUser;
 const mockWebSearchConfig = {
   searchProvider: 'tavily',
@@ -79,6 +81,17 @@ jest.mock('@librechat/api', () => {
     getCookingSession: jest.fn(),
     appendCookingSessionEvent: jest.fn(),
     completeCookingSession: jest.fn(),
+    consumeGuestDailyPrompt: jest.fn().mockResolvedValue(true),
+    refundGuestDailyPrompt: jest.fn().mockResolvedValue(undefined),
+    generateGuestUserId: jest.fn().mockReturnValue('123456789012345678901234'),
+    reserveGuestTrial: jest.fn().mockResolvedValue(true),
+    commitGuestTrial: jest.fn().mockResolvedValue(undefined),
+    refundGuestTrial: jest.fn().mockResolvedValue(undefined),
+    hasConsumedGuestTrial: jest.fn().mockResolvedValue(false),
+    reserveGuestConcurrency: jest.fn().mockResolvedValue(true),
+    releaseGuestConcurrency: jest.fn().mockResolvedValue(undefined),
+    limiterCache: jest.fn().mockReturnValue(undefined),
+    removePorts: (req) => req['ip'],
   };
 });
 
@@ -93,6 +106,7 @@ const savedRecipeId = '665f1f77bcf86cd799439011';
 
 function createApp() {
   const app = express();
+  app.set('trust proxy', 1);
   app.use(express.json());
   app.use('/api/cooking', cookingRoutes);
   return app;
@@ -178,6 +192,10 @@ describe('cooking routes', () => {
     cookingApi.getCookingSession.mockResolvedValue({ _id: 'session-1' });
     cookingApi.appendCookingSessionEvent.mockResolvedValue({ _id: 'session-1' });
     cookingApi.completeCookingSession.mockResolvedValue({ _id: 'session-1' });
+    cookingApi.consumeGuestDailyPrompt.mockResolvedValue(true);
+    cookingApi.reserveGuestTrial.mockResolvedValue(true);
+    cookingApi.reserveGuestConcurrency.mockResolvedValue(true);
+    cookingApi.hasConsumedGuestTrial.mockResolvedValue(false);
   });
 
   test('unauthenticated requests are blocked by auth middleware', async () => {
@@ -186,6 +204,156 @@ describe('cooking routes', () => {
     await request(app).patch('/api/cooking/drafts/draft-1').send({ recipe: recipe() }).expect(401);
 
     expect(cookingApi.updateCookingDraft).not.toHaveBeenCalled();
+  });
+
+  test('guest chat allows one anonymous text prompt without persistence or document tools', async () => {
+    mockCurrentUser = null;
+
+    const response = await request(app)
+      .post('/api/cooking/guest/chat')
+      .send({
+        text: 'What can I cook with eggs?',
+        messageId: 'guest-message-1',
+        responseMessageId: 'guest-message-2',
+      })
+      .expect(200);
+
+    expect(response.text).toContain('"guestLimitReached":true');
+    expect(cookingApi.commitGuestTrial).toHaveBeenCalledTimes(1);
+    expect(response.headers['set-cookie']?.[0]).toContain('rekky_guest_session=');
+    expect(response.headers['set-cookie']?.[0]).toContain('HttpOnly');
+    expect(cookingApi.runCookingChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'What can I cook with eggs?',
+        conversationId: Constants.NEW_CONVO,
+        preferencesMarkdown: '',
+        messages: [],
+        activeDraft: null,
+        documents: [],
+        allowDocumentTools: false,
+        allowCulinaryTools: false,
+        webSearchConfig: undefined,
+        model: 'google/gemini-3.1-flash-lite',
+      }),
+    );
+    expect(db.saveMessage).not.toHaveBeenCalled();
+    expect(db.saveConvo).not.toHaveBeenCalled();
+    expect(cookingApi.curatePendingPreferences).not.toHaveBeenCalled();
+  });
+
+  test('guest chat ignores the client model and uses the trusted proxy address', async () => {
+    mockCurrentUser = null;
+
+    await request(app)
+      .post('/api/cooking/guest/chat')
+      .set('X-Forwarded-For', '203.0.113.50')
+      .send({ text: 'Make dinner', model: 'openai/gpt-5-pro' })
+      .expect(200);
+
+    expect(cookingApi.consumeGuestDailyPrompt).toHaveBeenCalledWith('203.0.113.50', 10);
+    expect(cookingApi.runCookingChat).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'google/gemini-3.1-flash-lite' }),
+    );
+  });
+
+  test('guest chat refunds the daily reservation when generation fails', async () => {
+    mockCurrentUser = null;
+    cookingApi.runCookingChat.mockRejectedValueOnce(new Error('Provider unavailable'));
+
+    const response = await request(app)
+      .post('/api/cooking/guest/chat')
+      .send({ text: 'Make dinner' })
+      .expect(200);
+
+    expect(cookingApi.refundGuestDailyPrompt).toHaveBeenCalledTimes(1);
+    expect(response.text).toContain('"guestLimitReached":false');
+  });
+
+  test('guest chat blocks another prompt when the server-side trial is reserved', async () => {
+    mockCurrentUser = null;
+    cookingApi.reserveGuestTrial.mockResolvedValueOnce(false);
+
+    await request(app).post('/api/cooking/guest/chat').send({ text: 'One more idea' }).expect(403);
+
+    expect(cookingApi.runCookingChat).not.toHaveBeenCalled();
+  });
+
+  test('guest status reports server-side trial state and establishes an HttpOnly identity', async () => {
+    mockCurrentUser = null;
+    cookingApi.hasConsumedGuestTrial.mockResolvedValueOnce(true);
+
+    const response = await request(app).get('/api/cooking/guest/status').expect(200);
+
+    expect(response.body).toEqual({ used: true });
+    expect(response.headers['set-cookie']?.[0]).toContain('rekky_guest_session=');
+    expect(response.headers['set-cookie']?.[0]).toContain('HttpOnly');
+  });
+
+  test('guest chat rejects oversized prompts before reserving usage', async () => {
+    mockCurrentUser = null;
+
+    await request(app)
+      .post('/api/cooking/guest/chat')
+      .send({ text: 'x'.repeat(4001) })
+      .expect(413);
+
+    expect(cookingApi.reserveGuestTrial).not.toHaveBeenCalled();
+    expect(cookingApi.runCookingChat).not.toHaveBeenCalled();
+  });
+
+  test('guest chat releases trial and daily reservations when concurrency is saturated', async () => {
+    mockCurrentUser = null;
+    cookingApi.reserveGuestConcurrency.mockResolvedValueOnce(false);
+
+    await request(app).post('/api/cooking/guest/chat').send({ text: 'Make dinner' }).expect(429);
+
+    expect(cookingApi.refundGuestTrial).toHaveBeenCalledTimes(1);
+    expect(cookingApi.refundGuestDailyPrompt).toHaveBeenCalledTimes(1);
+    expect(cookingApi.runCookingChat).not.toHaveBeenCalled();
+  });
+
+  test('guest chat releases all reservations and returns a safe error when generation fails', async () => {
+    mockCurrentUser = null;
+    cookingApi.runCookingChat.mockRejectedValueOnce(
+      new Error('Provider secret details should not escape'),
+    );
+
+    const response = await request(app)
+      .post('/api/cooking/guest/chat')
+      .send({ text: 'Make dinner' })
+      .expect(200);
+
+    expect(cookingApi.refundGuestTrial).toHaveBeenCalledTimes(1);
+    expect(cookingApi.refundGuestDailyPrompt).toHaveBeenCalledTimes(1);
+    expect(cookingApi.releaseGuestConcurrency).toHaveBeenCalledTimes(1);
+    expect(response.text).toContain('Rekky could not complete that request');
+    expect(response.text).not.toContain('Provider secret details');
+  });
+
+  test('guest chat rejects attachments', async () => {
+    mockCurrentUser = null;
+
+    await request(app)
+      .post('/api/cooking/guest/chat')
+      .send({ text: 'What is in this photo?', files: [{ file_id: 'file-1' }] })
+      .expect(400);
+
+    expect(cookingApi.runCookingChat).not.toHaveBeenCalled();
+  });
+
+  test('guest chat burst limiter rejects requests beyond the configured IP window', async () => {
+    mockCurrentUser = null;
+    const responses = await Promise.all(
+      Array.from({ length: 101 }, () =>
+        request(app)
+          .post('/api/cooking/guest/chat')
+          .set('X-Forwarded-For', '203.0.113.77')
+          .send({ text: 'Make dinner' }),
+      ),
+    );
+
+    expect(responses.filter((response) => response.status === 200)).toHaveLength(100);
+    expect(responses.filter((response) => response.status === 429)).toHaveLength(1);
   });
 
   test('happy path endpoints return expected statuses and response shapes', async () => {

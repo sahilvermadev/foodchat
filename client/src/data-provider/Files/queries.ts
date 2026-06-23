@@ -10,18 +10,21 @@ export const useGetFiles = <TData = t.TFile[] | boolean>(
   config?: UseQueryOptions<t.TFile[], unknown, TData>,
 ): QueryObserverResult<TData, unknown> => {
   const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
+  const user = useRecoilValue<t.TUser | undefined>(store.user);
   return useQuery<t.TFile[], unknown, TData>([QueryKeys.files], () => dataService.getFiles(), {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchOnMount: false,
     ...config,
-    enabled: (config?.enabled ?? true) === true && queriesEnabled,
+    enabled: (config?.enabled ?? true) === true && queriesEnabled && !!user,
   });
 };
 
 export const useGetFileConfig = <TData = t.FileConfig>(
   config?: UseQueryOptions<t.FileConfig, unknown, TData>,
 ): QueryObserverResult<TData, unknown> => {
+  const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
+  const user = useRecoilValue<t.TUser | undefined>(store.user);
   return useQuery<t.FileConfig, unknown, TData>(
     [QueryKeys.fileConfig],
     () => dataService.getFileConfig(),
@@ -30,6 +33,7 @@ export const useGetFileConfig = <TData = t.FileConfig>(
       refetchOnReconnect: false,
       refetchOnMount: false,
       ...config,
+      enabled: (config?.enabled ?? true) === true && queriesEnabled && !!user,
     },
   );
 };

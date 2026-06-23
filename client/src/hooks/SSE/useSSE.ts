@@ -10,7 +10,9 @@ import type { EventHandlerParams } from './useEventHandlers';
 import type { TResData } from '~/common';
 import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
 import { useAuthContext } from '~/hooks/AuthContext';
+import useGuestCookingTrial, { guestTrialQueryKey } from '~/hooks/useGuestCookingTrial';
 import useEventHandlers from './useEventHandlers';
+import { isGuestCookingSubmission } from './transport';
 import { clearAllDrafts } from '~/utils';
 import store from '~/store';
 
@@ -32,6 +34,8 @@ export default function useSSE(
   runIndex = 0,
 ) {
   const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
+  const { markUsed: markGuestCookingPromptUsed, reset: resetGuestCookingTrial } =
+    useGuestCookingTrial();
   const queryClient = useQueryClient();
 
   const appendStep = useRecoilCallback(
@@ -127,6 +131,11 @@ export default function useSSE(
       }
 
       if (data.final != null) {
+        if ((data as { guestLimitReached?: boolean }).guestLimitReached === true) {
+          markGuestCookingPromptUsed();
+        } else if ((data as { guestLimitReached?: boolean }).guestLimitReached === false) {
+          resetGuestCookingTrial();
+        }
         if (data.cookingDocumentsUpdated && data.conversation?.conversationId) {
           queryClient.invalidateQueries([
             QueryKeys.cookingDocuments,
@@ -149,7 +158,7 @@ export default function useSSE(
           setIsSubmitting(false);
           setShowStopButton(false);
         }
-        (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
+        isAuthenticated && (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
         return;
       } else if (data.created != null) {
         const runId = v4();
@@ -250,7 +259,10 @@ export default function useSSE(
       }
 
       console.log('error in server stream.');
-      (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
+      if (submission && isGuestCookingSubmission(submission)) {
+        queryClient.invalidateQueries(guestTrialQueryKey);
+      }
+      isAuthenticated && (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
 
       let data: TResData | undefined = undefined;
       try {
@@ -277,5 +289,5 @@ export default function useSSE(
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submission]);
+  }, [submission, markGuestCookingPromptUsed, resetGuestCookingTrial]);
 }

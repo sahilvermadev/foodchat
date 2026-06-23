@@ -2,6 +2,7 @@ import type { TSubmission } from 'librechat-data-provider';
 import type { EventHandlerParams } from './useEventHandlers';
 import useResumableSSE from './useResumableSSE';
 import useSSE from './useSSE';
+import { usesDirectSSE } from './transport';
 
 type ChatHelpers = Pick<
   EventHandlerParams,
@@ -27,8 +28,7 @@ export default function useAdaptiveSSE(
   isAddedRequest = false,
   runIndex = 0,
 ) {
-  const isCookingBridge = submission?.endpointOption?.clientOptions?.cookingBridge === true;
-  const resumableEnabled = !isCookingBridge;
+  const resumableEnabled = !usesDirectSSE(submission);
 
   useSSE(resumableEnabled ? null : submission, chatHelpers, isAddedRequest, runIndex);
 

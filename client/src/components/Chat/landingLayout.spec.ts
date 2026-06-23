@@ -1,6 +1,7 @@
 import {
   getChatComposerClass,
   getChatFormLayoutClass,
+  getChatInputLayoutClass,
   getChatStageClass,
   getPromptRailClass,
 } from './landingLayout';
@@ -37,6 +38,15 @@ describe('landing layout', () => {
     expect(getChatFormLayoutClass(true)).not.toContain('flex-row');
     expect(getChatFormLayoutClass(false)).toContain('flex-row');
     expect(getChatFormLayoutClass(false)).toContain('gap-3');
+  });
+
+  test('stacks the locked guest CTA below the composer', () => {
+    const lockedClass = getChatInputLayoutClass(false, true);
+    expect(lockedClass).toContain('flex-col');
+    expect(lockedClass).toContain('items-stretch');
+    expect(lockedClass).not.toContain('flex-row-reverse');
+
+    expect(getChatInputLayoutClass(true, false)).toContain('flex-row-reverse');
   });
 
   test('moves and disables the prompt rail when history is expanded', () => {

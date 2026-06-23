@@ -9,6 +9,7 @@ export const useGetEndpointsQuery = <TData = t.TEndpointsConfig>(
   config?: UseQueryOptions<t.TEndpointsConfig, unknown, TData>,
 ): QueryObserverResult<TData> => {
   const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
+  const user = useRecoilValue<t.TUser | undefined>(store.user);
   return useQuery<t.TEndpointsConfig, unknown, TData>(
     [QueryKeys.endpoints],
     () => dataService.getAIEndpoints(),
@@ -18,7 +19,7 @@ export const useGetEndpointsQuery = <TData = t.TEndpointsConfig>(
       refetchOnReconnect: false,
       refetchOnMount: false,
       ...config,
-      enabled: (config?.enabled ?? true) === true && queriesEnabled,
+      enabled: (config?.enabled ?? true) === true && queriesEnabled && !!user,
     },
   );
 };

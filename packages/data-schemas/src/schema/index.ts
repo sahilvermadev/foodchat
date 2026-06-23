@@ -34,4 +34,5 @@ export {
   cookingSessionSchema,
   structuredRecipeSchema,
   cookingSessionEventSchema,
+  guestLimitSchema,
 } from './cooking';

@@ -195,7 +195,7 @@ export default function useResumableSSE(
             clearStepMaps();
             // Optimistically remove from active jobs
             removeActiveJob(currentStreamId);
-            (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
+            isAuthenticated && (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
             sse.close();
             setStreamId(null);
             return;
@@ -360,7 +360,7 @@ export default function useResumableSSE(
        * Order matters: check responseCode first since HTTP errors may also include data
        */
       sse.addEventListener('error', async (e: MessageEvent) => {
-        (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
+        isAuthenticated && (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
 
         /* @ts-ignore - sse.js types don't expose responseCode */
         const responseCode = e.responseCode;
@@ -561,12 +561,14 @@ export default function useResumableSSE(
       contentHandler,
       resetContentHandler,
       syncStepMessage,
+      appendStep,
       clearStepMaps,
       messageHandler,
       errorHandler,
       setIsSubmitting,
       getMessages,
       setMessages,
+      isAuthenticated,
       startupConfig?.balance?.enabled,
       balanceQuery,
       removeActiveJob,

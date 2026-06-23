@@ -1,4 +1,3 @@
-import debounce from 'lodash/debounce';
 import { useEffect, useRef, useCallback } from 'react';
 import { useRecoilValue, useRecoilState } from 'recoil';
 import type { TEndpointOption } from 'librechat-data-provider';
@@ -44,17 +43,22 @@ const getExtensionFromMimeType = (mimeType: string): string => {
   return '';
 };
 
+export function shouldUploadPastedFiles(fileCount: number, allowFileUploads: boolean): boolean {
+  return allowFileUploads && fileCount > 0;
+}
 
 export default function useTextarea({
   textAreaRef,
   submitButtonRef,
   setIsScrollable,
   disabled = false,
+  allowFileUploads = true,
 }: {
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   submitButtonRef: React.RefObject<HTMLButtonElement>;
   setIsScrollable: React.Dispatch<React.SetStateAction<boolean>>;
   disabled?: boolean;
+  allowFileUploads?: boolean;
 }) {
   const localize = useLocalize();
   const { isCookingChat } = useCookingChat();
@@ -80,6 +84,32 @@ export default function useTextarea({
   const isNotAppendable = latestMessage?.error === true;
   // && (conversationId?.length ?? 0) > 6; // also ensures that we don't show the wrong placeholder
 
+  const getPlaceholderText = () => {
+    if (isCookingChat) {
+      return localize('com_cooking_chat_placeholder');
+    }
+    if (disabled) {
+      return localize('com_endpoint_config_placeholder');
+    }
+    const currentAgentId = conversation?.agent_id ?? '';
+    if (isAgent && (!currentAgentId || !agentsMap?.[currentAgentId])) {
+      return localize('com_endpoint_agent_placeholder');
+    }
+
+    if (isNotAppendable) {
+      return localize('com_endpoint_message_not_appendable');
+    }
+
+    const sender = isAgent
+      ? getEntityName({ name: entityName, isAgent, localize })
+      : getSender(conversation as TEndpointOption);
+
+    return localize('com_endpoint_message_new', {
+      0: sender ? sender : localize('com_endpoint_ai'),
+    });
+  };
+  const placeholder = getPlaceholderText();
+
   useEffect(() => {
     const prompt = activePrompt ?? '';
     if (prompt && textAreaRef.current) {
@@ -88,71 +118,6 @@ export default function useTextarea({
       setActivePrompt(undefined);
     }
   }, [activePrompt, setActivePrompt, textAreaRef]);
-
-  useEffect(() => {
-    const currentValue = textAreaRef.current?.value ?? '';
-    if (currentValue) {
-      return;
-    }
-
-    const getPlaceholderText = () => {
-      if (disabled) {
-        return localize('com_endpoint_config_placeholder');
-      }
-      if (isCookingChat) {
-        return localize('com_cooking_chat_placeholder');
-      }
-      const currentAgentId = conversation?.agent_id ?? '';
-      if (isAgent && (!currentAgentId || !agentsMap?.[currentAgentId])) {
-        return localize('com_endpoint_agent_placeholder');
-      }
-
-      if (isNotAppendable) {
-        return localize('com_endpoint_message_not_appendable');
-      }
-
-      const sender =
-        isAgent
-          ? getEntityName({ name: entityName, isAgent, localize })
-          : getSender(conversation as TEndpointOption);
-
-      return `${localize('com_endpoint_message_new', {
-        0: sender ? sender : localize('com_endpoint_ai'),
-      })}`;
-    };
-
-    const placeholder = getPlaceholderText();
-
-    if (textAreaRef.current?.getAttribute('placeholder') === placeholder) {
-      return;
-    }
-
-    const setPlaceholder = () => {
-      const placeholder = getPlaceholderText();
-
-      if (textAreaRef.current?.getAttribute('placeholder') !== placeholder) {
-        textAreaRef.current?.setAttribute('placeholder', placeholder);
-        forceResize(textAreaRef.current);
-      }
-    };
-
-    const debouncedSetPlaceholder = debounce(setPlaceholder, 80);
-    debouncedSetPlaceholder();
-
-    return () => debouncedSetPlaceholder.cancel();
-  }, [
-    isAgent,
-    isCookingChat,
-    localize,
-    disabled,
-    getSender,
-    agentsMap,
-    entityName,
-    textAreaRef,
-    conversation,
-    latestMessage,
-    isNotAppendable,
-  ]);
 
   const handleKeyDown = useCallback(
     (e: KeyEvent) => {
@@ -233,7 +198,12 @@ export default function useTextarea({
         return;
       }
 
-      if (clipboardData.files.length > 0) {
+      if (clipboardData.files.length > 0 && !allowFileUploads) {
+        e.preventDefault();
+        return;
+      }
+
+      if (shouldUploadPastedFiles(clipboardData.files.length, allowFileUploads)) {
         e.preventDefault();
         setFilesLoading(true);
         const timestampedFiles: File[] = [];
@@ -257,13 +227,14 @@ export default function useTextarea({
         handleFiles(timestampedFiles);
       }
     },
-    [handleFiles, setFilesLoading, textAreaRef],
+    [allowFileUploads, handleFiles, setFilesLoading, textAreaRef],
   );
 
   return {
     textAreaRef,
     handlePaste,
     handleKeyDown,
+    placeholder,
     isNotAppendable,
     handleCompositionEnd,
     handleCompositionStart,

@@ -7,6 +7,7 @@ import type { List } from 'react-virtualized';
 import { useLocalize, useAuthContext, useNavScrolling } from '~/hooks';
 import { useConversationsInfiniteQuery, useTitleGeneration } from '~/data-provider';
 import { Conversations } from '~/components/Conversations';
+import { GuestHistoryEmptyState } from './Guest';
 import HistorySearch from './HistorySearch';
 import store from '~/store';
 
@@ -74,17 +75,26 @@ const ConversationsSection = memo(() => {
       aria-label={localize('com_ui_chat_history')}
     >
       <div className="flex min-h-0 flex-grow flex-col overflow-hidden">
-        <HistorySearch query={searchQuery} setQuery={setSearchQuery} toggleNav={toggleNav} />
+        <HistorySearch
+          query={searchQuery}
+          setQuery={setSearchQuery}
+          toggleNav={toggleNav}
+          enabled={isAuthenticated}
+        />
         {searchQuery.length === 0 && (
           <div className="min-h-0 flex-1">
-            <Conversations
-              conversations={conversations}
-              moveToTop={moveToTop}
-              toggleNav={toggleNav}
-              containerRef={conversationsRef}
-              loadMoreConversations={loadMoreConversations}
-              isLoading={isFetchingNextPage || showLoading || isLoading}
-            />
+            {isAuthenticated ? (
+              <Conversations
+                conversations={conversations}
+                moveToTop={moveToTop}
+                toggleNav={toggleNav}
+                containerRef={conversationsRef}
+                loadMoreConversations={loadMoreConversations}
+                isLoading={isFetchingNextPage || showLoading || isLoading}
+              />
+            ) : (
+              <GuestHistoryEmptyState />
+            )}
           </div>
         )}
       </div>

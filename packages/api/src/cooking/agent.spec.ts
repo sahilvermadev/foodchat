@@ -2608,6 +2608,35 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(toolNames).not.toContain('revise_cooking_document');
   });
 
+  test('can disable all local tools for a cost-bounded guest response', async () => {
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Make soft scrambled eggs with toast and a quick side salad.',
+            },
+          },
+        ],
+      }),
+    });
+
+    setFetch(fetchMock);
+
+    await runCookingChat({
+      user: 'guest-user',
+      conversationId: 'new',
+      text: 'What can I cook with eggs?',
+      allowDocumentTools: false,
+      allowCulinaryTools: false,
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.tools).toEqual([]);
+  });
+
   test('creates a separate guide while a recipe document is selected', async () => {
     const selected = activeDraft();
     const guideMarkdown = (selected.documentMarkdown ?? '').replace(

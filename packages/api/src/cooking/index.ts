@@ -10,3 +10,4 @@ export * from './routing';
 export * from './context';
 export * from './category';
 export * from './savedRecipeDiscussion';
+export * from './guest';

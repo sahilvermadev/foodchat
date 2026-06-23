@@ -12,12 +12,7 @@ import {
   tMessageSchema,
   tConvoUpdateSchema,
 } from 'librechat-data-provider';
-import type {
-  TMessage,
-  TConversation,
-  EventSubmission,
-  TStartupConfig,
-} from 'librechat-data-provider';
+import type { TMessage, TConversation, EventSubmission } from 'librechat-data-provider';
 import type { TResData, TFinalResData, ConvoGenerator } from '~/common';
 import type { InfiniteData } from '@tanstack/react-query';
 import type { SetterOrUpdater, Resetter } from 'recoil';
@@ -32,7 +27,7 @@ import {
   removeConvoFromAllQueries,
   findConversationInInfinite,
 } from '~/utils';
-import { startupConfigKey, queueTitleGeneration } from '~/data-provider';
+import { queueTitleGeneration } from '~/data-provider';
 import useAttachmentHandler from '~/hooks/SSE/useAttachmentHandler';
 import useContentHandler from '~/hooks/SSE/useContentHandler';
 import useStepHandler from '~/hooks/SSE/useStepHandler';
@@ -40,6 +35,7 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import { MESSAGE_UPDATE_INTERVAL } from '~/common';
 import { useLiveAnnouncer } from '~/Providers';
 import { shouldResetSubagentAtomsOnConversationChange } from './cleanup';
+import { shouldNavigateAfterFinal } from './transport';
 import store from '~/store';
 
 type TSyncData = {
@@ -494,6 +490,7 @@ export default function useEventHandlers({
         isRegenerate = false,
         isTemporary: _isTemporary = false,
       } = submission;
+      const shouldNavigate = shouldNavigateAfterFinal(submission);
 
       try {
         const isCookingRoute = location.pathname.startsWith('/cook');
@@ -632,7 +629,7 @@ export default function useEventHandlers({
             return update;
           });
 
-          if (location.pathname === newChatPath) {
+          if (location.pathname === newChatPath && shouldNavigate) {
             preserveSubagentAtomsForNewConvoIdRef.current = conversation.conversationId;
             if (conversation.conversationId) {
               navigate(convoPath(conversation.conversationId), { replace: true });

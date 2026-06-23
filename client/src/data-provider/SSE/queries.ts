@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiBaseUrl, QueryKeys, request, dataService } from 'librechat-data-provider';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
-import type { Agents, TConversation } from 'librechat-data-provider';
+import { useRecoilValue } from 'recoil';
+import type { Agents, TConversation, TUser } from 'librechat-data-provider';
 import { updateConvoInAllQueries } from '~/utils';
+import store from '~/store';
 
 export interface StreamStatusResponse {
   active: boolean;
@@ -140,10 +142,13 @@ export function useTitleGeneration(enabled = true) {
  * - Shows generation indicators in conversation list
  */
 export function useActiveJobs(enabled = true) {
+  const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
+  const user = useRecoilValue<TUser | undefined>(store.user);
+
   return useQuery({
     queryKey: [QueryKeys.activeJobs],
     queryFn: () => dataService.getActiveJobs(),
-    enabled,
+    enabled: enabled && queriesEnabled && !!user,
     staleTime: 5_000,
     refetchOnMount: true,
     refetchOnWindowFocus: true,

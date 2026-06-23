@@ -5,7 +5,7 @@ import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognitio
 import { useGetCustomConfigSpeechQuery } from 'librechat-data-provider/react-query';
 import useGetAudioSettings from './useGetAudioSettings';
 import { composeBrowserTranscript } from './transcriptionSession';
-import { useLocalize } from '~/hooks';
+import { useAuthContext, useLocalize } from '~/hooks';
 import store from '~/store';
 
 const useSpeechToTextBrowser = (
@@ -14,10 +14,11 @@ const useSpeechToTextBrowser = (
   onTranscriptionComplete: (text: string) => void,
 ) => {
   const localize = useLocalize();
+  const { isAuthenticated } = useAuthContext();
   const { showToast } = useToastContext();
   const { speechToTextEndpoint } = useGetAudioSettings();
   const isBrowserSTTEnabled = speechToTextEndpoint === 'browser';
-  const { data: speechConfig } = useGetCustomConfigSpeechQuery({ enabled: true });
+  const { data: speechConfig } = useGetCustomConfigSpeechQuery({ enabled: isAuthenticated });
   const sttExternal = Boolean(speechConfig?.sttExternal);
 
   const lastTranscript = useRef<string | null>(null);

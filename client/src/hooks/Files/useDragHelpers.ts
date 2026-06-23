@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useDrop } from 'react-dnd';
 import { useToastContext } from '@librechat/client';
 import { NativeTypes } from 'react-dnd-html5-backend';
@@ -24,7 +24,11 @@ import useFileHandling from './useFileHandling';
 import { isEphemeralAgent } from '~/common';
 import useLocalize from '../useLocalize';
 
-export default function useDragHelpers() {
+export function canAcceptFileDrop(enabled: boolean): boolean {
+  return enabled;
+}
+
+export default function useDragHelpers({ enabled = true }: { enabled?: boolean } = {}) {
   const queryClient = useQueryClient();
   const { showToast } = useToastContext();
   const localize = useLocalize();
@@ -62,6 +66,9 @@ export default function useDragHelpers() {
 
   const handleDrop = useCallback(
     (item: { files: File[] }) => {
+      if (!enabled) {
+        return;
+      }
       /** Early block: leverage endpoint file config to prevent drag/drop on disabled endpoints */
       const currentEndpoint = conversationRef.current?.endpoint ?? 'default';
       const endpointsConfig = queryClient.getQueryData<t.TEndpointsConfig>([QueryKeys.endpoints]);
@@ -133,14 +140,14 @@ export default function useDragHelpers() {
       setDraggedFiles(item.files);
       setShowModal(true);
     },
-    [queryClient, showToast, localize],
+    [enabled, queryClient, showToast, localize],
   );
 
   const [{ canDrop, isOver }, drop] = useDrop(
     () => ({
       accept: [NativeTypes.FILE],
       drop: handleDrop,
-      canDrop: () => true,
+      canDrop: () => canAcceptFileDrop(enabled),
       collect: (monitor: DropTargetMonitor) => {
         /** Optimize collect to reduce re-renders */
         const isOver = monitor.isOver();
@@ -148,7 +155,7 @@ export default function useDragHelpers() {
         return { isOver, canDrop };
       },
     }),
-    [handleDrop],
+    [enabled, handleDrop],
   );
 
   return {

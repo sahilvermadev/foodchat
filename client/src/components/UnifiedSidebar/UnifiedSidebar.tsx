@@ -231,6 +231,7 @@ function UnifiedSidebar() {
             onExpand={handleExpand}
             onResizeStart={handleResizeStart}
             onResizeKeyboard={handleResizeKeyboard}
+            contentWidth={sidebarWidth}
             transparent={isCookingLandingRoute}
           />
         </aside>

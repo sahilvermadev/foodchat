@@ -1,4 +1,6 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const cookies = require('cookie');
 const crypto = require('crypto');
 const { isValidObjectIdString, logger } = require('@librechat/data-schemas');
 const {
@@ -21,6 +23,17 @@ const {
   getCookingSession,
   appendCookingSessionEvent,
   completeCookingSession,
+  consumeGuestDailyPrompt,
+  refundGuestDailyPrompt,
+  generateGuestUserId,
+  reserveGuestTrial,
+  commitGuestTrial,
+  refundGuestTrial,
+  hasConsumedGuestTrial,
+  reserveGuestConcurrency,
+  releaseGuestConcurrency,
+  limiterCache,
+  removePorts,
 } = require('@librechat/api');
 const { Constants, VisionModes } = require('librechat-data-provider');
 const { encodeAndFormat } = require('~/server/services/Files/images/encode');
@@ -29,11 +42,138 @@ const { loadAuthValues } = require('~/server/services/Tools/credentials');
 
 const router = express.Router();
 const cookingAssistantName = 'Samwise';
+const guestSessionCookieName = 'rekky_guest_session';
+const guestSessionMaxAgeSeconds = 60 * 60 * 24 * 30;
+const configuredGuestPromptLimit = Number(process.env.REKKY_GUEST_DAILY_PROMPT_LIMIT);
+const guestDailyPromptLimit =
+  Number.isInteger(configuredGuestPromptLimit) && configuredGuestPromptLimit > 0
+    ? configuredGuestPromptLimit
+    : 10;
+const configuredGuestPromptMaxChars = Number(process.env.REKKY_GUEST_MAX_PROMPT_CHARS);
+const guestPromptMaxChars =
+  Number.isInteger(configuredGuestPromptMaxChars) && configuredGuestPromptMaxChars > 0
+    ? configuredGuestPromptMaxChars
+    : 4000;
+const configuredGuestConcurrencyLimit = Number(process.env.REKKY_GUEST_CONCURRENCY_LIMIT);
+const guestConcurrencyLimit =
+  Number.isInteger(configuredGuestConcurrencyLimit) && configuredGuestConcurrencyLimit > 0
+    ? configuredGuestConcurrencyLimit
+    : 2;
+const configuredGuestBurstLimit = Number(process.env.REKKY_GUEST_BURST_LIMIT);
+const guestBurstLimit =
+  Number.isInteger(configuredGuestBurstLimit) && configuredGuestBurstLimit > 0
+    ? configuredGuestBurstLimit
+    : 5;
+const guestModel =
+  process.env.REKKY_GUEST_MODEL?.trim() ||
+  process.env.COOKING_AGENT_MODEL?.trim() ||
+  'google/gemini-3.1-flash-lite';
+const guestEndpoint = 'OpenRouter';
+const guestBurstLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: guestBurstLimit,
+  keyGenerator: removePorts,
+  store: limiterCache('rekky_guest_chat_burst'),
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) =>
+    res.status(429).json({ error: 'Too many guest requests. Please try again later.' }),
+});
 
-router.use(requireJwtAuth, configMiddleware);
+function parsedCookies(req) {
+  return req.headers.cookie ? cookies.parse(req.headers.cookie) : {};
+}
 
 function userId(req) {
   return req.user.id;
+}
+
+function guestIp(req) {
+  return (req.ip || req.socket?.remoteAddress || 'unknown').trim();
+}
+
+function guestCookieOptions() {
+  return {
+    httpOnly: true,
+    maxAge: guestSessionMaxAgeSeconds,
+    path: '/',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  };
+}
+
+function guestSigningSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is required for guest trial identity signing.');
+  }
+  return secret;
+}
+
+function guestIdentitySignature(guestId) {
+  return crypto.createHmac('sha256', guestSigningSecret()).update(guestId).digest('base64url');
+}
+
+function serializeGuestIdentity(guestId) {
+  return `${guestId}.${guestIdentitySignature(guestId)}`;
+}
+
+function parseGuestIdentity(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const separator = value.lastIndexOf('.');
+  if (separator <= 0) {
+    return null;
+  }
+  const guestId = value.slice(0, separator);
+  const signature = value.slice(separator + 1);
+  const expected = guestIdentitySignature(guestId);
+  const actualBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (
+    actualBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(actualBuffer, expectedBuffer)
+  ) {
+    return null;
+  }
+  return guestId;
+}
+
+function getOrCreateGuestIdentity(req, res) {
+  const existing = parseGuestIdentity(parsedCookies(req)[guestSessionCookieName]);
+  if (existing) {
+    return existing;
+  }
+  const guestId = crypto.randomUUID();
+  res.append(
+    'Set-Cookie',
+    cookies.serialize(
+      guestSessionCookieName,
+      serializeGuestIdentity(guestId),
+      guestCookieOptions(),
+    ),
+  );
+  return guestId;
+}
+
+async function releaseGuestReservations({ guestId, ip, trial, daily, concurrency }) {
+  const releases = [];
+  if (trial) {
+    releases.push(refundGuestTrial(guestId));
+  }
+  if (daily) {
+    releases.push(refundGuestDailyPrompt(ip));
+  }
+  if (concurrency) {
+    releases.push(releaseGuestConcurrency(ip));
+  }
+  const results = await Promise.allSettled(releases);
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      logger.error('[CookingGuest] Failed to release guest reservation', result.reason);
+    }
+  }
 }
 
 function isObject(value) {
@@ -353,6 +493,231 @@ async function restoreLatestCookingImage(req, messages, currentImageUrls, text) 
 
   return messages;
 }
+
+router.get('/guest/status', async (req, res) => {
+  const guestId = getOrCreateGuestIdentity(req, res);
+  const used = await hasConsumedGuestTrial(guestId);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ used });
+});
+
+router.post('/guest/chat', guestBurstLimiter, configMiddleware, async (req, res) => {
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  if (!text) {
+    return res.status(400).json({ error: 'Prompt is required.' });
+  }
+  if (text.length > guestPromptMaxChars) {
+    return res
+      .status(413)
+      .json({ error: `Guest prompts must be ${guestPromptMaxChars} characters or fewer.` });
+  }
+  if (Array.isArray(req.body?.files) && req.body.files.length > 0) {
+    return res.status(400).json({ error: 'Sign in to use attachments with Rekky.' });
+  }
+
+  const guestId = getOrCreateGuestIdentity(req, res);
+  const ip = guestIp(req);
+  let trialReserved = false;
+  let dailyReserved = false;
+  let concurrencyReserved = false;
+
+  trialReserved = await reserveGuestTrial(guestId);
+  if (!trialReserved) {
+    return res.status(403).json({ error: 'Sign in to continue cooking with Rekky.' });
+  }
+
+  try {
+    dailyReserved = await consumeGuestDailyPrompt(ip, guestDailyPromptLimit);
+  } catch (error) {
+    await releaseGuestReservations({ guestId, ip, trial: true, daily: false, concurrency: false });
+    throw error;
+  }
+  if (!dailyReserved) {
+    await releaseGuestReservations({ guestId, ip, trial: true, daily: false, concurrency: false });
+    return res.status(429).json({ error: 'Guest prompt limit reached. Please sign in.' });
+  }
+
+  try {
+    concurrencyReserved = await reserveGuestConcurrency(ip, guestConcurrencyLimit);
+  } catch (error) {
+    await releaseGuestReservations({ guestId, ip, trial: true, daily: true, concurrency: false });
+    throw error;
+  }
+  if (!concurrencyReserved) {
+    await releaseGuestReservations({ guestId, ip, trial: true, daily: true, concurrency: false });
+    return res.status(429).json({ error: 'Too many guest requests are already running.' });
+  }
+
+  const conversationId = Constants.NEW_CONVO;
+  const userMessageId =
+    typeof req.body?.messageId === 'string' && req.body.messageId
+      ? req.body.messageId
+      : crypto.randomUUID();
+  const responseMessageId =
+    typeof req.body?.responseMessageId === 'string' && req.body.responseMessageId
+      ? req.body.responseMessageId
+      : `${userMessageId}_`;
+  const parentMessageId =
+    typeof req.body?.parentMessageId === 'string' ? req.body.parentMessageId : Constants.NO_PARENT;
+  const endpoint = guestEndpoint;
+  const model = guestModel;
+  const guestUser = generateGuestUserId(ip);
+  const perf = createChatPerfTrace({ conversationId, endpoint, model, isNewConvo: true });
+
+  res.setHeader('Content-Encoding', 'identity');
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  perf.mark('guest_headers_flushed', { promptChars: text.length });
+
+  const requestMessage = {
+    text,
+    conversationId,
+    messageId: userMessageId,
+    parentMessageId,
+    isCreatedByUser: true,
+    error: false,
+    user: guestUser,
+  };
+  sendEvent(res, { message: requestMessage, created: true, cooking: true });
+
+  try {
+    let assistantTextStreamed = false;
+    let cumulativeText = '';
+    const result = await runCookingChat({
+      user: guestUser,
+      conversationId,
+      text,
+      model,
+      promptPrefix:
+        'This is an anonymous one-prompt trial. Answer in chat only. Do not create, revise, or refer to a saved canvas, saved recipe, saved preferences, account history, or uploaded files.',
+      preferencesMarkdown: '',
+      messages: [],
+      activeDraft: null,
+      documents: [],
+      webSearchConfig: undefined,
+      conversationCreatedAt: new Date(),
+      allowDocumentTools: false,
+      allowCulinaryTools: false,
+      onStep: (step) => {
+        sendEvent(res, {
+          type: 'step',
+          step,
+          messageId: responseMessageId,
+          parentMessageId: userMessageId,
+          conversationId,
+        });
+      },
+      onTextDelta: async (delta, isFinal) => {
+        if (!assistantTextStreamed) {
+          assistantTextStreamed = true;
+          perf.mark('guest_first_text_event_sent');
+        }
+        if (isFinal) {
+          await streamAssistantText(res, {
+            text: delta,
+            messageId: responseMessageId,
+            parentMessageId: userMessageId,
+            conversationId,
+          });
+          return;
+        }
+        cumulativeText += delta;
+        sendEvent(res, {
+          message: true,
+          text: cumulativeText,
+          messageId: responseMessageId,
+          parentMessageId: userMessageId,
+          conversationId,
+        });
+      },
+    });
+    const responseMessage = {
+      messageId: responseMessageId,
+      parentMessageId: userMessageId,
+      conversationId,
+      sender: cookingAssistantName,
+      endpoint,
+      model: model || req.body?.modelDisplayLabel || '',
+      text: result.text,
+      unfinished: false,
+      error: false,
+      isCreatedByUser: false,
+      user: guestUser,
+    };
+    const conversation = {
+      conversationId,
+      endpoint,
+      model,
+      title: conversationTitle(text),
+    };
+
+    if (!assistantTextStreamed) {
+      await streamAssistantText(res, {
+        text: result.text,
+        messageId: responseMessage.messageId,
+        parentMessageId: responseMessage.parentMessageId,
+        conversationId,
+        onFirstChunk: () => perf.mark('guest_first_text_event_sent'),
+      });
+    }
+    await commitGuestTrial(guestId);
+    sendEvent(res, {
+      final: true,
+      conversation,
+      title: conversation.title,
+      requestMessage,
+      responseMessage,
+      guestLimitReached: true,
+    });
+    await releaseGuestReservations({
+      guestId,
+      ip,
+      trial: false,
+      daily: false,
+      concurrency: true,
+    });
+    perf.log('info', { status: 'guest_ok' });
+    res.end();
+  } catch (error) {
+    await releaseGuestReservations({ guestId, ip, trial: true, daily: true, concurrency: true });
+    const errorResponseMessage = {
+      messageId: responseMessageId,
+      parentMessageId: userMessageId,
+      conversationId,
+      sender: cookingAssistantName,
+      endpoint,
+      model: model || '',
+      text: 'Rekky could not complete that request. Please try again.',
+      unfinished: false,
+      error: true,
+      isCreatedByUser: false,
+      user: guestUser,
+    };
+    await streamAssistantText(res, {
+      text: errorResponseMessage.text,
+      messageId: errorResponseMessage.messageId,
+      parentMessageId: errorResponseMessage.parentMessageId,
+      conversationId,
+    });
+    sendEvent(res, {
+      final: true,
+      conversation: { conversationId, title: conversationTitle(text), endpoint, model },
+      requestMessage,
+      responseMessage: errorResponseMessage,
+      guestLimitReached: false,
+    });
+    perf.log('warn', {
+      status: 'guest_error',
+      error: error instanceof Error ? error.message : 'unknown error',
+    });
+    res.end();
+  }
+});
+
+router.use(requireJwtAuth, configMiddleware);
 
 router.post('/chat', async (req, res) => {
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';

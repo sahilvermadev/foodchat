@@ -1,5 +1,11 @@
 import { Schema } from 'mongoose';
-import type { ICookingDraft, ICookingSession, ICookingSessionEvent, ISavedRecipe } from '~/types';
+import type {
+  ICookingDraft,
+  ICookingSession,
+  ICookingSessionEvent,
+  ISavedRecipe,
+  IGuestLimit,
+} from '~/types';
 
 const timerSchema = new Schema(
   {
@@ -216,3 +222,14 @@ savedRecipeSchema.index({ user: 1, 'categorization.diet': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.timeBucket': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.mainIngredients': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.equipment': 1, tenantId: 1 });
+
+export const guestLimitSchema = new Schema<IGuestLimit>(
+  {
+    _id: { type: String, required: true },
+    count: { type: Number, required: true, default: 0 },
+    expiresAt: { type: Date, required: true },
+  },
+  { timestamps: true },
+);
+
+guestLimitSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });

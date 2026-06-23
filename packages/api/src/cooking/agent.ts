@@ -175,6 +175,8 @@ type CookingChatInput = {
     optional?: Set<string>;
     throwError?: boolean;
   }) => Promise<Record<string, string>>;
+  allowDocumentTools?: boolean;
+  allowCulinaryTools?: boolean;
   conversationCreatedAt?: string | number | Date;
   locale?: string;
   timeZone?: string;
@@ -913,7 +915,11 @@ function toolStateContext(
 function selectCookingToolsForState(
   hasActiveCanvas: boolean,
   webTools: CookingWebToolDefinition[],
-  options: { allowDocumentTools?: boolean; allowResearchRequest?: boolean } = {},
+  options: {
+    allowDocumentTools?: boolean;
+    allowCulinaryTools?: boolean;
+    allowResearchRequest?: boolean;
+  } = {},
 ): AvailableCookingTool[] {
   let localToolNames: CookingToolName[] = [];
   if (options.allowDocumentTools !== false) {
@@ -921,15 +927,17 @@ function selectCookingToolsForState(
       ? ['create_cooking_document', 'read_cooking_document', 'revise_cooking_document']
       : ['create_cooking_document'];
   }
-  localToolNames.push(
-    'find_pairings',
-    'neighbors',
-    'closest_mode',
-    'compare_on_axis',
-    'morph',
-    'pairing_score',
-    'cultural_profile',
-  );
+  if (options.allowCulinaryTools !== false) {
+    localToolNames.push(
+      'find_pairings',
+      'neighbors',
+      'closest_mode',
+      'compare_on_axis',
+      'morph',
+      'pairing_score',
+      'cultural_profile',
+    );
+  }
   const selected = localToolNames
     .map(cookingTool)
     .filter((tool): tool is CookingToolDefinition => Boolean(tool));
@@ -969,6 +977,7 @@ function emptyAvailableToolState(): AvailableToolState {
 function buildAvailableToolState({
   activeCanvas,
   allowDocumentTools,
+  allowCulinaryTools,
   allowResearchRequestTool,
   sourceState,
   webContext,
@@ -976,6 +985,7 @@ function buildAvailableToolState({
 }: {
   activeCanvas: boolean;
   allowDocumentTools?: boolean;
+  allowCulinaryTools?: boolean;
   allowResearchRequestTool?: boolean;
   sourceState: LinkedSourceState;
   webContext: Awaited<ReturnType<typeof createCookingWebContext>>;
@@ -986,6 +996,7 @@ function buildAvailableToolState({
     : [];
   const availableTools = selectCookingToolsForState(activeCanvas, providerWebTools, {
     allowDocumentTools,
+    allowCulinaryTools,
     allowResearchRequest:
       Boolean(allowResearchRequestTool) && !webToolsUnlocked && webContext.tools.length > 0,
   });
@@ -2041,7 +2052,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     historicalImageCount: imageSourceState.historicalImageCount,
     runtimeFallbackIntent: turnUnderstanding.intent,
     runtimeFallbackResponseMode: turnUnderstanding.responseMode,
-    runtimeFallbackAllowDocumentTools: turnUnderstanding.toolPolicy.allowDocumentTools,
+    runtimeFallbackAllowDocumentTools:
+      input.allowDocumentTools !== false && turnUnderstanding.toolPolicy.allowDocumentTools,
     runtimeFallbackAllowResearchRequestTool: turnUnderstanding.toolPolicy.allowResearchRequestTool,
   });
   const plannerRoute = routeCookingPlanner({
@@ -2093,7 +2105,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
       attachedImageSourceState: imageSourceState,
       preferenceSectionTitles: preferenceSectionTitles(input.preferencesMarkdown),
       availableCapabilities: {
-        documentTools: true,
+        documentTools: input.allowDocumentTools !== false,
         activeCanvas,
         webConfigured: webContext.tools.length > 0,
       },
@@ -2119,6 +2131,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     hardConstraintCount: turnPlan.constraints.hard.length,
     softConstraintCount: turnPlan.constraints.soft.length,
   });
+  const allowDocumentTools =
+    input.allowDocumentTools !== false && turnPlan.toolPolicy.allowDocumentTools;
   const externalEvidenceNeeded = planNeedsExternalEvidence(turnPlan, sourceState, imageSourceState);
   const sourceDependent =
     imageSourceState.available ||
@@ -2164,7 +2178,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
   let webToolsUnlocked = externalEvidenceNeeded;
   let availableToolState = buildAvailableToolState({
     activeCanvas,
-    allowDocumentTools: turnPlan.toolPolicy.allowDocumentTools,
+    allowDocumentTools,
+    allowCulinaryTools: input.allowCulinaryTools,
     allowResearchRequestTool: turnPlan.toolPolicy.allowResearchRequestTool,
     sourceState,
     webContext,
@@ -2174,7 +2189,7 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     conversationId: input.conversationId,
     activeCanvas,
     webToolsUnlocked,
-    allowDocumentTools: turnPlan.toolPolicy.allowDocumentTools,
+    allowDocumentTools,
     allowResearchRequestTool: turnPlan.toolPolicy.allowResearchRequestTool,
     linkedSourceReadRequired: sourceState.readRequired,
     linkedSourceReadSucceeded: sourceState.readSucceeded,
@@ -2183,7 +2198,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
   const refreshAvailableTools = (): void => {
     availableToolState = buildAvailableToolState({
       activeCanvas,
-      allowDocumentTools: turnPlan.toolPolicy.allowDocumentTools,
+      allowDocumentTools,
+      allowCulinaryTools: input.allowCulinaryTools,
       allowResearchRequestTool: turnPlan.toolPolicy.allowResearchRequestTool,
       sourceState,
       webContext,

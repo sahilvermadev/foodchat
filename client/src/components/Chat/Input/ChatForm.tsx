@@ -15,8 +15,11 @@ import {
   useQueryParams,
   useSubmitMessage,
   useFocusChatEffect,
+  useAuthContext,
 } from '~/hooks';
+import useGuestCookingTrial from '~/hooks/useGuestCookingTrial';
 import { mainTextareaId, BadgeItem } from '~/common';
+import { GuestAuthActions } from '~/components/Auth/GuestAuth';
 import AttachFileChat from './Files/AttachFileChat';
 import FileFormChat from './Files/FileFormChat';
 import { cn, removeFocusRings } from '~/utils';
@@ -33,7 +36,7 @@ import EditBadges from './EditBadges';
 import BadgeRow from './BadgeRow';
 import Mention from './Mention';
 import store from '~/store';
-import { getChatFormLayoutClass } from '../landingLayout';
+import { getChatFormLayoutClass, getChatInputLayoutClass } from '../landingLayout';
 
 interface ChatFormProps {
   index: number;
@@ -77,6 +80,7 @@ const ChatForm = memo(function ChatForm({
   const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
   const centerFormOnLanding = useRecoilValue(store.centerFormOnLanding);
   const isTemporary = useRecoilValue(store.isTemporary);
+  const { used: guestPromptUsed, resolved: guestTrialResolved } = useGuestCookingTrial();
 
   const [badges, setBadges] = useRecoilState(store.chatBadges);
   const [isEditingBadges, setIsEditingBadges] = useRecoilState(store.isEditingBadges);
@@ -86,6 +90,7 @@ const ChatForm = memo(function ChatForm({
 
   const { requiresKey } = useRequiresKey();
   const methods = useChatFormContext();
+  const { isAuthenticated } = useAuthContext();
   const {
     generateConversation,
     conversation: addedConvo,
@@ -104,8 +109,11 @@ const ChatForm = memo(function ChatForm({
     () => (chatDirection != null ? chatDirection?.toLowerCase() === 'rtl' : false),
     [chatDirection],
   );
+  const isGuest = !isAuthenticated;
+  const guestComposerLocked = isGuest && guestPromptUsed;
   const disableInputs = requiresKey === true;
-  const isInputUnavailable = disableInputs || !endpoint;
+  const isInputUnavailable =
+    disableInputs || !endpoint || guestComposerLocked || (isGuest && !guestTrialResolved);
 
   const handleContainerClick = useCallback(() => {
     /** Check if the device is a touchscreen */
@@ -148,13 +156,15 @@ const ChatForm = memo(function ChatForm({
     isNotAppendable,
     handlePaste,
     handleKeyDown,
+    placeholder,
     handleCompositionStart,
     handleCompositionEnd,
   } = useTextarea({
     textAreaRef,
     submitButtonRef,
     setIsScrollable,
-    disabled: disableInputs,
+    disabled: isInputUnavailable,
+    allowFileUploads: !isGuest,
   });
 
   useQueryParams({ textAreaRef });
@@ -237,32 +247,33 @@ const ChatForm = memo(function ChatForm({
       )}
     >
       <div className="relative flex min-w-0 flex-1 flex-col items-stretch">
-        <div
-          className={cn(
-            'order-2 flex w-full items-center min-[769px]:order-1',
-            isRTL && 'flex-row-reverse',
+        <div className={getChatInputLayoutClass(isRTL, guestComposerLocked)}>
+          {!isGuest && (
+            <>
+              <Mention
+                index={index}
+                popoverAtom={plusPopoverAtom}
+                newConversation={generateConversation}
+                textAreaRef={textAreaRef}
+                commandChar="+"
+                placeholder="com_ui_add_model_preset"
+              />
+              <Mention
+                index={index}
+                popoverAtom={mentionPopoverAtom}
+                newConversation={newConversation}
+                textAreaRef={textAreaRef}
+              />
+            </>
           )}
-        >
-          <Mention
-            index={index}
-            popoverAtom={plusPopoverAtom}
-            newConversation={generateConversation}
-            textAreaRef={textAreaRef}
-            commandChar="+"
-            placeholder="com_ui_add_model_preset"
-          />
-          <Mention
-            index={index}
-            popoverAtom={mentionPopoverAtom}
-            newConversation={newConversation}
-            textAreaRef={textAreaRef}
-          />
-          <SkillsCommand
-            index={index}
-            textAreaRef={textAreaRef}
-            conversationId={conversationId}
-            agentId={conversation?.agent_id}
-          />
+          {!isGuest && (
+            <SkillsCommand
+              index={index}
+              textAreaRef={textAreaRef}
+              conversationId={conversationId}
+              agentId={conversation?.agent_id}
+            />
+          )}
           <div
             id="chat-input-container"
             onClick={handleContainerClick}
@@ -323,6 +334,7 @@ const ChatForm = memo(function ChatForm({
                   tabIndex={0}
                   data-testid="text-input"
                   rows={1}
+                  placeholder={placeholder}
                   onFocus={handleTextareaFocus}
                   onBlur={handleTextareaBlur}
                   aria-label={localize('com_ui_message_input')}
@@ -350,16 +362,20 @@ const ChatForm = memo(function ChatForm({
               )}
             >
               <div className={`${isRTL ? 'mr-2' : 'ml-2'}`}>
-                <AttachFileChat
-                  conversation={conversation}
-                  disableInputs={isInputUnavailable}
-                  files={files}
-                  setFiles={setFiles}
-                  setFilesLoading={setFilesLoading}
-                />
+                {isGuest ? (
+                  <div className="size-11" aria-hidden="true" />
+                ) : (
+                  <AttachFileChat
+                    conversation={conversation}
+                    disableInputs={isInputUnavailable}
+                    files={files}
+                    setFiles={setFiles}
+                    setFilesLoading={setFilesLoading}
+                  />
+                )}
               </div>
               <BadgeRow
-                showEphemeralBadges={!!endpoint && !isAgentsEndpoint(endpoint)}
+                showEphemeralBadges={!!endpoint && !isGuest && !isAgentsEndpoint(endpoint)}
                 isSubmitting={isSubmitting}
                 conversationId={conversationId}
                 specName={conversation?.spec}
@@ -373,7 +389,7 @@ const ChatForm = memo(function ChatForm({
                 <AudioRecorder
                   methods={methods}
                   ask={submitMessage}
-                  disabled={disableInputs || isNotAppendable}
+                  disabled={isInputUnavailable || isNotAppendable}
                   isSubmitting={isSubmitting}
                 />
               )}
@@ -391,6 +407,18 @@ const ChatForm = memo(function ChatForm({
             </div>
             {TextToSpeech && automaticPlayback && <StreamAudio index={index} />}
           </div>
+          {guestComposerLocked ? (
+            <div
+              data-testid="guest-trial-cta"
+              className="mt-4 w-full rounded-2xl border border-[#c1121f]/20 bg-[#c1121f]/5 p-4 text-sm text-text-primary shadow-sm dark:border-[#e63946]/20 dark:bg-[#e63946]/10"
+            >
+              <p className="font-medium">{localize('com_cooking_guest_trial_title')}</p>
+              <p className="mt-1 text-text-secondary">{localize('com_cooking_guest_trial_body')}</p>
+              <div className="mt-4">
+                <GuestAuthActions primaryAction="register" compact />
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="order-1 min-[769px]:order-2">
           <GenerativePrompts

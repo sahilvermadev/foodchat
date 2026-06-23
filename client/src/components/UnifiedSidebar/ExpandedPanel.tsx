@@ -5,7 +5,7 @@ import { SquarePen } from 'lucide-react';
 import { Skeleton, Button, TooltipAnchor, ThemeSelector } from '@librechat/client';
 import type { NavLink } from '~/common';
 import { useActivePanel, DEFAULT_PANEL } from '~/Providers/ActivePanelContext';
-import { useLocalize } from '~/hooks';
+import { useAuthContext, useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import store from '~/store';
 import { resolveRenderedPanel } from '~/components/SidePanel/panelSelection';
@@ -174,6 +174,7 @@ function ExpandedPanel({
   const { active, setActive } = useActivePanel();
   const renderedPanel = resolveRenderedPanel(active, links, location.pathname);
   const switchToHistory = useRecoilValue(store.newChatSwitchToHistory);
+  const { isAuthenticated } = useAuthContext();
   const startConversation = useStartCookingConversation();
   const handleStartConversation = useCallback(() => {
     startConversation();
@@ -223,9 +224,11 @@ function ExpandedPanel({
 
       <div className="flex flex-col items-center justify-center gap-2 pb-1">
         <ThemeSelector returnThemeOnly />
-        <Suspense fallback={<Skeleton className="h-12 w-12 rounded-lg" />}>
-          <AccountSettings collapsed />
-        </Suspense>
+        {isAuthenticated ? (
+          <Suspense fallback={<Skeleton className="h-12 w-12 rounded-lg" />}>
+            <AccountSettings collapsed />
+          </Suspense>
+        ) : null}
       </div>
     </div>
   );

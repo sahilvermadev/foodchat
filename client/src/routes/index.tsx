@@ -94,6 +94,10 @@ export const router = createBrowserRouter(
       errorElement: <RouteErrorBoundary />,
       children: [
         {
+          path: 'chat',
+          element: <Navigate to="/cook" replace={true} />,
+        },
+        {
           path: '/',
           element: <Root />,
           children: [

@@ -37,6 +37,18 @@ import {
 import useTimeout from './useTimeout';
 import store from '~/store';
 
+function getCurrentClientPath() {
+  const baseUrl = apiBaseUrl();
+  const rawPath = window.location.pathname;
+  return baseUrl && (rawPath === baseUrl || rawPath.startsWith(baseUrl + '/'))
+    ? rawPath.slice(baseUrl.length) || '/'
+    : rawPath;
+}
+
+function allowsGuestAuthPath(path: string) {
+  return path === '/' || path === '/cook' || path === '/chat';
+}
+
 const AuthContext = (import.meta.hot?.data?.__AuthContext ??
   createContext<TAuthContext | undefined>(undefined)) as React.Context<TAuthContext | undefined>;
 if (import.meta.hot) {
@@ -56,6 +68,7 @@ const AuthContextProvider = ({
   const [token, setToken] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isAuthResolved, setIsAuthResolved] = useState<boolean>(false);
   const setQueriesEnabled = useSetRecoilState<boolean>(store.queriesEnabled);
 
   const userRoleName = user?.role ?? '';
@@ -81,6 +94,7 @@ const AuthContextProvider = ({
         setToken(token);
         setTokenHeader(token);
         setIsAuthenticated(isAuthenticated);
+        setIsAuthResolved(true);
         if (isAuthenticated) {
           setQueriesEnabled(true);
         }
@@ -162,13 +176,17 @@ const AuthContextProvider = ({
 
   const userQuery = useGetUserQuery({ enabled: !!(token ?? '') });
 
-  const login = (data: t.TLoginUser) => {
-    loginUser.mutate(data);
-  };
+  const login = useCallback(
+    (data: t.TLoginUser) => {
+      loginUser.mutate(data);
+    },
+    [loginUser],
+  );
 
   const silentRefresh = useCallback(() => {
     if (authConfig?.test === true) {
       console.log('Test mode. Skipping silent refresh.');
+      setIsAuthResolved(true);
       return;
     }
     if (isExternalRedirectRef.current) {
@@ -183,12 +201,7 @@ const AuthContextProvider = ({
         if (token) {
           const storedRedirect = sessionStorage.getItem(SESSION_KEY);
           sessionStorage.removeItem(SESSION_KEY);
-          const baseUrl = apiBaseUrl();
-          const rawPath = window.location.pathname;
-          const strippedPath =
-            baseUrl && (rawPath === baseUrl || rawPath.startsWith(baseUrl + '/'))
-              ? rawPath.slice(baseUrl.length) || '/'
-              : rawPath;
+          const strippedPath = getCurrentClientPath();
           const currentUrl = `${strippedPath}${window.location.search}`;
           const fallbackRedirect = isSafeRedirect(currentUrl) ? currentUrl : '/cook';
           const redirect =
@@ -197,7 +210,11 @@ const AuthContextProvider = ({
           return;
         }
         console.log('Token is not present. User is not authenticated.');
+        setIsAuthResolved(true);
         if (authConfig?.test === true) {
+          return;
+        }
+        if (allowsGuestAuthPath(getCurrentClientPath())) {
           return;
         }
         navigate(buildLoginRedirectUrl());
@@ -207,7 +224,11 @@ const AuthContextProvider = ({
           return;
         }
         console.log('refreshToken mutation error:', error);
+        setIsAuthResolved(true);
         if (authConfig?.test === true) {
+          return;
+        }
+        if (allowsGuestAuthPath(getCurrentClientPath())) {
           return;
         }
         navigate(buildLoginRedirectUrl());
@@ -224,23 +245,28 @@ const AuthContextProvider = ({
       setUser(userQuery.data);
     } else if (userQuery.isError) {
       doSetError((userQuery.error as Error).message);
+      if (!token && allowsGuestAuthPath(getCurrentClientPath())) {
+        return;
+      }
       navigate(buildLoginRedirectUrl(), { replace: true });
     }
     if (error != null && error && isAuthenticated) {
       doSetError(undefined);
     }
-    if (token == null || !token || !isAuthenticated) {
+    if (!isAuthResolved && (token == null || !token || !isAuthenticated)) {
       silentRefresh();
     }
   }, [
     token,
     isAuthenticated,
+    isAuthResolved,
     userQuery.data,
     userQuery.isError,
     userQuery.error,
     error,
     setUser,
     navigate,
+    doSetError,
     silentRefresh,
     setUserContext,
   ]);
@@ -276,18 +302,22 @@ const AuthContextProvider = ({
         ...(isCustomRole && customRole ? { [userRoleName]: customRole } : {}),
       },
       isAuthenticated,
+      isAuthResolved,
     }),
 
     [
       user,
       error,
       isAuthenticated,
+      isAuthResolved,
       token,
       userRole,
       adminRole,
       isCustomRole,
       userRoleName,
       customRole,
+      login,
+      logout,
     ],
   );
 

@@ -7,15 +7,17 @@ import { useRegisterUserMutation } from 'librechat-data-provider/react-query';
 import { loginPage } from 'librechat-data-provider';
 import type { TRegisterUser, TError } from 'librechat-data-provider';
 import type { TLoginLayoutContext } from '~/common';
-import { useLocalize, TranslationKeys } from '~/hooks';
+import type { TranslationKeys } from '~/hooks';
+import { useLocalize } from '~/hooks';
 import usePublicLogin from '~/hooks/usePublicLogin';
 import { ErrorMessage } from './ErrorMessage';
-
-const authInputClass =
-  'auth-input peer w-full rounded-2xl border border-[var(--rekky-linen)] bg-[var(--rekky-alabaster)] px-3.5 pb-2.5 pt-3 font-sans text-[var(--rekky-charcoal)] caret-[var(--rekky-terracotta)] shadow-sm transition-colors duration-200 [color-scheme:light] focus:border-[var(--rekky-terracotta)] focus:outline-none focus:ring-2 focus:ring-[var(--rekky-terracotta)]/15 dark:border-white/10 dark:bg-[var(--rekky-plum-850)] dark:text-[var(--rekky-cream-text)] dark:caret-[var(--rekky-terracotta)] dark:[color-scheme:dark] dark:focus:border-[var(--rekky-terracotta)]';
-
-const authLabelClass =
-  'pointer-events-none absolute start-3 top-0 z-10 origin-[0] -translate-y-1/2 scale-75 transform rounded-md bg-[var(--rekky-alabaster)] px-2 font-sans text-sm text-[var(--rekky-umber)] transition-colors duration-200 peer-focus:text-[var(--rekky-terracotta)] dark:bg-[var(--rekky-plum-850)] dark:text-[var(--rekky-cream-muted)]';
+import {
+  authInlineLinkClass,
+  authInputClass,
+  authLabelClass,
+  authPrimaryButtonClass,
+} from './styles';
+import PasswordField from './PasswordField';
 
 const Registration: React.FC = () => {
   const navigate = useNavigate();
@@ -78,25 +80,34 @@ const Registration: React.FC = () => {
 
   const renderInput = (id: string, label: TranslationKeys, type: string, validation: object) => (
     <div className="mb-4">
-      <div className="relative">
-        <input
+      {type === 'password' ? (
+        <PasswordField
           id={id}
-          type={type}
-          autoComplete={id}
+          autoComplete="new-password"
           aria-label={localize(label)}
-          {...register(
-            id as 'name' | 'email' | 'username' | 'password' | 'confirm_password',
-            validation,
-          )}
+          label={localize(label)}
+          {...register(id as 'password' | 'confirm_password', validation)}
           aria-invalid={!!errors[id]}
-          className={authInputClass}
-          placeholder=" "
           data-testid={id}
         />
-        <label htmlFor={id} className={authLabelClass}>
-          {localize(label)}
-        </label>
-      </div>
+      ) : (
+        <div className="relative">
+          <input
+            id={id}
+            type={type}
+            autoComplete={id}
+            aria-label={localize(label)}
+            {...register(id as 'name' | 'email' | 'username', validation)}
+            aria-invalid={!!errors[id]}
+            className={authInputClass}
+            placeholder=" "
+            data-testid={id}
+          />
+          <label htmlFor={id} className={authLabelClass}>
+            {localize(label)}
+          </label>
+        </div>
+      )}
       {errors[id] && (
         <span role="alert" className="mt-1 font-mono text-sm text-red-500">
           {String(errors[id]?.message) ?? ''}
@@ -213,7 +224,7 @@ const Registration: React.FC = () => {
                 type="submit"
                 aria-label="Submit registration"
                 variant="submit"
-                className="h-12 w-full rounded-2xl bg-[var(--rekky-terracotta)] font-sans text-white hover:bg-[var(--rekky-terracotta-hover)]"
+                className={authPrimaryButtonClass}
               >
                 {isSubmitting ? <Spinner /> : localize('com_auth_continue')}
               </Button>
@@ -222,11 +233,7 @@ const Registration: React.FC = () => {
 
           <p className="my-4 text-center text-sm font-light text-[var(--rekky-umber)] dark:text-[var(--rekky-cream-muted)]">
             {localize('com_auth_already_have_account')}{' '}
-            <a
-              href={loginPage()}
-              aria-label="Login"
-              className="inline-flex p-1 text-sm font-medium text-[var(--rekky-terracotta)] transition-colors hover:text-[var(--rekky-terracotta-hover)]"
-            >
+            <a href={loginPage()} aria-label="Login" className={authInlineLinkClass}>
               {localize('com_auth_login')}
             </a>
           </p>

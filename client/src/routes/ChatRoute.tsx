@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useRecoilCallback, useRecoilValue } from 'recoil';
 import { useToastContext } from '@librechat/client';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Constants } from 'librechat-data-provider';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
-import type { TPreset } from 'librechat-data-provider';
+import type { TConversation, TPreset } from 'librechat-data-provider';
 import {
   mergeQuerySettingsWithSpec,
   processValidSettings,
@@ -39,7 +39,12 @@ import store from '~/store';
 
 export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking' }) {
   const { data: startupConfig } = useGetStartupConfig();
-  const { isAuthenticated, user, roles } = useAuthRedirect();
+  const { conversationId: routeConversationId = '' } = useParams();
+  const isCookingMode = mode === 'cooking';
+  const allowGuestCookingLanding = isCookingMode && !routeConversationId;
+  const { isAuthenticated, user, roles } = useAuthRedirect({
+    allowGuest: allowGuestCookingLanding,
+  });
 
   const defaultTemporaryChat = useRecoilValue(temporaryStore.defaultTemporaryChat);
   const setIsTemporary = useRecoilCallback(
@@ -53,11 +58,10 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
 
   const index = 0;
   const [searchParams] = useSearchParams();
-  const { conversationId: routeConversationId = '' } = useParams();
-  const isCookingMode = mode === 'cooking';
   const conversationId = routeConversationId || (isCookingMode ? Constants.NEW_CONVO : '');
   useIdChangeEffect(conversationId);
-  const { hasSetConversation, conversation } = store.useCreateConversationAtom(index);
+  const { hasSetConversation, conversation, setConversation } =
+    store.useCreateConversationAtom(index);
   const lastConversationIdRef = useRef<string>('');
   if (conversationId !== lastConversationIdRef.current) {
     lastConversationIdRef.current = conversationId;
@@ -121,7 +125,24 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
     }
   }, [conversationId, isCookingMode, isTemporaryChat, setIsTemporary, defaultTemporaryChat]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!isAuthenticated && allowGuestCookingLanding && !hasSetConversation.current) {
+      const now = new Date().toISOString();
+      const guestConversation = {
+        ...getNewCookingConversationTemplate(),
+        ...getRekkyDefaultPreset(),
+        createdAt: now,
+        updatedAt: now,
+      } as TConversation;
+      setConversation(guestConversation);
+      hasSetConversation.current = true;
+      return;
+    }
+
+    if (!isAuthenticated) {
+      return;
+    }
+
     if (
       !isCookingMode ||
       conversationId !== Constants.NEW_CONVO ||
@@ -143,7 +164,17 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
       keepLatestMessage: true,
       routeBase: '/cook',
     });
-  }, [conversationId, endpointsQuery.data, isCookingMode, modelsQuery.data, newConversation]);
+  }, [
+    allowGuestCookingLanding,
+    conversationId,
+    endpointsQuery.data,
+    hasSetConversation,
+    isAuthenticated,
+    isCookingMode,
+    modelsQuery.data,
+    newConversation,
+    setConversation,
+  ]);
 
   /** This effect is mainly for the first conversation state change on first load of the page.
    *  Adjusting this may have unintended consequences on the conversation state.
@@ -244,7 +275,7 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
     modelsQuery.data,
   ]);
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !allowGuestCookingLanding) {
     return null;
   }
 

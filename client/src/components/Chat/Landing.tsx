@@ -16,10 +16,10 @@ const containerClassName =
 const defaultCookingWordKey: TranslationKeys = 'com_cooking_chat_landing_word_cooking';
 const cookingWordKeys: TranslationKeys[] = [
   defaultCookingWordKey,
-  'com_cooking_chat_landing_word_inventing',
-  'com_cooking_chat_landing_word_tweaking',
   'com_cooking_chat_landing_word_craving',
-  'com_cooking_chat_landing_word_mastering',
+  'com_cooking_chat_landing_word_tasting',
+  'com_cooking_chat_landing_word_serving',
+  'com_cooking_chat_landing_word_sharing',
 ];
 
 function getTextSizeClass(text: string | undefined | null) {
@@ -54,12 +54,12 @@ function RotatingCookingHeadline() {
 
   return (
     <h1
-      className={`${getTextSizeClass(localize('com_cooking_chat_landing'))} flex flex-wrap items-baseline justify-center font-medium text-text-primary`}
+      className={`${getTextSizeClass(localize('com_cooking_chat_landing'))} flex items-baseline justify-center font-medium text-text-primary`}
       aria-label={localize('com_cooking_chat_landing')}
     >
       <span>{localize('com_cooking_chat_landing_prefix')}</span>
       <span
-        className="ml-2 inline-grid min-w-[10ch] overflow-hidden text-left align-baseline text-[#c1121f] dark:text-[#e63946]"
+        className="ml-[0.3em] inline-grid w-[4.5em] overflow-hidden text-center align-baseline text-[#c1121f] dark:text-[#e63946]"
         aria-hidden="true"
       >
         <span key={word} className="rekky-rotating-word whitespace-nowrap">
@@ -74,8 +74,8 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
   const { conversation } = useChatContext();
   const agentsMap = useAgentsMapContext();
   const { data: startupConfig } = useGetStartupConfig();
-  const { data: endpointsConfig } = useGetEndpointsQuery();
-  const { user } = useAuthContext();
+  const { user, isAuthenticated } = useAuthContext();
+  const { data: endpointsConfig } = useGetEndpointsQuery({ enabled: isAuthenticated });
   const localize = useLocalize();
   const { isCookingChat } = useCookingChat();
 

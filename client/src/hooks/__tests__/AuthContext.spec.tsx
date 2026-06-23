@@ -75,6 +75,7 @@ function TestConsumer() {
     <div
       data-testid="consumer"
       data-authenticated={ctx.isAuthenticated}
+      data-auth-resolved={ctx.isAuthResolved}
       data-roles={JSON.stringify(ctx.roles ?? {})}
     />
   );
@@ -329,6 +330,45 @@ describe('AuthContextProvider — silentRefresh post-login redirect', () => {
     });
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
     jest.useRealTimers();
+  });
+
+  it('does not expose a guest state while the initial refresh is pending', () => {
+    jest.useFakeTimers();
+    const { getByTestId } = renderProviderLive();
+    const consumer = getByTestId('consumer');
+
+    expect(consumer.getAttribute('data-authenticated')).toBe('false');
+    expect(consumer.getAttribute('data-auth-resolved')).toBe('false');
+
+    const [, refreshOptions] = mockRefreshMutate.mock.calls[0] as [
+      unknown,
+      { onSuccess: (data: unknown) => void },
+    ];
+
+    act(() => {
+      refreshOptions.onSuccess({ user: { id: '1', role: 'USER' }, token: 'new-token' });
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(consumer.getAttribute('data-authenticated')).toBe('true');
+    expect(consumer.getAttribute('data-auth-resolved')).toBe('true');
+    jest.useRealTimers();
+  });
+
+  it('resolves as unauthenticated when refresh returns no token', () => {
+    const { getByTestId } = renderProviderLive();
+    const consumer = getByTestId('consumer');
+    const [, refreshOptions] = mockRefreshMutate.mock.calls[0] as [
+      unknown,
+      { onSuccess: (data: unknown) => void },
+    ];
+
+    act(() => {
+      refreshOptions.onSuccess(undefined);
+    });
+
+    expect(consumer.getAttribute('data-authenticated')).toBe('false');
+    expect(consumer.getAttribute('data-auth-resolved')).toBe('true');
   });
 
   it('navigates to current URL when no stored redirect exists', () => {

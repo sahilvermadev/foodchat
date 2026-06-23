@@ -12,12 +12,15 @@ if (typeof Request === 'undefined') {
       public url: string,
       public init?: RequestInit,
     ) {}
-  } as any;
+  } as unknown as typeof Request;
 }
 
 jest.mock('~/hooks', () => ({
   useAuthContext: jest.fn(),
 }));
+
+type AuthRedirectResult = ReturnType<typeof useAuthRedirect>;
+type TestWindow = Window & { __testResult?: AuthRedirectResult };
 
 /**
  * TestComponent that uses the useAuthRedirect hook and exposes its return value
@@ -25,8 +28,14 @@ jest.mock('~/hooks', () => ({
 function TestComponent() {
   const result = useAuthRedirect();
   // Expose result for assertions
-  (window as any).__testResult = result;
+  (window as TestWindow).__testResult = result;
   return <div data-testid="test-component">Test Component</div>;
+}
+
+function GuestAllowedTestComponent() {
+  const result = useAuthRedirect({ allowGuest: true });
+  (window as TestWindow).__testResult = result;
+  return <div data-testid="guest-component">Guest Component</div>;
 }
 
 /**
@@ -60,12 +69,12 @@ const createTestRouter = (basename = '/', initialEntry?: string) => {
 
 describe('useAuthRedirect', () => {
   beforeEach(() => {
-    (window as any).__testResult = undefined;
+    (window as TestWindow).__testResult = undefined;
   });
 
   afterEach(() => {
     jest.clearAllMocks();
-    (window as any).__testResult = undefined;
+    (window as TestWindow).__testResult = undefined;
   });
 
   it('should not redirect when user is authenticated', async () => {
@@ -113,6 +122,34 @@ describe('useAuthRedirect', () => {
     // Verify navigation used replace (history has only 1 entry)
     // This prevents users from hitting back to return to protected pages
     expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('should keep unauthenticated users on guest-allowed routes', async () => {
+    (useAuthContext as jest.Mock).mockReturnValue({
+      user: null,
+      isAuthenticated: false,
+    });
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/cook',
+          element: <GuestAllowedTestComponent />,
+        },
+        {
+          path: '/login',
+          element: <div data-testid="login-page">Login Page</div>,
+        },
+      ],
+      { initialEntries: ['/cook'] },
+    );
+    const { getByTestId, queryByTestId } = render(<RouterProvider router={router} />);
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(router.state.location.pathname).toBe('/cook');
+    expect(getByTestId('guest-component')).toBeInTheDocument();
+    expect(queryByTestId('login-page')).not.toBeInTheDocument();
   });
 
   it('should respect router basename when redirecting (subdirectory deployment)', async () => {
@@ -196,10 +233,10 @@ describe('useAuthRedirect', () => {
     render(<RouterProvider router={router} />);
 
     await waitFor(() => {
-      const testResult = (window as any).__testResult;
+      const testResult = (window as TestWindow).__testResult;
       expect(testResult).toBeDefined();
-      expect(testResult.user).toEqual(mockUser);
-      expect(testResult.isAuthenticated).toBe(true);
+      expect(testResult?.user).toEqual(mockUser);
+      expect(testResult?.isAuthenticated).toBe(true);
     });
   });
 

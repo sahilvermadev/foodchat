@@ -23,8 +23,9 @@ export default function Root() {
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
   const isCookingLandingRoute = location.pathname === '/cook';
+  const isGuestEntryRoute = location.pathname === '/' || isCookingLandingRoute;
 
-  const { isAuthenticated, logout } = useAuthContext();
+  const { isAuthenticated, isAuthResolved, logout } = useAuthContext();
 
   useHealthCheck(isAuthenticated);
 
@@ -50,7 +51,17 @@ export default function Root() {
     logout('/login?redirect=false');
   };
 
-  if (!isAuthenticated) {
+  if (!isAuthResolved) {
+    return (
+      <div
+        className="h-dvh w-full bg-presentation"
+        role="status"
+        aria-label={localize('com_ui_loading')}
+      />
+    );
+  }
+
+  if (!isAuthenticated && !isGuestEntryRoute) {
     return null;
   }
 
@@ -85,7 +96,7 @@ export default function Root() {
               }}
               inert={isSmallScreen && sidebarExpanded ? '' : undefined}
             >
-              <LocationWeather />
+              {isAuthenticated ? <LocationWeather /> : null}
               <Outlet />
             </div>
           </div>
@@ -100,7 +111,7 @@ export default function Root() {
             modalContent={config.interface.termsOfService.modalContent}
           />
         )}
-        <Tour />
+        {isAuthenticated ? <Tour /> : null}
       </FileMapContext.Provider>
     </SetConvoProvider>
   );

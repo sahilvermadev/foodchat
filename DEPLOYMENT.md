@@ -106,6 +106,15 @@ The stateful Express API and MongoDB instance are hosted on **Railway** under th
 | `ALLOW_REGISTRATION` | `true` | Enables/disables the email sign-up/registration form on the login screen |
 | `OPENROUTER_KEY` | `sk-or-...` | API Key for custom OpenRouter endpoints (Gemini, Llama, Claude, GPT) |
 | `TAVILY_API_KEY` | `tvly-...` | API Key for Tavily advanced web search and markdown scraping integration |
+| `REKKY_GUEST_DAILY_PROMPT_LIMIT` | Optional, defaults to `10` | Per-IP daily abuse cap for anonymous `/cook` trial prompts before sign-in is required |
+| `REKKY_GUEST_MODEL` | Optional, defaults to the cooking model | Server-controlled model used for anonymous `/cook` trial prompts |
+| `REKKY_GUEST_MAX_PROMPT_CHARS` | Optional, defaults to `4000` | Maximum anonymous trial prompt length |
+| `REKKY_GUEST_BURST_LIMIT` | Optional, defaults to `5` | Anonymous guest chat attempts allowed per IP in a ten-minute window |
+| `REKKY_GUEST_CONCURRENCY_LIMIT` | Optional, defaults to `2` | Simultaneous anonymous generations allowed per IP |
+
+Anonymous limits use Express's trusted `req.ip`. Production must remain behind the configured
+reverse proxy, with `TRUST_PROXY` matching the proxy hop count and the edge overwriting
+client-supplied forwarding headers.
 
 Security audit note (June 11, 2026): Railway has all four secret variables present,
 but their values exactly match the defaults in `packages/api/src/app/checks.ts`.
@@ -182,6 +191,10 @@ During the deployment lifecycle, the following critical challenges were resolved
 ### 7. Epicure Core Production Parity
 * **Problem**: The old Epicure integration depended on a Python package install during Docker build and used a legacy data bundle. A deploy attempt timed out while fetching Python dependencies from PyPI, and the production runtime could drift from the checked-in model files.
 * **Solution**: Replaced the legacy bundle with the checked-in `Kaikaku/epicure-core` artifact under `data/epicure-core`, added a repository-local stdio MCP server, and changed Docker to install only Alpine `python3` and `py3-numpy`. Local and production now load the same model files and expose the same seven Samwise-facing MCP tool names.
+
+### 8. Anonymous Cooking Trial
+* **Problem**: First-time visitors landing on `rekky.ai` had to authenticate before seeing Rekky's cooking workspace, adding friction before they could understand the product.
+* **Solution**: The unauthenticated `/cook` route now renders the new-chat workspace and submits exactly one anonymous text prompt through `/api/cooking/guest/chat`. The guest route does not persist conversations, does not load saved preferences, blocks attachments, and disables document/canvas mutation tools. After the first streamed answer, the composer locks and prompts the user to sign up or log in to continue.
 
 ---
 

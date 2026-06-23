@@ -8,7 +8,8 @@ const mockNavigateToConvo = jest.fn();
 const mockUseChatHistorySearchQuery = jest.fn();
 
 jest.mock('~/data-provider', () => ({
-  useChatHistorySearchQuery: (query: string) => mockUseChatHistorySearchQuery(query),
+  useChatHistorySearchQuery: (query: string, config?: { enabled?: boolean }) =>
+    mockUseChatHistorySearchQuery(query, config),
 }));
 
 jest.mock('~/hooks', () => ({
@@ -43,9 +44,17 @@ const searchResponse: ChatHistorySearchResponse = {
   ],
 };
 
-function SearchHarness({ toggleNav }: { toggleNav: () => void }) {
+function SearchHarness({
+  toggleNav,
+  enabled = true,
+}: {
+  toggleNav: () => void;
+  enabled?: boolean;
+}) {
   const [query, setQuery] = useState('');
-  return <HistorySearch query={query} setQuery={setQuery} toggleNav={toggleNav} />;
+  return (
+    <HistorySearch query={query} setQuery={setQuery} toggleNav={toggleNav} enabled={enabled} />
+  );
 }
 
 describe('HistorySearch', () => {
@@ -79,7 +88,9 @@ describe('HistorySearch', () => {
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'butter chicken' } });
     act(() => jest.advanceTimersByTime(250));
 
-    expect(mockUseChatHistorySearchQuery).toHaveBeenLastCalledWith('butter chicken');
+    expect(mockUseChatHistorySearchQuery).toHaveBeenLastCalledWith('butter chicken', {
+      enabled: true,
+    });
     fireEvent.click(screen.getByRole('option'));
 
     expect(toggleNav).toHaveBeenCalledTimes(1);
@@ -91,5 +102,24 @@ describe('HistorySearch', () => {
         targetMessageId: 'message-1',
       },
     );
+  });
+
+  it('keeps guest search local and shows a login-aware message', () => {
+    render(
+      <MemoryRouter
+        initialEntries={['/cook']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <SearchHarness toggleNav={jest.fn()} enabled={false} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'butter chicken' } });
+    act(() => jest.advanceTimersByTime(250));
+
+    expect(mockUseChatHistorySearchQuery).toHaveBeenLastCalledWith('butter chicken', {
+      enabled: false,
+    });
+    expect(screen.getByText('com_cooking_guest_history_search_body')).toBeInTheDocument();
   });
 });
