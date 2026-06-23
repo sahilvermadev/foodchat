@@ -5,6 +5,12 @@ node_modules
 client/dist
 .vercel
 .turbo
+.venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+coverage
+**/coverage
 data-node
 data/*
 !data/epicure-core

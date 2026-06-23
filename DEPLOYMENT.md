@@ -186,7 +186,7 @@ During the deployment lifecycle, the following critical challenges were resolved
 
 ### 6. Railway Deployment GraphQL Upload Timeouts
 * **Problem**: Local databases, git history, and build caches bloated the deployment directory. When running `npx @railway/cli up`, the entire directory was uploaded, triggering GraphQL timeouts on Railway due to payload size (hundreds of megabytes).
-* **Solution**: Created a highly targeted `.railwayignore` file at the root, explicitly excluding large directories like `.git/`, `.github/`, `.vercel/`, `.turbo/`, `node_modules/`, `client/dist/`, `data/`, `data-node/`, and log files. This reduced the upload payload to a few kilobytes, accelerating deployments and eliminating timeouts.
+* **Solution**: Created a highly targeted `.railwayignore` file at the root, explicitly excluding large directories like `.git/`, `.github/`, `.vercel/`, `.turbo/`, `.venv/`, `node_modules/`, `client/dist/`, `coverage/`, `data/`, `data-node/`, and log files. This reduced the upload payload to a few kilobytes, accelerating deployments and eliminating timeouts.
 
 ### 7. Epicure Core Production Parity
 * **Problem**: The old Epicure integration depended on a Python package install during Docker build and used a legacy data bundle. A deploy attempt timed out while fetching Python dependencies from PyPI, and the production runtime could drift from the checked-in model files.
