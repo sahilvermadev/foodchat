@@ -61,6 +61,7 @@ import RecipeMetrics from './Metrics';
 import StructuredIngredients, { hasDisplayableIngredients } from './StructuredIngredients';
 import { recipeMarkdownDisplay, stripIngredientsSection } from './recipe';
 import { remarkCookingTimers } from './timerMarkdown';
+import VoiceAssistantWidget from './VoiceAssistantWidget';
 
 type BrowserAudioContext = typeof AudioContext;
 
@@ -696,6 +697,7 @@ export default function RecipeCanvas({
           )}
         </article>
       </div>
+      {conversationId && <VoiceAssistantWidget conversationId={conversationId} />}
     </section>
   );
 }
