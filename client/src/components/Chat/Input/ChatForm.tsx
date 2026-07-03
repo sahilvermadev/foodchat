@@ -404,7 +404,7 @@ const ChatForm = memo(function ChatForm({
                   className={cn(
                     'flex h-8 items-center gap-1.5 self-center rounded-full border border-border-light px-3 py-1 text-xs font-semibold shadow-sm transition-all duration-200 focus:outline-none',
                     isVoiceActive
-                      ? 'animate-pulse border-transparent bg-emerald-600 text-white hover:bg-emerald-700'
+                      ? 'border-transparent bg-emerald-600 text-white hover:bg-emerald-700'
                       : 'bg-surface-primary text-text-secondary hover:bg-surface-hover hover:text-text-primary dark:border-border-heavy',
                   )}
                 >
