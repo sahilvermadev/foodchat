@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, X, Sparkles, AlertTriangle } from 'lucide-react';
+import { useRecoilState } from 'recoil';
+import { X, Sparkles, AlertTriangle, MicOff } from 'lucide-react';
+import store from '~/store';
 import { useChatHelpers, useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -16,6 +18,7 @@ export default function VoiceAssistantWidget({
 }: VoiceAssistantWidgetProps) {
   const localize = useLocalize();
   const { ask, isSubmitting, getMessages } = useChatHelpers(index, conversationId);
+  const [isActive, setIsActive] = useRecoilState(store.voiceAssistantActive);
 
   const [voiceState, setVoiceState] = useState<VoiceState>('inactive');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -74,18 +77,18 @@ export default function VoiceAssistantWidget({
     };
 
     recognition.onerror = (event: any) => {
-      console.warn('Speech recognition warning/error:', event.error);
+      console.warn('Speech recognition error:', event.error);
       if (event.error === 'not-allowed') {
         setVoiceState('error');
         setErrorMessage(localize('com_ui_mic_permission_denied') || 'Mic permission denied');
+        setIsActive(false);
       } else if (event.error === 'no-speech') {
-        // Safe timeout restart to prevent CPU looping
         setTimeout(() => {
           if (activeSessionRef.current && voiceState === 'listening') {
             try {
               recognition.start();
             } catch {
-              // ignore active state starts
+              // ignore
             }
           }
         }, 1000);
@@ -93,13 +96,12 @@ export default function VoiceAssistantWidget({
     };
 
     recognition.onend = () => {
-      // Automatically restart if session is active and we are in listening state
       setTimeout(() => {
         if (activeSessionRef.current && voiceState === 'listening') {
           try {
             recognition.start();
           } catch {
-            // ignore active state starts
+            // ignore
           }
         }
       }, 300);
@@ -107,7 +109,7 @@ export default function VoiceAssistantWidget({
 
     recognitionRef.current = recognition;
     return recognition;
-  }, [ask, voiceState, localize]);
+  }, [ask, voiceState, localize, setIsActive]);
 
   // Handle TTS Speak
   const speakText = useCallback((text: string) => {
@@ -129,7 +131,6 @@ export default function VoiceAssistantWidget({
       if (activeSessionRef.current) {
         setVoiceState('listening');
         setUserTranscript('');
-        // Restart speech recognition
         try {
           recognitionRef.current?.start();
         } catch {
@@ -156,13 +157,11 @@ export default function VoiceAssistantWidget({
   // Monitor Assistant thinking completion to trigger Speech response
   useEffect(() => {
     if (prevIsSubmittingRef.current && !isSubmitting && activeSessionRef.current) {
-      // Completed thinking! Let's get the latest assistant message
       const messages = getMessages() ?? [];
       const assistantMessages = messages.filter((m) => !m.isCreatedByUser);
       if (assistantMessages.length > 0) {
         const lastMsg = assistantMessages[assistantMessages.length - 1];
         if (lastMsg?.text) {
-          // Clean up markdown markers for TTS speech
           const cleanText = lastMsg.text
             .replace(/[*_#`~[\]]/g, '')
             .replace(/-\s+/g, '')
@@ -177,7 +176,7 @@ export default function VoiceAssistantWidget({
   }, [isSubmitting, getMessages, speakText]);
 
   // Start Assistant Session
-  const startSession = () => {
+  const startSession = useCallback(() => {
     activeSessionRef.current = true;
     setUserTranscript('');
     setAssistantResponse('');
@@ -192,10 +191,10 @@ export default function VoiceAssistantWidget({
         // ignore
       }
     }
-  };
+  }, [initSpeechRecognition]);
 
   // Stop Assistant Session
-  const stopSession = () => {
+  const stopSession = useCallback(() => {
     activeSessionRef.current = false;
     window.speechSynthesis.cancel();
     try {
@@ -204,16 +203,18 @@ export default function VoiceAssistantWidget({
       // ignore
     }
     setVoiceState('inactive');
-  };
+    setIsActive(false);
+  }, [setIsActive]);
 
-  // Toggle active session state
-  const handleToggle = () => {
-    if (voiceState === 'inactive') {
+  // Synchronize active session state with Recoil atom
+  useEffect(() => {
+    if (isActive) {
       startSession();
     } else {
       stopSession();
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]);
 
   // Ensure speech synthesis cancels on unmount
   useEffect(() => {
@@ -235,22 +236,6 @@ export default function VoiceAssistantWidget({
       window.speechSynthesis.getVoices();
     }
   }, []);
-
-  // Resolve class names based on state to avoid nested ternaries
-  const getToggleButtonClass = () => {
-    switch (voiceState) {
-      case 'inactive':
-        return 'bg-surface-submit text-white hover:bg-surface-submit-hover';
-      case 'listening':
-        return 'animate-pulse bg-emerald-600 text-white hover:bg-emerald-700';
-      case 'thinking':
-        return 'bg-amber-500 text-white hover:bg-amber-600';
-      case 'speaking':
-        return 'bg-blue-600 text-white hover:bg-blue-700';
-      default:
-        return 'bg-red-600 text-white hover:bg-red-700';
-    }
-  };
 
   const getStatusTextColorClass = () => {
     switch (voiceState) {
@@ -321,30 +306,6 @@ export default function VoiceAssistantWidget({
           transform-origin: center;
         }
       `}</style>
-
-      {/* Floating Toggle Button */}
-      <div className="fixed bottom-6 right-6 z-40 sm:bottom-8 sm:right-8">
-        <button
-          onClick={handleToggle}
-          aria-label="Toggle Hands-Free Cooking Assistant"
-          className={cn(
-            'flex h-14 items-center gap-2.5 rounded-full px-5 text-sm font-semibold shadow-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#c1121f]/50',
-            getToggleButtonClass(),
-          )}
-        >
-          {voiceState === 'inactive' ? (
-            <>
-              <Mic className="size-5" />
-              <span>{localize('com_cooking_voice_assistant') || 'Hands-Free Assistant'}</span>
-            </>
-          ) : (
-            <>
-              <MicOff className="size-5" />
-              <span>{localize('com_cooking_voice_active') || 'Voice Mode Active'}</span>
-            </>
-          )}
-        </button>
-      </div>
 
       {/* active Assistant panel */}
       {voiceState !== 'inactive' && (

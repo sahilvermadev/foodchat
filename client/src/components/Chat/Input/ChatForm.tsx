@@ -36,6 +36,7 @@ import EditBadges from './EditBadges';
 import BadgeRow from './BadgeRow';
 import Mention from './Mention';
 import store from '~/store';
+import { useCookingChat } from '~/components/Cooking/CookingChatContext';
 import { getChatFormLayoutClass, getChatInputLayoutClass } from '../landingLayout';
 
 interface ChatFormProps {
@@ -85,6 +86,8 @@ const ChatForm = memo(function ChatForm({
   const [badges, setBadges] = useRecoilState(store.chatBadges);
   const [isEditingBadges, setIsEditingBadges] = useRecoilState(store.isEditingBadges);
   const [showStopButton, setShowStopButton] = useRecoilState(store.showStopButtonByIndex(index));
+  const [isVoiceActive, setIsVoiceActive] = useRecoilState(store.voiceAssistantActive);
+  const { isCookingChat } = useCookingChat();
   const plusPopoverAtom = useMemo(() => store.showPlusPopoverFamily(index), [index]);
   const mentionPopoverAtom = useMemo(() => store.showMentionPopoverFamily(index), [index]);
 
@@ -392,6 +395,32 @@ const ChatForm = memo(function ChatForm({
                   disabled={isInputUnavailable || isNotAppendable}
                   isSubmitting={isSubmitting}
                 />
+              )}
+              {isCookingChat && (
+                <button
+                  type="button"
+                  onClick={() => setIsVoiceActive(!isVoiceActive)}
+                  aria-label="Toggle Voice Assistant Mode"
+                  className={cn(
+                    'flex h-8 items-center gap-1.5 self-center rounded-full border border-border-light px-3 py-1 text-xs font-semibold shadow-sm transition-all duration-200 focus:outline-none',
+                    isVoiceActive
+                      ? 'animate-pulse border-transparent bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-surface-primary text-text-secondary hover:bg-surface-hover hover:text-text-primary dark:border-border-heavy',
+                  )}
+                >
+                  <svg
+                    className="size-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 2v20M17 5v14M22 9v6M7 5v14M2 9v6" />
+                  </svg>
+                  <span>{localize('com_cooking_voice_button_label') || 'Voice'}</span>
+                </button>
               )}
               <div className={`${isRTL ? 'ml-2' : 'mr-2'}`}>
                 {isSubmitting && showStopButton ? (

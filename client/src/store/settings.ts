@@ -12,6 +12,7 @@ const staticAtoms = {
     default: SettingsViews.default,
   }),
   showPopover: atom<boolean>({ key: 'showPopover', default: false }),
+  voiceAssistantActive: atom<boolean>({ key: 'voiceAssistantActive', default: false }),
 };
 
 const localStorageAtoms = {
