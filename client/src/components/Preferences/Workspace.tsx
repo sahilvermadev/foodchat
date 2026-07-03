@@ -405,12 +405,14 @@ function KitchenPreferenceSummary({ lines, localize }: { lines: string[]; locali
         const hiddenCount = group.items.length - visible.length;
         return (
           <div key={group.labelKey} className="grid gap-1 sm:block sm:pl-1">
-            <h3 className="rekky-meta text-text-secondary sm:mb-1">{localize(group.labelKey)}</h3>
-            <div className="sm:border-border-light/60 space-y-1 sm:border-l sm:pl-4">
+            <h3 className="text-text-secondary/70 text-[10px] font-bold uppercase tracking-widest sm:mb-1">
+              {localize(group.labelKey)}
+            </h3>
+            <div className="border-border-light/40 sm:border-border-light/60 space-y-1 border-l pl-3.5 sm:border-l sm:pl-4">
               {visible.map((item) => (
                 <p
                   key={`${group.labelKey}:${item}`}
-                  className="text-[0.92rem] leading-5 text-text-secondary sm:text-sm"
+                  className="text-sm leading-5 text-text-secondary"
                 >
                   {item}
                 </p>
@@ -1359,7 +1361,7 @@ function PreferenceCard({
     content = <KitchenPreferenceSummary lines={section.lines} localize={localize} />;
   } else if (isComplete) {
     content = (
-      <ul className="mt-2 space-y-1 text-[0.94rem] leading-5 text-text-secondary sm:text-sm">
+      <ul className="mt-2 space-y-1 text-sm leading-5 text-text-secondary">
         {section.lines.map((line) => (
           <li key={`${config.heading}:${line}`} className="break-words">
             {cleanPreferenceLine(line)}
@@ -1369,7 +1371,7 @@ function PreferenceCard({
     );
   } else {
     content = (
-      <p className="mt-2 text-[0.94rem] italic leading-5 text-text-secondary sm:text-sm">
+      <p className="mt-2 text-sm italic leading-5 text-text-secondary">
         {localize('com_preferences_not_set')}
       </p>
     );
@@ -2545,17 +2547,24 @@ export default function PreferencesWorkspace() {
 
   return (
     <main className="rekky-ui rekky-preferences-surface flex h-full min-h-0 flex-col bg-[#f7f1e8] text-text-primary dark:bg-[#141014]">
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-8 sm:px-8 sm:py-7 lg:px-14">
+      {/* Mobile Top Header Navbar */}
+      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-30 flex h-12 shrink-0 items-center justify-center border-b px-5 backdrop-blur md:hidden">
+        <span className="text-[1.05rem] font-medium tracking-normal text-text-primary">
+          {localize('com_preferences_dashboard_title')}
+        </span>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-14">
         <div className="mx-auto w-full max-w-[1500px]">
           <section
             aria-label={localize('com_preferences_document')}
-            className="min-w-0 space-y-8 sm:space-y-12"
+            className="min-w-0 space-y-8 pt-3 sm:space-y-12 sm:pt-0"
           >
             <header>
-              <div className="flex flex-col gap-4 pt-1 sm:pt-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex flex-col gap-4 pt-1 lg:flex-row lg:items-start lg:justify-between">
                 <h1
                   id="preferences-title"
-                  className="text-[2.45rem] font-medium leading-[0.95] tracking-normal text-text-primary sm:text-[3.45rem]"
+                  className="hidden text-[2.45rem] font-medium leading-[0.95] tracking-normal text-text-primary sm:block sm:text-[3.45rem]"
                 >
                   {localize('com_preferences_dashboard_title')}
                 </h1>

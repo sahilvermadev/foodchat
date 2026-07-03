@@ -15,7 +15,7 @@ import StartupLayout from './Layouts/Startup';
 import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
 import Root from './Root';
-import { CookingSession, RecipeDetail, RecipeLibrary } from '~/components/Cooking';
+import { CookingSession, RecipeDetail, RecipeLibrary, SocialImports } from '~/components/Cooking';
 import { PreferencesWorkspace } from '~/components/Preferences';
 
 const AuthProviderLayout = () => (
@@ -124,6 +124,14 @@ export const router = createBrowserRouter(
             {
               path: 'recipes/:recipeId',
               element: <RecipeDetail />,
+            },
+            {
+              path: 'imports',
+              element: <SocialImports />,
+            },
+            {
+              path: 'imports/share',
+              element: <SocialImports />,
             },
             {
               path: 'preferences',

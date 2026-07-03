@@ -12,6 +12,15 @@ import type {
   SavedRecipe,
   SavedRecipeSummary,
   SaveRecipeRequest,
+  SocialImport,
+  SocialImportDraftResponse,
+  SocialPlaylistSubscription,
+  SocialPlaylistSubscriptionResponse,
+  CreateSocialImportRequest,
+  CreateSocialImportDraftRequest,
+  CreateSocialPlaylistSubscriptionRequest,
+  UpdateSocialImportRequest,
+  UpdateSocialPlaylistSubscriptionRequest,
   UpdateCookingDraftRequest,
   UpdateCookingDocumentRequest,
   UpdateSavedRecipeRequest,
@@ -227,6 +236,152 @@ export const useDeleteSavedRecipeMutation = (): UseMutationResult<
         queryClient.removeQueries([QueryKeys.recipe, 'draft', recipe.sourceDraftId]);
       }
       queryClient.invalidateQueries([QueryKeys.recipes]);
+    },
+  });
+};
+
+export const useCreateSocialImportMutation = (): UseMutationResult<
+  SocialImport,
+  unknown,
+  CreateSocialImportRequest
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.createSocialImport], {
+    mutationFn: (payload: CreateSocialImportRequest) => dataService.createSocialImport(payload),
+    onSuccess: (socialImport) => {
+      queryClient.setQueryData([QueryKeys.socialImports, socialImport._id], socialImport);
+      queryClient.invalidateQueries([QueryKeys.socialImports]);
+    },
+  });
+};
+
+export const useUpdateSocialImportMutation = (): UseMutationResult<
+  SocialImport,
+  unknown,
+  { importId: string; payload: UpdateSocialImportRequest }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.updateSocialImport], {
+    mutationFn: ({ importId, payload }) => dataService.updateSocialImport(importId, payload),
+    onSuccess: (socialImport) => {
+      queryClient.setQueryData([QueryKeys.socialImports, socialImport._id], socialImport);
+      queryClient.invalidateQueries([QueryKeys.socialImports]);
+    },
+  });
+};
+
+export const useCreateSocialImportDraftMutation = (): UseMutationResult<
+  SocialImportDraftResponse,
+  unknown,
+  { importId: string; payload?: CreateSocialImportDraftRequest }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.createSocialImportDraft], {
+    mutationFn: ({ importId, payload }) => dataService.createSocialImportDraft(importId, payload),
+    onSuccess: ({ socialImport, draft }) => {
+      queryClient.setQueryData([QueryKeys.socialImports, socialImport._id], socialImport);
+      queryClient.setQueryData([QueryKeys.cookingDraft, draft._id], draft);
+      if (draft.conversationId) {
+        queryClient.setQueryData(
+          [QueryKeys.cookingDraft, 'conversation', draft.conversationId],
+          draft,
+        );
+        queryClient.invalidateQueries([
+          QueryKeys.cookingDocuments,
+          'conversation',
+          draft.conversationId,
+        ]);
+      }
+      queryClient.invalidateQueries([QueryKeys.socialImports]);
+    },
+  });
+};
+
+export const useRetrySocialImportMutation = (): UseMutationResult<
+  SocialImport,
+  unknown,
+  SocialImport
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.retrySocialImport], {
+    mutationFn: (socialImport: SocialImport) => dataService.retrySocialImport(socialImport._id),
+    onSuccess: (socialImport) => {
+      queryClient.setQueryData([QueryKeys.socialImports, socialImport._id], socialImport);
+      queryClient.invalidateQueries([QueryKeys.socialImports]);
+      queryClient.invalidateQueries([QueryKeys.socialImportJobs, socialImport._id]);
+    },
+  });
+};
+
+export const useDeleteSocialImportMutation = (): UseMutationResult<void, unknown, SocialImport> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.deleteSocialImport], {
+    mutationFn: (socialImport: SocialImport) => dataService.deleteSocialImport(socialImport._id),
+    onSuccess: (_result, socialImport) => {
+      queryClient.removeQueries([QueryKeys.socialImports, socialImport._id]);
+      queryClient.invalidateQueries([QueryKeys.socialImports]);
+    },
+  });
+};
+
+export const useCreateSocialPlaylistSubscriptionMutation = (): UseMutationResult<
+  SocialPlaylistSubscriptionResponse,
+  unknown,
+  CreateSocialPlaylistSubscriptionRequest
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.createSocialPlaylist], {
+    mutationFn: (payload: CreateSocialPlaylistSubscriptionRequest) =>
+      dataService.createSocialPlaylistSubscription(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries([QueryKeys.socialPlaylists]);
+      queryClient.invalidateQueries([QueryKeys.socialImports]);
+    },
+  });
+};
+
+export const useUpdateSocialPlaylistSubscriptionMutation = (): UseMutationResult<
+  SocialPlaylistSubscription,
+  unknown,
+  { subscriptionId: string; payload: UpdateSocialPlaylistSubscriptionRequest }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.updateSocialPlaylist], {
+    mutationFn: ({ subscriptionId, payload }) =>
+      dataService.updateSocialPlaylistSubscription(subscriptionId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries([QueryKeys.socialPlaylists]);
+    },
+  });
+};
+
+export const useSyncSocialPlaylistSubscriptionMutation = (): UseMutationResult<
+  SocialPlaylistSubscriptionResponse,
+  unknown,
+  SocialPlaylistSubscription
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.syncSocialPlaylist], {
+    mutationFn: (subscription: SocialPlaylistSubscription) =>
+      dataService.syncSocialPlaylistSubscription(subscription._id),
+    onSuccess: () => {
+      queryClient.invalidateQueries([QueryKeys.socialPlaylists]);
+      queryClient.invalidateQueries([QueryKeys.socialImports]);
+    },
+  });
+};
+
+export const useDeleteSocialPlaylistSubscriptionMutation = (): UseMutationResult<
+  void,
+  unknown,
+  SocialPlaylistSubscription
+> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.deleteSocialPlaylist], {
+    mutationFn: (subscription: SocialPlaylistSubscription) =>
+      dataService.deleteSocialPlaylistSubscription(subscription._id),
+    onSuccess: () => {
+      queryClient.invalidateQueries([QueryKeys.socialPlaylists]);
     },
   });
 };

@@ -27,7 +27,20 @@ import type {
   SavedRecipesQuery,
   SavedRecipesResponse,
   SaveRecipeRequest,
+  SocialImport,
+  SocialImportDraftResponse,
+  SocialImportJobsResponse,
+  SocialImportsQuery,
+  SocialImportsResponse,
+  CreateSocialImportRequest,
+  CreateSocialImportDraftRequest,
+  CreateSocialPlaylistSubscriptionRequest,
+  UpdateSocialImportRequest,
+  UpdateSocialPlaylistSubscriptionRequest,
   UpdateSavedRecipeRequest,
+  SocialPlaylistSubscription,
+  SocialPlaylistSubscriptionResponse,
+  SocialPlaylistSubscriptionsResponse,
 } from './types/cooking';
 import type {
   PreferencesChatRequest,
@@ -171,6 +184,79 @@ export function getRecipe(recipeId: string): Promise<SavedRecipe> {
 
 export function getSavedRecipeByDraft(draftId: string): Promise<SavedRecipe> {
   return request.get(endpoints.recipeByDraft(draftId));
+}
+
+function socialImportsQueryString(params: SocialImportsQuery): string {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && String(value).trim()) {
+      query.set(key, String(value));
+    }
+  });
+  return query.toString();
+}
+
+export function createSocialImport(payload: CreateSocialImportRequest): Promise<SocialImport> {
+  return request.post(endpoints.socialImports(), payload);
+}
+
+export function getSocialImports(
+  params: SocialImportsQuery = {},
+): Promise<SocialImportsResponse> {
+  return request.get(endpoints.socialImports(socialImportsQueryString(params)));
+}
+
+export function updateSocialImport(
+  importId: string,
+  payload: UpdateSocialImportRequest,
+): Promise<SocialImport> {
+  return request.patch(endpoints.socialImport(importId), payload);
+}
+
+export function createSocialImportDraft(
+  importId: string,
+  payload: CreateSocialImportDraftRequest = {},
+): Promise<SocialImportDraftResponse> {
+  return request.post(endpoints.socialImportDraft(importId), payload);
+}
+
+export function getSocialImportJobs(importId: string): Promise<SocialImportJobsResponse> {
+  return request.get(endpoints.socialImportJobs(importId));
+}
+
+export function retrySocialImport(importId: string): Promise<SocialImport> {
+  return request.post(endpoints.socialImportRetry(importId), {});
+}
+
+export function deleteSocialImport(importId: string): Promise<void> {
+  return request.delete(endpoints.socialImport(importId));
+}
+
+export function createSocialPlaylistSubscription(
+  payload: CreateSocialPlaylistSubscriptionRequest,
+): Promise<SocialPlaylistSubscriptionResponse> {
+  return request.post(endpoints.socialPlaylists(), payload);
+}
+
+export function getSocialPlaylistSubscriptions(): Promise<SocialPlaylistSubscriptionsResponse> {
+  return request.get(endpoints.socialPlaylists());
+}
+
+export function updateSocialPlaylistSubscription(
+  subscriptionId: string,
+  payload: UpdateSocialPlaylistSubscriptionRequest,
+): Promise<SocialPlaylistSubscription> {
+  return request.patch(endpoints.socialPlaylist(subscriptionId), payload);
+}
+
+export function syncSocialPlaylistSubscription(
+  subscriptionId: string,
+): Promise<SocialPlaylistSubscriptionResponse> {
+  return request.post(endpoints.socialPlaylistSync(subscriptionId), {});
+}
+
+export function deleteSocialPlaylistSubscription(subscriptionId: string): Promise<void> {
+  return request.delete(endpoints.socialPlaylist(subscriptionId));
 }
 
 export function updateSavedRecipe(

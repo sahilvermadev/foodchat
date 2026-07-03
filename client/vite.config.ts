@@ -93,6 +93,15 @@ export default defineConfig(({ command }) => ({
         display: 'standalone',
         background_color: '#000000',
         theme_color: '#171217',
+        share_target: {
+          action: 'imports/share',
+          method: 'GET',
+          params: {
+            title: 'title',
+            text: 'text',
+            url: 'url',
+          },
+        },
         icons: [
           {
             src: 'assets/favicon-rekky-32x32.png',

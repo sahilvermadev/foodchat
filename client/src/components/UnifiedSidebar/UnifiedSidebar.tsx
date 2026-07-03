@@ -51,8 +51,10 @@ function UnifiedSidebar() {
   const resizeHandlers = useRef<{ move: (e: MouseEvent) => void; up: () => void } | null>(null);
 
   const links = useUnifiedSidebarLinks();
-  const isRecipeRoute =
-    location.pathname === '/recipes' || location.pathname.startsWith('/recipes/');
+  const isLibraryRoute =
+    location.pathname === '/imports' ||
+    location.pathname === '/recipes' ||
+    location.pathname.startsWith('/recipes/');
   const isCookingLandingRoute = location.pathname === '/cook';
 
   const handleCollapse = useCallback(() => {
@@ -117,10 +119,10 @@ function UnifiedSidebar() {
   }, []);
 
   useEffect(() => {
-    if (isRecipeRoute) {
+    if (isLibraryRoute) {
       setExpanded(false);
     }
-  }, [isRecipeRoute, setExpanded]);
+  }, [isLibraryRoute, setExpanded]);
 
   useEffect(() => {
     return () => {
@@ -218,6 +220,7 @@ function UnifiedSidebar() {
             width: expanded ? sidebarWidth : COLLAPSED_WIDTH,
             minWidth: expanded ? EXPANDED_MIN : COLLAPSED_WIDTH,
             maxWidth: expanded ? '40%' : COLLAPSED_WIDTH,
+            willChange: 'width, min-width, max-width',
             transition: isResizing
               ? 'none'
               : `width ${TRANSITION_MS}ms ${EASING}, min-width ${TRANSITION_MS}ms ${EASING}, max-width ${TRANSITION_MS}ms ${EASING}`,

@@ -37,6 +37,10 @@ import {
   createCookingDraftModel,
   createCookingSessionModel,
   createCookingSessionEventModel,
+  createSocialImportModel,
+  createSocialImportJobModel,
+  createSocialPlaylistSubscriptionModel,
+  createSocialTranscriptModel,
   createGuestLimitModel,
 } from './cooking';
 
@@ -83,6 +87,10 @@ export function createModels(mongoose: typeof import('mongoose')) {
     CookingDraft: createCookingDraftModel(mongoose),
     CookingSession: createCookingSessionModel(mongoose),
     CookingSessionEvent: createCookingSessionEventModel(mongoose),
+    SocialImport: createSocialImportModel(mongoose),
+    SocialImportJob: createSocialImportJobModel(mongoose),
+    SocialPlaylistSubscription: createSocialPlaylistSubscriptionModel(mongoose),
+    SocialTranscript: createSocialTranscriptModel(mongoose),
     GuestLimit: createGuestLimitModel(mongoose),
   };
 }

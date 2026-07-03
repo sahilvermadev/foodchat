@@ -124,6 +124,48 @@ describe('saved recipe title integrity', () => {
     expect(saved.recipe?.title).toBe('Thai Iced Tea');
   });
 
+  test('marks a matching social import as saved when saving from its draft', async () => {
+    const thumbnailUrl = 'https://example.com/thumb.jpg';
+    await mongoose.models.SocialImport.create({
+      user: 'social-save-user',
+      sourceUrl: 'https://example.com/recipe',
+      canonicalUrl: 'https://example.com/recipe',
+      provider: 'web',
+      thumbnailUrl,
+      embedHtmlAllowed: false,
+      status: 'draft_ready',
+      provenance: 'source_exact',
+      draftId: 'draft-social-recipe',
+      draftConversationId: 'conversation-social-recipe',
+    });
+
+    const saved = await saveRecipe('social-save-user', {
+      documentMarkdown: markdown,
+      recipe: recipe('Thai Iced Tea'),
+      sourceDraftId: 'draft-social-recipe',
+    });
+
+    expect(saved.illustrationUrl).toMatch(/^\/api\/recipes\/[^/]+\/illustration\?v=/);
+    expect(saved.illustrationStatus).toBe('complete');
+
+    const socialImport = await mongoose.models.SocialImport.findOne({
+      user: 'social-save-user',
+      draftId: 'draft-social-recipe',
+    }).lean();
+
+    expect(socialImport).toMatchObject({
+      status: 'saved_recipe',
+      savedRecipeId: saved._id,
+      draftSummary: 'Saved to recipe library.',
+    });
+
+    const library = await listRecipes('social-save-user', {});
+    expect(library.recipes[0]?.illustrationUrl).toMatch(
+      /^\/api\/recipes\/[^/]+\/illustration\?v=.*&variant=thumbnail$/,
+    );
+    expect(illustrateRecipe).not.toHaveBeenCalled();
+  });
+
   test('repairs legacy wrapper titles when listing saved recipes', async () => {
     const created = await mongoose.models.SavedRecipe.create({
       user: 'legacy-recipe-user',

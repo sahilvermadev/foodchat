@@ -314,14 +314,21 @@ export default function RecipeLibrary() {
       : localize('com_recipes_count_short_other', { count: total });
 
   return (
-    <main className="rekky-ui h-full overflow-y-auto bg-surface-primary-alt px-5 py-8 text-text-primary sm:px-8 sm:py-7 lg:px-14">
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-5 sm:gap-7">
-        <header className="pt-1 sm:pt-4">
+    <main className="rekky-ui h-full overflow-y-auto bg-surface-primary-alt px-5 py-5 text-text-primary sm:px-8 sm:py-7 lg:px-14">
+      {/* Mobile Top Header Navbar */}
+      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-30 -mx-5 flex h-12 items-center justify-center border-b px-5 backdrop-blur md:hidden">
+        <span className="text-[1.05rem] font-medium tracking-[-0.04em] text-text-primary">
+          {localize('com_recipes_library')}
+        </span>
+      </div>
+
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-5 pt-3 sm:gap-7 sm:pt-0">
+        <header className="pt-1">
           <div className="flex flex-col gap-4">
             <div>
               <h1
                 id="recipe-library-title"
-                className="text-[2.45rem] font-medium leading-[0.95] tracking-[-0.04em] text-text-primary sm:text-[clamp(2.75rem,5vw,3.45rem)] sm:tracking-[-0.03em]"
+                className="hidden text-[2.45rem] font-medium leading-[0.95] tracking-[-0.04em] text-text-primary sm:block sm:text-[clamp(2.75rem,5vw,3.45rem)] sm:tracking-[-0.03em]"
               >
                 {localize('com_recipes_library')}
               </h1>
@@ -330,9 +337,9 @@ export default function RecipeLibrary() {
                   {localize('com_recipes_library_subtitle')}
                 </p>
                 {recipesQuery.isLoading ? (
-                  <SkeletonBlock className="h-4 w-24" />
+                  <SkeletonBlock className="hidden h-4 w-24 sm:block" />
                 ) : (
-                  <span className="text-text-secondary/90 text-sm font-medium sm:border-l sm:border-border-light sm:pl-3">
+                  <span className="text-text-secondary/90 hidden text-sm font-medium sm:inline-block sm:border-l sm:border-border-light sm:pl-3">
                     {recipeCountLabel}
                   </span>
                 )}

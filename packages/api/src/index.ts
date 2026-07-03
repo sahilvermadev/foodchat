@@ -34,6 +34,8 @@ export * from './skills';
 export * from './cooking';
 /* Recipes */
 export * from './recipes';
+/* Social imports */
+export * from './social';
 /* Preferences */
 export * from './preferences';
 /* Endpoints */

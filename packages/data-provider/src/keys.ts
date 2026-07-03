@@ -67,6 +67,9 @@ export enum QueryKeys {
   cookingSession = 'cookingSession',
   recipes = 'recipes',
   recipe = 'recipe',
+  socialImports = 'socialImports',
+  socialImportJobs = 'socialImportJobs',
+  socialPlaylists = 'socialPlaylists',
 }
 
 export enum MutationKeys {
@@ -106,4 +109,13 @@ export enum MutationKeys {
   saveRecipe = 'saveRecipe',
   updateSavedRecipe = 'updateSavedRecipe',
   deleteSavedRecipe = 'deleteSavedRecipe',
+  createSocialImport = 'createSocialImport',
+  updateSocialImport = 'updateSocialImport',
+  createSocialImportDraft = 'createSocialImportDraft',
+  retrySocialImport = 'retrySocialImport',
+  deleteSocialImport = 'deleteSocialImport',
+  createSocialPlaylist = 'createSocialPlaylist',
+  updateSocialPlaylist = 'updateSocialPlaylist',
+  syncSocialPlaylist = 'syncSocialPlaylist',
+  deleteSocialPlaylist = 'deleteSocialPlaylist',
 }

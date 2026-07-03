@@ -10,6 +10,7 @@ import {
 } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import RecipeMetrics from './Metrics';
+import RecipeHeaderAction from './RecipeHeaderAction';
 import StructuredIngredients, { hasDisplayableIngredients } from './StructuredIngredients';
 import {
   recipeBodyMarkdown,
@@ -106,6 +107,31 @@ function formatRecipeDate(value?: string): string {
     month: 'long',
     year: 'numeric',
   }).format(date);
+}
+
+function getSourceLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase().replace('www.', '');
+    if (hostname === 'youtube.com' || hostname === 'youtu.be') {
+      return 'YouTube';
+    }
+    if (hostname === 'cooking.nytimes.com') {
+      return 'NYT Cooking';
+    }
+    if (hostname === 'nytimes.com') {
+      return 'New York Times';
+    }
+    if (hostname === 'instagram.com') {
+      return 'Instagram';
+    }
+    if (hostname === 'tiktok.com') {
+      return 'TikTok';
+    }
+    return hostname;
+  } catch {
+    return 'Source';
+  }
 }
 
 export default function RecipeDetail() {
@@ -243,45 +269,66 @@ export default function RecipeDetail() {
         </div>
         <article className="bg-surface-primary px-4 py-6 shadow-none sm:mt-4 sm:rounded-lg sm:border sm:border-border-light sm:px-8 sm:py-9 lg:px-12 lg:py-10">
           <header className="mb-7 border-b border-border-light pb-6 sm:mb-8 sm:pb-7">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <h1 className="rekky-title min-w-0">
                 {isEditing ? localize('com_recipes_edit_recipe') : recipeDisplayTitle(recipe)}
               </h1>
               {!isEditing ? (
-                <div className="mt-0.5 flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
-                  <Button
+                <div className="flex w-full shrink-0 items-center gap-2 sm:mt-0.5 sm:w-auto sm:justify-end">
+                  <RecipeHeaderAction
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    className="size-9 px-0 sm:size-auto sm:gap-2 sm:px-3"
                     disabled={createCookingDocument.isLoading}
                     onClick={discussWithAI}
                     aria-label={localize('com_recipes_discuss_ai')}
+                    icon={<MessageSquare className="size-4" aria-hidden="true" />}
                   >
-                    <MessageSquare className="h-4 w-4" aria-hidden="true" />
-                    <span className="hidden sm:inline">{localize('com_recipes_discuss_ai')}</span>
-                  </Button>
-                  <Button
+                    {localize('com_ui_chat')}
+                  </RecipeHeaderAction>
+                  <RecipeHeaderAction
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    className="size-9 px-0 sm:size-auto sm:gap-2 sm:px-3"
                     onClick={startEditing}
                     aria-label={localize('com_recipes_edit_markdown_btn')}
+                    icon={<Edit3 className="size-4" aria-hidden="true" />}
                   >
-                    <Edit3 className="h-4 w-4" aria-hidden="true" />
-                    <span className="hidden sm:inline">
-                      {localize('com_recipes_edit_markdown_btn')}
-                    </span>
-                  </Button>
+                    {localize('com_ui_edit')}
+                  </RecipeHeaderAction>
                 </div>
               ) : null}
             </div>
             {!isEditing ? (
-              <div className="rekky-meta mt-4 flex flex-wrap gap-x-3 gap-y-1 text-text-secondary sm:mt-3">
+              <div className="rekky-meta mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-text-secondary sm:mt-3">
                 <span>{documentTypeLabel(localize, recipe.documentType)}</span>
+                {recipe.sourceUrl ? (
+                  <>
+                    <span>·</span>
+                    <a
+                      href={recipe.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 font-medium text-surface-submit underline decoration-dotted underline-offset-4 hover:text-surface-submit-hover"
+                    >
+                      <span>{getSourceLabel(recipe.sourceUrl)}</span>
+                      <svg
+                        className="size-3 shrink-0"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        <polyline points="15 3 21 3 21 9" />
+                        <line x1="10" y1="14" x2="21" y2="3" />
+                      </svg>
+                    </a>
+                  </>
+                ) : null}
                 {updatedAt ? (
-                  <span>{localize('com_recipes_updated_date', { date: updatedAt })}</span>
+                  <>
+                    <span>·</span>
+                    <span>{localize('com_recipes_updated_date', { date: updatedAt })}</span>
+                  </>
                 ) : null}
               </div>
             ) : null}

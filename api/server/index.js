@@ -1,4 +1,5 @@
 require('dotenv').config();
+const dns = require('dns');
 const fs = require('fs');
 const path = require('path');
 require('module-alias')({ base: path.resolve(__dirname, '..') });
@@ -20,9 +21,11 @@ const {
   handleJsonParseError,
   GenerationJobManager,
   createStreamServices,
+  startSocialPlaylistSyncScheduler,
   initializeFileStorage,
   updateInterfacePermissions,
   preAuthTenantMiddleware,
+  sweepStuckSocialImports,
 } = require('@librechat/api');
 const { connectDb, indexSync } = require('~/db');
 const {
@@ -43,6 +46,15 @@ const noIndex = require('./middleware/noIndex');
 const routes = require('./routes');
 
 const { PORT, HOST, ALLOW_SOCIAL_LOGIN, DISABLE_COMPRESSION, TRUST_PROXY } = process.env ?? {};
+const dnsResultOrder = ['ipv4first', 'ipv6first', 'verbatim'].includes(
+  process.env.REKKY_DNS_RESULT_ORDER,
+)
+  ? process.env.REKKY_DNS_RESULT_ORDER
+  : 'ipv4first';
+
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder(dnsResultOrder);
+}
 
 // Allow PORT=0 to be used for automatic free port assignment
 const port = isNaN(Number(PORT)) ? 3080 : Number(PORT);
@@ -81,6 +93,10 @@ const startServer = async () => {
   runAsSystem(sweepOrphanedPreviews).catch((err) => {
     logger.error('[sweepOrphanedPreviews] Background sweep failed:', err);
   });
+  runAsSystem(sweepStuckSocialImports).catch((err) => {
+    logger.error('[sweepStuckSocialImports] Background sweep failed:', err);
+  });
+  startSocialPlaylistSyncScheduler();
   const appConfig = await getAppConfig({ baseOnly: true });
   initializeFileStorage(appConfig);
   await runAsSystem(async () => {
@@ -189,6 +205,7 @@ const startServer = async () => {
   app.use('/api/categories', routes.categories);
   app.use('/api/cooking', routes.cooking);
   app.use('/api/recipes', routes.recipes);
+  app.use('/api/social-imports', routes.social);
   app.use('/api/endpoints', routes.endpoints);
   app.use('/api/balance', routes.balance);
   app.use('/api/models', routes.models);

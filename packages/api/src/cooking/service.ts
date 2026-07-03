@@ -179,6 +179,23 @@ export async function listCookingDocuments(
   if (!documents.length) {
     return { documents: [] };
   }
+
+  const draftIds = documents.map((doc) => idOf(doc));
+  const SocialImport = mongoose.model('SocialImport');
+  const imports = await SocialImport.find({
+    user,
+    draftId: { $in: draftIds },
+  })
+    .select('draftId sourceUrl')
+    .lean<{ draftId?: string; sourceUrl?: string }[]>();
+
+  const sourceUrlMap = new Map<string, string>();
+  for (const imp of imports) {
+    if (imp.draftId && imp.sourceUrl) {
+      sourceUrlMap.set(String(imp.draftId), imp.sourceUrl);
+    }
+  }
+
   let selectedDocument = documents.find((document) => document.selected);
   if (!selectedDocument) {
     selectedDocument = documents[0];
@@ -190,8 +207,16 @@ export async function listCookingDocuments(
       return document;
     });
   }
+
   return {
-    documents: documents.map(serializeDraft),
+    documents: documents.map((doc) => {
+      const serialized = serializeDraft(doc);
+      const url = sourceUrlMap.get(serialized._id);
+      if (url) {
+        serialized.sourceUrl = url;
+      }
+      return serialized;
+    }),
     selectedDocumentId: idOf(selectedDocument),
   };
 }

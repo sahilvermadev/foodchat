@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, MessagesSquare, SlidersHorizontal } from 'lucide-react';
+import { BookOpen, Inbox, MessagesSquare, SlidersHorizontal } from 'lucide-react';
 import type { NavLink } from '~/common';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
 import {
@@ -37,6 +37,20 @@ export default function useUnifiedSidebarLinks() {
             }
           : { Component: GuestRecipesPreviewPanel }),
         isActive: (pathname) => pathname === '/recipes' || pathname.startsWith('/recipes/'),
+      },
+      {
+        title: 'com_social_imports_title',
+        label: '',
+        icon: Inbox,
+        id: 'imports',
+        ...(isAuthenticated
+          ? {
+              onClick: () => {
+                navigate('/imports');
+              },
+            }
+          : { Component: GuestRecipesPreviewPanel }),
+        isActive: (pathname) => pathname === '/imports',
       },
       {
         title: 'com_nav_preferences',

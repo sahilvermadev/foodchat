@@ -211,6 +211,7 @@ export const resolvePreferenceIngredient = () => `${BASE_URL}/api/preferences/in
 
 const cookingRoot = `${BASE_URL}/api/cooking`;
 const recipesRoot = `${BASE_URL}/api/recipes`;
+const socialImportsRoot = `${BASE_URL}/api/social-imports`;
 
 export const cookingDraftsGenerate = () => `${cookingRoot}/drafts/generate`;
 export const cookingDraftByConversation = (conversationId: string) =>
@@ -235,6 +236,21 @@ export const recipes = (query = '') => `${recipesRoot}${query ? `?${query}` : ''
 export const recipe = (recipeId: string) => `${recipesRoot}/${encodeURIComponent(recipeId)}`;
 export const recipeByDraft = (draftId: string) =>
   `${recipesRoot}/by-draft/${encodeURIComponent(draftId)}`;
+export const socialImports = (query = '') =>
+  `${socialImportsRoot}${query ? `?${query}` : ''}`;
+export const socialImport = (importId: string) =>
+  `${socialImportsRoot}/${encodeURIComponent(importId)}`;
+export const socialImportDraft = (importId: string) =>
+  `${socialImportsRoot}/${encodeURIComponent(importId)}/draft`;
+export const socialImportJobs = (importId: string) =>
+  `${socialImportsRoot}/${encodeURIComponent(importId)}/jobs`;
+export const socialImportRetry = (importId: string) =>
+  `${socialImportsRoot}/${encodeURIComponent(importId)}/retry`;
+export const socialPlaylists = () => `${socialImportsRoot}/playlists`;
+export const socialPlaylist = (subscriptionId: string) =>
+  `${socialImportsRoot}/playlists/${encodeURIComponent(subscriptionId)}`;
+export const socialPlaylistSync = (subscriptionId: string) =>
+  `${socialPlaylist(subscriptionId)}/sync`;
 
 export const agents = ({ path = '', options }: { path?: string; options?: object }) => {
   let url = `${BASE_URL}/api/agents`;

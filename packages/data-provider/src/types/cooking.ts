@@ -75,6 +75,7 @@ export type CookingDocument = {
   selected: boolean;
   documentMarkdown?: string;
   recipe: StructuredRecipe;
+  sourceUrl?: string;
   expiresAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -120,6 +121,7 @@ export type SavedRecipe = {
   recipe?: StructuredRecipe;
   sourceConversationId?: string;
   sourceDraftId?: string;
+  sourceUrl?: string;
   categorization?: RecipeCategorization;
   categorizationStatus: RecipeCategorizationStatus;
   categorizationVersion: number;
@@ -264,4 +266,167 @@ export type SavedRecipesResponse = {
   recipes: SavedRecipeSummary[];
   total: number;
   nextCursor?: string;
+};
+
+export type SocialImportProvider = 'youtube' | 'instagram' | 'tiktok' | 'web' | 'unknown';
+
+export type SocialImportStatus =
+  | 'saved'
+  | 'processing'
+  | 'draft_ready'
+  | 'needs_review'
+  | 'saved_recipe'
+  | 'inspiration'
+  | 'failed';
+
+export type SocialImportProvenance =
+  | 'source_exact'
+  | 'creator_verified'
+  | 'rekky_estimated'
+  | 'user_edited'
+  | 'unknown';
+
+export type SocialImportJobStatus = 'queued' | 'processing' | 'succeeded' | 'failed';
+export type SocialTranscriptStatus = 'found' | 'not_available' | 'temporarily_failed';
+export type SocialTranscriptSource =
+  | 'creator_authorized_caption'
+  | 'experimental_ytdlp'
+  | 'user_pasted'
+  | 'unknown';
+export type SocialPlaylistSubscriptionStatus = 'active' | 'paused' | 'failed';
+
+export type SocialImport = {
+  _id: string;
+  user: string;
+  sourceUrl: string;
+  canonicalUrl: string;
+  provider: SocialImportProvider;
+  providerContentId?: string;
+  creatorName?: string;
+  creatorUrl?: string;
+  title?: string;
+  thumbnailUrl?: string;
+  userSuppliedText?: string;
+  extractedText?: string;
+  extractedAt?: string;
+  draftId?: string;
+  draftConversationId?: string;
+  embedHtmlAllowed: boolean;
+  status: SocialImportStatus;
+  reviewMessage?: string;
+  draftSummary?: string;
+  savedRecipeId?: string;
+  provenance: SocialImportProvenance;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateSocialImportRequest = {
+  sourceUrl: string;
+  title?: string;
+  userSuppliedText?: string;
+};
+
+export type UpdateSocialImportRequest = {
+  status?: SocialImportStatus;
+  title?: string;
+  creatorName?: string;
+  userSuppliedText?: string;
+  draftSummary?: string;
+  savedRecipeId?: string;
+};
+
+export type CreateSocialImportDraftRequest = {
+  userSuppliedText?: string;
+};
+
+export type SocialImportDraftResponse = {
+  socialImport: SocialImport;
+  draft: CookingDocument;
+};
+
+export type SocialImportJob = {
+  _id: string;
+  user: string;
+  socialImportId: string;
+  provider?: SocialImportProvider;
+  providerContentId?: string;
+  status: SocialImportJobStatus;
+  stage: string;
+  attemptCount: number;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+  startedAt?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SocialTranscript = {
+  _id: string;
+  provider: SocialImportProvider;
+  providerContentId: string;
+  status: SocialTranscriptStatus;
+  source: SocialTranscriptSource;
+  text?: string;
+  language?: string;
+  failureReason?: string;
+  lastErrorMessage?: string;
+  attemptCount: number;
+  lastAttemptedAt?: string;
+  nextAttemptAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SocialPlaylistSubscription = {
+  _id: string;
+  user: string;
+  provider: 'youtube';
+  playlistId: string;
+  sourceUrl: string;
+  title?: string;
+  status: SocialPlaylistSubscriptionStatus;
+  importCount: number;
+  lastSyncedAt?: string;
+  nextSyncAt?: string;
+  lastErrorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateSocialPlaylistSubscriptionRequest = {
+  sourceUrl: string;
+};
+
+export type UpdateSocialPlaylistSubscriptionRequest = {
+  status?: SocialPlaylistSubscriptionStatus;
+};
+
+export type SocialPlaylistSubscriptionResponse = {
+  subscription: SocialPlaylistSubscription;
+  importsCreated: number;
+};
+
+export type SocialPlaylistSubscriptionsResponse = {
+  subscriptions: SocialPlaylistSubscription[];
+};
+
+export type SocialImportsQuery = {
+  q?: string;
+  provider?: SocialImportProvider;
+  status?: SocialImportStatus;
+  view?: 'all' | 'ready' | 'needs_help' | 'processing' | 'saved';
+  limit?: number;
+  cursor?: string;
+};
+
+export type SocialImportsResponse = {
+  imports: SocialImport[];
+  total: number;
+  nextCursor?: string;
+};
+
+export type SocialImportJobsResponse = {
+  jobs: SocialImportJob[];
 };

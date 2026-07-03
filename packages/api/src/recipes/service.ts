@@ -10,7 +10,7 @@ import type {
   StructuredRecipe,
   UpdateSavedRecipeRequest,
 } from 'librechat-data-provider';
-import type { ISavedRecipe } from '@librechat/data-schemas';
+import type { ISavedRecipe, ISocialImport } from '@librechat/data-schemas';
 import { categorizeRecipe } from './categorize';
 import { illustrateRecipe } from './illustrate';
 import { createIllustrationThumbnail, decodeIllustrationDataUrl } from '../illustrations/media';
@@ -19,6 +19,9 @@ import { CookingValidationError, normalizeRecipe } from '../cooking/validation';
 
 const maxLimit = 50;
 const pendingTimeoutMs = 1000 * 60 * 2;
+const externalImageFetchTimeoutMs = 5000;
+const maxExternalImageBytes = 5 * 1024 * 1024;
+const externalImageContentTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const activeIllustrationJobs = new Set<string>();
 const usersWithRepairedTitles = new Set<string>();
 const usersWithRepairedSaveLists = new Set<string>();
@@ -47,6 +50,133 @@ function iso(date?: Date): string {
 
 function model() {
   return mongoose.model<ISavedRecipe>('SavedRecipe');
+}
+
+function socialImportModel() {
+  return mongoose.model<ISocialImport>('SocialImport');
+}
+
+function cleanExternalImageUrl(value: string | undefined): string | undefined {
+  const candidate = value?.trim();
+  if (!candidate) {
+    return undefined;
+  }
+  try {
+    const url = new URL(candidate);
+    return url.protocol === 'https:' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function cleanTrustedExternalImageUrl(value: string | undefined): string | undefined {
+  const candidate = cleanExternalImageUrl(value);
+  if (!candidate) {
+    return undefined;
+  }
+  const hostname = new URL(candidate).hostname.toLowerCase();
+  if (hostname === 'ytimg.com' || hostname.endsWith('.ytimg.com')) {
+    return candidate;
+  }
+  if (hostname === 'img.youtube.com') {
+    return candidate;
+  }
+  return undefined;
+}
+
+function responseContentType(response: Response): string | undefined {
+  return response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
+}
+
+async function fetchExternalImage(url: string): Promise<IllustrationMedia | null> {
+  const trustedUrl = cleanTrustedExternalImageUrl(url);
+  if (!trustedUrl) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), externalImageFetchTimeoutMs);
+  try {
+    const response = await globalThis.fetch(trustedUrl, {
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const contentType = responseContentType(response);
+    if (!contentType || !externalImageContentTypes.has(contentType)) {
+      return null;
+    }
+    const contentLength = Number(response.headers.get('content-length') ?? 0);
+    if (contentLength > maxExternalImageBytes) {
+      return null;
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0 || buffer.length > maxExternalImageBytes) {
+      return null;
+    }
+    return { buffer, contentType };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function importExternalIllustration(url: string | undefined): Promise<{
+  illustration: IllustrationMedia;
+  thumbnail: IllustrationMedia;
+} | null> {
+  if (!url) {
+    return null;
+  }
+  const illustration = await fetchExternalImage(url);
+  if (!illustration) {
+    return null;
+  }
+  try {
+    return {
+      illustration,
+      thumbnail: await createIllustrationThumbnail(illustration),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function socialImportThumbnailUrl(
+  user: string,
+  sourceDraftId: string | undefined,
+): Promise<string | undefined> {
+  if (!sourceDraftId) {
+    return undefined;
+  }
+  const socialImport = await socialImportModel()
+    .findOne({ user, draftId: sourceDraftId })
+    .select('thumbnailUrl')
+    .lean<{ thumbnailUrl?: string }>();
+  return cleanExternalImageUrl(socialImport?.thumbnailUrl);
+}
+
+async function markSocialImportSavedRecipe(
+  user: string,
+  sourceDraftId: string | undefined,
+  savedRecipeId: string,
+): Promise<void> {
+  if (!sourceDraftId) {
+    return;
+  }
+  await socialImportModel().updateOne(
+    { user, draftId: sourceDraftId },
+    {
+      $set: {
+        savedRecipeId,
+        status: 'saved_recipe',
+        draftSummary: 'Saved to recipe library.',
+      },
+    },
+  );
 }
 
 function isWrapperLine(value: string): boolean {
@@ -753,6 +883,17 @@ async function runIllustration(recipeId: string, version: number): Promise<void>
   }
 }
 
+async function markExternalIllustrationFailed(recipe: ISavedRecipe): Promise<void> {
+  await model().updateOne(
+    { _id: recipe._id },
+    {
+      $set: { illustrationStatus: 'pending' },
+      $unset: { illustrationUrl: 1 },
+    },
+  );
+  scheduleIllustration(idOf(recipe), recipe.categorizationVersion);
+}
+
 function scheduleIllustration(recipeId: string, version: number): void {
   const jobKey = `${recipeId}:${version}`;
   if (activeIllustrationJobs.has(jobKey)) {
@@ -781,6 +922,8 @@ export async function saveRecipe(user: string, payload: SaveRecipeRequest): Prom
   const Recipe = model();
   const documentMarkdown = cleanMarkdown(payload.documentMarkdown);
   const recipe = canonicalRecipe(payload.recipe, documentMarkdown);
+  const socialThumbnailUrl = await socialImportThumbnailUrl(user, payload.sourceDraftId);
+  const importedSocialThumbnail = await importExternalIllustration(socialThumbnailUrl);
   const title = cleanTitle(
     headingTitleFromMarkdown(documentMarkdown) ?? payload.title ?? recipe?.title,
     documentMarkdown,
@@ -802,17 +945,28 @@ export async function saveRecipe(user: string, payload: SaveRecipeRequest): Prom
     ...(recipe ? { recipe } : {}),
     ...(payload.sourceConversationId ? { sourceConversationId: payload.sourceConversationId } : {}),
     ...(payload.sourceDraftId ? { sourceDraftId: payload.sourceDraftId } : {}),
+    ...(importedSocialThumbnail
+      ? {
+          illustrationData: importedSocialThumbnail.illustration.buffer,
+          illustrationContentType: importedSocialThumbnail.illustration.contentType,
+          illustrationThumbnail: importedSocialThumbnail.thumbnail.buffer,
+        }
+      : socialThumbnailUrl
+        ? { illustrationUrl: socialThumbnailUrl }
+        : {}),
     categorizationStatus: enrichRecipe ? 'pending' : 'complete',
-    illustrationStatus: 'pending',
+    illustrationStatus: socialThumbnailUrl ? 'complete' : 'pending',
     categorizationVersion: 1,
   });
   if (enrichRecipe) {
     scheduleCategorization(idOf(saved), saved.categorizationVersion);
   }
-  scheduleIllustration(idOf(saved), saved.categorizationVersion);
+  if (!socialThumbnailUrl) {
+    scheduleIllustration(idOf(saved), saved.categorizationVersion);
+  }
+  await markSocialImportSavedRecipe(user, payload.sourceDraftId, idOf(saved));
   return serializeSavedRecipe(saved);
 }
-
 export async function getRecipe(user: string, recipeId: string): Promise<SavedRecipe | null> {
   await repairLegacyWrapperTitles(user);
   await repairLegacySaveLists(user);
@@ -823,7 +977,20 @@ export async function getRecipe(user: string, recipeId: string): Promise<SavedRe
   if (recipe) {
     scheduleMissingIllustrations([recipe]);
   }
-  return recipe ? serializeSavedRecipe(recipe) : null;
+  if (!recipe) {
+    return null;
+  }
+  const serialized = serializeSavedRecipe(recipe);
+  if (recipe.sourceDraftId) {
+    const socialImport = await socialImportModel()
+      .findOne({ user, draftId: recipe.sourceDraftId })
+      .select('sourceUrl')
+      .lean<{ sourceUrl?: string }>();
+    if (socialImport?.sourceUrl) {
+      serialized.sourceUrl = socialImport.sourceUrl;
+    }
+  }
+  return serialized;
 }
 
 export async function ownsRecipe(user: string, recipeId: string): Promise<boolean> {
@@ -841,9 +1008,21 @@ export async function getRecipeByDraft(user: string, draftId: string): Promise<S
   if (recipe) {
     scheduleMissingIllustrations([recipe]);
   }
-  return recipe ? serializeSavedRecipe(recipe) : null;
+  if (!recipe) {
+    return null;
+  }
+  const serialized = serializeSavedRecipe(recipe);
+  if (recipe.sourceDraftId) {
+    const socialImport = await socialImportModel()
+      .findOne({ user, draftId: recipe.sourceDraftId })
+      .select('sourceUrl')
+      .lean<{ sourceUrl?: string }>();
+    if (socialImport?.sourceUrl) {
+      serialized.sourceUrl = socialImport.sourceUrl;
+    }
+  }
+  return serialized;
 }
-
 export async function getRecipeIllustration(
   user: string,
   recipeId: string,
@@ -851,38 +1030,62 @@ export async function getRecipeIllustration(
 ): Promise<IllustrationMedia | null> {
   const recipe = await model()
     .findOne({ _id: recipeId, user })
-    .select('illustrationUrl illustrationData illustrationContentType illustrationThumbnail');
+    .select(
+      'illustrationUrl illustrationData illustrationContentType illustrationThumbnail categorizationVersion',
+    );
   if (!recipe) {
     return null;
   }
 
   const illustration = storedIllustration(recipe);
-  if (!illustration) {
+  if (illustration) {
+    if (!thumbnail) {
+      return illustration;
+    }
+
+    if (recipe.illustrationThumbnail?.length) {
+      return { buffer: Buffer.from(recipe.illustrationThumbnail), contentType: 'image/webp' };
+    }
+
+    const generatedThumbnail = await createIllustrationThumbnail(illustration);
+    await model().updateOne(
+      { _id: recipe._id },
+      {
+        $set: {
+          illustrationData: illustration.buffer,
+          illustrationContentType: illustration.contentType,
+          illustrationThumbnail: generatedThumbnail.buffer,
+        },
+        $unset: { illustrationUrl: 1 },
+      },
+      { timestamps: false },
+    );
+    return generatedThumbnail;
+  }
+
+  const importedExternalIllustration = await importExternalIllustration(recipe.illustrationUrl);
+  if (!importedExternalIllustration) {
+    await markExternalIllustrationFailed(recipe);
     return null;
   }
 
-  if (!thumbnail) {
-    return illustration;
-  }
-
-  if (recipe.illustrationThumbnail?.length) {
-    return { buffer: Buffer.from(recipe.illustrationThumbnail), contentType: 'image/webp' };
-  }
-
-  const generatedThumbnail = await createIllustrationThumbnail(illustration);
   await model().updateOne(
     { _id: recipe._id },
     {
       $set: {
-        illustrationData: illustration.buffer,
-        illustrationContentType: illustration.contentType,
-        illustrationThumbnail: generatedThumbnail.buffer,
+        illustrationData: importedExternalIllustration.illustration.buffer,
+        illustrationContentType: importedExternalIllustration.illustration.contentType,
+        illustrationThumbnail: importedExternalIllustration.thumbnail.buffer,
+        illustrationStatus: 'complete',
       },
       $unset: { illustrationUrl: 1 },
     },
     { timestamps: false },
   );
-  return generatedThumbnail;
+
+  return thumbnail
+    ? importedExternalIllustration.thumbnail
+    : importedExternalIllustration.illustration;
 }
 
 export async function listRecipes(
@@ -902,6 +1105,7 @@ export async function listRecipes(
           'title',
           'documentType',
           'shortDescription',
+          'illustrationUrl',
           'illustrationStatus',
           'illustrationModel',
           'sourceConversationId',

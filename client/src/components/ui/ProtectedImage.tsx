@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { QueryKeys, dataService } from 'librechat-data-provider';
-import type { ImgHTMLAttributes, ReactNode } from 'react';
+import type { ImgHTMLAttributes, ReactNode, SyntheticEvent } from 'react';
 
 type ProtectedImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
   src?: string;
@@ -55,6 +55,30 @@ function AuthenticatedImage({
   return objectUrl ? <img {...props} src={objectUrl} /> : <>{fallback}</>;
 }
 
+function PublicImage({
+  src,
+  fallback,
+  onError,
+  ...props
+}: Omit<ProtectedImageProps, 'src'> & { src: string }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (failed) {
+    return <>{fallback}</>;
+  }
+
+  const handleError = (event: SyntheticEvent<HTMLImageElement, Event>) => {
+    onError?.(event);
+    setFailed(true);
+  };
+
+  return <img referrerPolicy="no-referrer" {...props} src={src} onError={handleError} />;
+}
+
 export default function ProtectedImage({ src, fallback = null, ...props }: ProtectedImageProps) {
   if (!src) {
     return <>{fallback}</>;
@@ -64,5 +88,5 @@ export default function ProtectedImage({ src, fallback = null, ...props }: Prote
     return <AuthenticatedImage {...props} src={src} fallback={fallback} />;
   }
 
-  return <img {...props} src={src} />;
+  return <PublicImage {...props} src={src} fallback={fallback} />;
 }

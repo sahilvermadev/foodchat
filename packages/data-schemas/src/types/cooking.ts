@@ -6,6 +6,9 @@ import type {
   CookingDocumentType,
   StructuredRecipe,
   SavedRecipe,
+  SocialImport,
+  SocialPlaylistSubscription,
+  SocialTranscript,
   RecipeCategorizationStatus,
 } from 'librechat-data-provider';
 
@@ -73,6 +76,82 @@ export interface ISavedRecipe extends Document {
   categorization?: SavedRecipe['categorization'];
   categorizationStatus: RecipeCategorizationStatus;
   categorizationVersion: number;
+  tenantId?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface ISocialImport extends Document {
+  user: string;
+  sourceUrl: string;
+  canonicalUrl: string;
+  provider: SocialImport['provider'];
+  providerContentId?: string;
+  creatorName?: string;
+  creatorUrl?: string;
+  title?: string;
+  thumbnailUrl?: string;
+  userSuppliedText?: string;
+  extractedText?: string;
+  extractedAt?: Date;
+  draftId?: string;
+  draftConversationId?: string;
+  embedHtmlAllowed: boolean;
+  status: SocialImport['status'];
+  reviewMessage?: string;
+  draftSummary?: string;
+  savedRecipeId?: string;
+  provenance: SocialImport['provenance'];
+  tenantId?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface ISocialImportJob extends Document {
+  user: string;
+  socialImportId: string;
+  provider?: SocialImport['provider'];
+  providerContentId?: string;
+  status: 'queued' | 'processing' | 'succeeded' | 'failed';
+  stage: string;
+  attemptCount: number;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+  startedAt?: Date;
+  completedAt?: Date;
+  tenantId?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface ISocialTranscript extends Document {
+  provider: SocialTranscript['provider'];
+  providerContentId: string;
+  status: SocialTranscript['status'];
+  source: SocialTranscript['source'];
+  text?: string;
+  language?: string;
+  failureReason?: string;
+  lastErrorMessage?: string;
+  attemptCount: number;
+  lastAttemptedAt?: Date;
+  nextAttemptAt?: Date;
+  tenantId?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface ISocialPlaylistSubscription extends Document {
+  user: string;
+  provider: SocialPlaylistSubscription['provider'];
+  playlistId: string;
+  sourceUrl: string;
+  title?: string;
+  status: SocialPlaylistSubscription['status'];
+  importCount: number;
+  lastSyncedAt?: Date;
+  nextSyncAt?: Date;
+  lastErrorMessage?: string;
   tenantId?: string;
   createdAt?: Date;
   updatedAt?: Date;

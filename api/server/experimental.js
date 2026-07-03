@@ -19,8 +19,10 @@ const {
   ErrorController,
   performStartupChecks,
   handleJsonParseError,
+  startSocialPlaylistSyncScheduler,
   initializeFileStorage,
   preAuthTenantMiddleware,
+  sweepStuckSocialImports,
 } = require('@librechat/api');
 const { connectDb, indexSync } = require('~/db');
 const createValidateImageRequest = require('./middleware/validateImageRequest');
@@ -229,7 +231,11 @@ if (cluster.isMaster) {
     runAsSystem(sweepOrphanedPreviews).catch((err) => {
       logger.error('[sweepOrphanedPreviews] Background sweep failed:', err);
     });
+    runAsSystem(sweepStuckSocialImports).catch((err) => {
+      logger.error('[sweepStuckSocialImports] Background sweep failed:', err);
+    });
 
+    startSocialPlaylistSyncScheduler();
     /** Initialize app configuration */
     const appConfig = await getAppConfig();
     initializeFileStorage(appConfig);
@@ -319,6 +325,7 @@ if (cluster.isMaster) {
     app.use('/api/convos', routes.convos);
     app.use('/api/skills', routes.skills);
     app.use('/api/categories', routes.categories);
+    app.use('/api/social-imports', routes.social);
     app.use('/api/endpoints', routes.endpoints);
     app.use('/api/balance', routes.balance);
     app.use('/api/models', routes.models);

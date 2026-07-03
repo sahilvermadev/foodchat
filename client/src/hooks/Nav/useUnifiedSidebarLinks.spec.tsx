@@ -27,11 +27,13 @@ describe('useUnifiedSidebarLinks', () => {
     expect(result.current.map((link) => link.id)).toEqual([
       'conversations',
       'recipes',
+      'imports',
       'preferences',
     ]);
     expect(result.current.map((link) => link.title)).toEqual([
       'com_ui_chat_history',
       'com_recipes_library',
+      'com_social_imports_title',
       'com_nav_preferences',
     ]);
   });
@@ -53,9 +55,11 @@ describe('useUnifiedSidebarLinks', () => {
     expect(links.conversations.isActive?.('/cook/abc123')).toBe(true);
     expect(links.conversations.isActive?.('/c/abc123')).toBe(true);
     expect(links.conversations.isActive?.('/recipes')).toBe(false);
+    expect(links.conversations.isActive?.('/imports')).toBe(false);
     expect(links.conversations.isActive?.('/preferences')).toBe(false);
     expect(links.recipes.isActive?.('/recipes')).toBe(true);
     expect(links.recipes.isActive?.('/recipes/recipe-1')).toBe(true);
+    expect(links.imports.isActive?.('/imports')).toBe(true);
     expect(links.preferences.isActive?.('/preferences')).toBe(true);
   });
 
@@ -66,6 +70,8 @@ describe('useUnifiedSidebarLinks', () => {
 
     expect(links.recipes.Component).toBeDefined();
     expect(links.recipes.onClick).toBeUndefined();
+    expect(links.imports.Component).toBeDefined();
+    expect(links.imports.onClick).toBeUndefined();
     expect(links.preferences.Component).toBeDefined();
     expect(links.preferences.onClick).toBeUndefined();
   });

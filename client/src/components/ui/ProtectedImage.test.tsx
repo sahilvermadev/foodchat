@@ -1,6 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { dataService } from 'librechat-data-provider';
 import ProtectedImage from './ProtectedImage';
 
@@ -73,5 +73,13 @@ describe('ProtectedImage', () => {
       'data:image/png;base64,image',
     );
     await waitFor(() => expect(getProtectedImage).not.toHaveBeenCalled());
+  });
+
+  it('shows the fallback when an unprotected image fails to load', () => {
+    renderProtectedImage('https://i.ytimg.com/vi/example/hqdefault.jpg');
+
+    fireEvent.error(screen.getByRole('img', { name: 'Illustration' }));
+
+    expect(screen.getByText('Loading')).toBeInTheDocument();
   });
 });

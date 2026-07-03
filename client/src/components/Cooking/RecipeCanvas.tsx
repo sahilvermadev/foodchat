@@ -341,6 +341,31 @@ function recipeToMarkdown(recipe: StructuredRecipe): string {
     .join('\n\n');
 }
 
+function getSourceLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase().replace('www.', '');
+    if (hostname === 'youtube.com' || hostname === 'youtu.be') {
+      return 'YouTube';
+    }
+    if (hostname === 'cooking.nytimes.com') {
+      return 'NYT Cooking';
+    }
+    if (hostname === 'nytimes.com') {
+      return 'New York Times';
+    }
+    if (hostname === 'instagram.com') {
+      return 'Instagram';
+    }
+    if (hostname === 'tiktok.com') {
+      return 'TikTok';
+    }
+    return hostname;
+  } catch {
+    return 'Source';
+  }
+}
+
 export default function RecipeCanvas({
   draft,
   markdown = '',
@@ -598,9 +623,35 @@ export default function RecipeCanvas({
                 <div className="mt-3 flex min-h-11 items-start justify-between gap-3 sm:min-h-9">
                   <div className="min-w-0 pt-1 sm:pt-0">
                     {draft ? (
-                      <p className="rekky-meta text-text-secondary">
-                        {localize(documentTypeKey(draft))}
-                      </p>
+                      <div className="rekky-meta flex flex-wrap items-center gap-x-2 text-text-secondary">
+                        <span>{localize(documentTypeKey(draft))}</span>
+                        {draft.sourceUrl ? (
+                          <>
+                            <span>·</span>
+                            <a
+                              href={draft.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 font-medium text-surface-submit underline decoration-dotted underline-offset-4 hover:text-surface-submit-hover"
+                            >
+                              <span>{getSourceLabel(draft.sourceUrl)}</span>
+                              <svg
+                                className="size-3 shrink-0"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                              </svg>
+                            </a>
+                          </>
+                        ) : null}
+                      </div>
                     ) : null}
                     {savedRecipe?.categorizationStatus === 'pending' ? (
                       <p className="rekky-meta mt-2 text-text-secondary">

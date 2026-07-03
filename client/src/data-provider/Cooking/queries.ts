@@ -12,6 +12,10 @@ import type {
   SavedRecipe,
   SavedRecipesQuery,
   SavedRecipesResponse,
+  SocialImportJobsResponse,
+  SocialPlaylistSubscriptionsResponse,
+  SocialImportsQuery,
+  SocialImportsResponse,
 } from 'librechat-data-provider';
 
 export const useCookingDraftByConversationQuery = (
@@ -133,6 +137,71 @@ export const useRecipeQuery = (
       refetchOnWindowFocus: false,
       staleTime: 5 * 60 * 1000,
       cacheTime: 30 * 60 * 1000,
+      ...config,
+    },
+  );
+};
+
+export const useSocialImportsQuery = (
+  params: SocialImportsQuery,
+  config?: UseQueryOptions<SocialImportsResponse>,
+): QueryObserverResult<SocialImportsResponse> => {
+  return useQuery<SocialImportsResponse>(
+    [QueryKeys.socialImports, params],
+    () => dataService.getSocialImports(params),
+    {
+      keepPreviousData: true,
+      refetchOnWindowFocus: false,
+      staleTime: 30 * 1000,
+      ...config,
+    },
+  );
+};
+
+export const useSocialImportsInfiniteQuery = (
+  params: SocialImportsQuery,
+  config?: UseInfiniteQueryOptions<SocialImportsResponse, unknown>,
+) => {
+  return useInfiniteQuery<SocialImportsResponse>({
+    queryKey: [QueryKeys.socialImports, 'infinite', params],
+    queryFn: ({ pageParam }) =>
+      dataService.getSocialImports({
+        ...params,
+        cursor: pageParam?.toString(),
+      }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    refetchOnWindowFocus: false,
+    staleTime: 30 * 1000,
+    ...config,
+  });
+};
+
+export const useSocialImportJobsQuery = (
+  importId: string | undefined,
+  config?: UseQueryOptions<SocialImportJobsResponse>,
+): QueryObserverResult<SocialImportJobsResponse> => {
+  const enabled = Boolean(importId);
+  return useQuery<SocialImportJobsResponse>(
+    [QueryKeys.socialImportJobs, importId],
+    () => dataService.getSocialImportJobs(importId as string),
+    {
+      enabled: enabled && (config?.enabled ?? true),
+      retry: false,
+      refetchOnWindowFocus: false,
+      ...config,
+    },
+  );
+};
+
+export const useSocialPlaylistSubscriptionsQuery = (
+  config?: UseQueryOptions<SocialPlaylistSubscriptionsResponse>,
+): QueryObserverResult<SocialPlaylistSubscriptionsResponse> => {
+  return useQuery<SocialPlaylistSubscriptionsResponse>(
+    [QueryKeys.socialPlaylists],
+    () => dataService.getSocialPlaylistSubscriptions(),
+    {
+      refetchOnWindowFocus: false,
+      staleTime: 30 * 1000,
       ...config,
     },
   );

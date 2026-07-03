@@ -1,17 +1,16 @@
-import { memo, useCallback, lazy, Suspense } from 'react';
+import { memo, useCallback } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useLocation } from 'react-router-dom';
 import { SquarePen } from 'lucide-react';
-import { Skeleton, Button, TooltipAnchor, ThemeSelector } from '@librechat/client';
+import { Button, TooltipAnchor, ThemeSelector } from '@librechat/client';
 import type { NavLink } from '~/common';
 import { useActivePanel, DEFAULT_PANEL } from '~/Providers/ActivePanelContext';
+import AccountSettings from '~/components/Nav/AccountSettings';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import store from '~/store';
 import { resolveRenderedPanel } from '~/components/SidePanel/panelSelection';
 import useStartCookingConversation from '~/hooks/Chat/useStartCookingConversation';
-
-const AccountSettings = lazy(() => import('~/components/Nav/AccountSettings'));
 
 const BrandButton = memo(function BrandButton({
   onStartConversation,
@@ -224,11 +223,7 @@ function ExpandedPanel({
 
       <div className="flex flex-col items-center justify-center gap-2 pb-1">
         <ThemeSelector returnThemeOnly />
-        {isAuthenticated ? (
-          <Suspense fallback={<Skeleton className="h-12 w-12 rounded-lg" />}>
-            <AccountSettings collapsed />
-          </Suspense>
-        ) : null}
+        {isAuthenticated ? <AccountSettings collapsed /> : null}
       </div>
     </div>
   );

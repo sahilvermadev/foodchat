@@ -31,6 +31,10 @@ export { specialtyIngredientSchema } from './ingredient';
 export {
   cookingDraftSchema,
   savedRecipeSchema,
+  socialImportSchema,
+  socialImportJobSchema,
+  socialPlaylistSubscriptionSchema,
+  socialTranscriptSchema,
   cookingSessionSchema,
   structuredRecipeSchema,
   cookingSessionEventSchema,

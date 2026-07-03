@@ -4,6 +4,10 @@ import type {
   ICookingSession,
   ICookingSessionEvent,
   ISavedRecipe,
+  ISocialImport,
+  ISocialImportJob,
+  ISocialPlaylistSubscription,
+  ISocialTranscript,
   IGuestLimit,
 } from '~/types';
 
@@ -222,6 +226,166 @@ savedRecipeSchema.index({ user: 1, 'categorization.diet': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.timeBucket': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.mainIngredients': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.equipment': 1, tenantId: 1 });
+
+export const socialImportSchema = new Schema<ISocialImport>(
+  {
+    user: { type: String, required: true, index: true },
+    sourceUrl: { type: String, required: true },
+    canonicalUrl: { type: String, required: true },
+    provider: {
+      type: String,
+      enum: ['youtube', 'instagram', 'tiktok', 'web', 'unknown'],
+      default: 'unknown',
+      required: true,
+    },
+    providerContentId: { type: String, index: true },
+    creatorName: { type: String },
+    creatorUrl: { type: String },
+    title: { type: String },
+    thumbnailUrl: { type: String },
+    userSuppliedText: { type: String, default: '' },
+    extractedText: { type: String, default: '' },
+    extractedAt: { type: Date },
+    draftId: { type: String, index: true },
+    draftConversationId: { type: String, index: true },
+    embedHtmlAllowed: { type: Boolean, default: false, required: true },
+    status: {
+      type: String,
+      enum: [
+        'saved',
+        'processing',
+        'draft_ready',
+        'needs_review',
+        'saved_recipe',
+        'inspiration',
+        'failed',
+      ],
+      default: 'saved',
+      required: true,
+    },
+    reviewMessage: { type: String },
+    draftSummary: { type: String },
+    savedRecipeId: { type: String, index: true },
+    provenance: {
+      type: String,
+      enum: ['source_exact', 'creator_verified', 'rekky_estimated', 'user_edited', 'unknown'],
+      default: 'unknown',
+      required: true,
+    },
+    tenantId: { type: String, index: true },
+  },
+  { timestamps: true },
+);
+
+socialImportSchema.index({ user: 1, updatedAt: -1, tenantId: 1 });
+socialImportSchema.index({ user: 1, createdAt: -1, tenantId: 1 });
+socialImportSchema.index({ user: 1, provider: 1, updatedAt: -1, tenantId: 1 });
+socialImportSchema.index({ user: 1, status: 1, updatedAt: -1, tenantId: 1 });
+socialImportSchema.index(
+  { user: 1, canonicalUrl: 1, tenantId: 1 },
+  { unique: true, partialFilterExpression: { canonicalUrl: { $type: 'string' } } },
+);
+
+export const socialImportJobSchema = new Schema<ISocialImportJob>(
+  {
+    user: { type: String, required: true, index: true },
+    socialImportId: { type: String, required: true, index: true },
+    provider: {
+      type: String,
+      enum: ['youtube', 'instagram', 'tiktok', 'web', 'unknown'],
+      index: true,
+    },
+    providerContentId: { type: String, index: true },
+    status: {
+      type: String,
+      enum: ['queued', 'processing', 'succeeded', 'failed'],
+      default: 'queued',
+      required: true,
+      index: true,
+    },
+    stage: { type: String, default: 'queued', required: true },
+    attemptCount: { type: Number, default: 0, required: true },
+    lastErrorCode: { type: String },
+    lastErrorMessage: { type: String },
+    startedAt: { type: Date },
+    completedAt: { type: Date },
+    tenantId: { type: String, index: true },
+  },
+  { timestamps: true },
+);
+
+socialImportJobSchema.index({ socialImportId: 1, createdAt: -1, tenantId: 1 });
+socialImportJobSchema.index({ user: 1, provider: 1, createdAt: -1, tenantId: 1 });
+socialImportJobSchema.index({ status: 1, updatedAt: 1, tenantId: 1 });
+
+export const socialTranscriptSchema = new Schema<ISocialTranscript>(
+  {
+    provider: {
+      type: String,
+      enum: ['youtube', 'instagram', 'tiktok', 'web', 'unknown'],
+      required: true,
+      index: true,
+    },
+    providerContentId: { type: String, required: true, index: true },
+    status: {
+      type: String,
+      enum: ['found', 'not_available', 'temporarily_failed'],
+      required: true,
+      default: 'temporarily_failed',
+      index: true,
+    },
+    source: {
+      type: String,
+      enum: ['creator_authorized_caption', 'experimental_ytdlp', 'user_pasted', 'unknown'],
+      required: true,
+      default: 'unknown',
+    },
+    text: { type: String, default: '' },
+    language: { type: String },
+    failureReason: { type: String },
+    lastErrorMessage: { type: String },
+    attemptCount: { type: Number, default: 0, required: true },
+    lastAttemptedAt: { type: Date },
+    nextAttemptAt: { type: Date },
+    tenantId: { type: String, index: true },
+  },
+  { timestamps: true },
+);
+
+socialTranscriptSchema.index(
+  { provider: 1, providerContentId: 1, tenantId: 1 },
+  { unique: true },
+);
+socialTranscriptSchema.index({ status: 1, nextAttemptAt: 1, tenantId: 1 });
+
+export const socialPlaylistSubscriptionSchema = new Schema<ISocialPlaylistSubscription>(
+  {
+    user: { type: String, required: true, index: true },
+    provider: { type: String, enum: ['youtube'], default: 'youtube', required: true },
+    playlistId: { type: String, required: true, index: true },
+    sourceUrl: { type: String, required: true },
+    title: { type: String },
+    status: {
+      type: String,
+      enum: ['active', 'paused', 'failed'],
+      default: 'active',
+      required: true,
+      index: true,
+    },
+    importCount: { type: Number, default: 0, required: true },
+    lastSyncedAt: { type: Date },
+    nextSyncAt: { type: Date, index: true },
+    lastErrorMessage: { type: String },
+    tenantId: { type: String, index: true },
+  },
+  { timestamps: true },
+);
+
+socialPlaylistSubscriptionSchema.index(
+  { user: 1, provider: 1, playlistId: 1, tenantId: 1 },
+  { unique: true },
+);
+socialPlaylistSubscriptionSchema.index({ status: 1, nextSyncAt: 1, tenantId: 1 });
 
 export const guestLimitSchema = new Schema<IGuestLimit>(
   {
