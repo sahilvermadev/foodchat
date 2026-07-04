@@ -405,13 +405,28 @@ function normalizedAction(input: CookingPlannerInput, raw: RawCookingPlan): Cook
   if (!rawAction || !actions.has(rawAction as CookingPlannedAction)) {
     return 'direct_answer';
   }
-  const action = rawAction as CookingPlannedAction;
+  let action = rawAction as CookingPlannedAction;
   if ((action === 'revise_document' || action === 'read_document') && !input.activeDraft) {
     return 'direct_answer';
   }
   if (action === 'read_source' && !input.linkedSourceState.readRequired) {
     return 'direct_answer';
   }
+
+  // Programmatic override: If action is revise_document but the input is an inquiry/question rather than a direct command, downgrade to direct_answer.
+  if (action === 'revise_document') {
+    const text = input.text.trim().toLowerCase();
+    const isSecondPersonRequest = /^(can|could|would|will|should)\s+you\b/i.test(text);
+    const isQuestionOrInquiry =
+      (/^(is|can|should|would|how|what|why|will|could|are|does|did|do|is\s+it\s+possible)\b/i.test(text) || text.endsWith('?')) &&
+      !isSecondPersonRequest;
+    const isExplicitCommand = /\b(update|change|change\s+to|revise|modify|scale|add|remove|replace|rewrite|make\s+the\s+recipe|apply)\b/i.test(text);
+
+    if (isQuestionOrInquiry && !isExplicitCommand) {
+      action = 'direct_answer';
+    }
+  }
+
   return action;
 }
 
