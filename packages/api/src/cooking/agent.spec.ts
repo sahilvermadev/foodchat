@@ -2082,38 +2082,53 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
 
   test('planner-selected full recipe follow-up exposes canvas creation before answering', async () => {
     const draft = activeDraft();
-    const fetchMock = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: 'create-1',
-                  type: 'function',
-                  function: {
-                    name: 'create_cooking_document',
-                    arguments: JSON.stringify({
-                      title: 'Two-Ingredient Dark Chocolate Mousse',
-                      markdown:
-                        draft.documentMarkdown?.replace(
-                          '# Authentic Village-Style Masala Chhach',
-                          '# Two-Ingredient Dark Chocolate Mousse',
-                        ) ?? '',
-                      change_summary: 'created a two-ingredient chocolate mousse canvas',
-                      user_message: 'I created the two-ingredient chocolate mousse canvas.',
-                    }),
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'create-1',
+                    type: 'function',
+                    function: {
+                      name: 'create_cooking_document',
+                      arguments: JSON.stringify({
+                        title: 'Two-Ingredient Dark Chocolate Mousse',
+                        markdown:
+                          draft.documentMarkdown?.replace(
+                            '# Authentic Village-Style Masala Chhach',
+                            '# Two-Ingredient Dark Chocolate Mousse',
+                          ) ?? '',
+                        change_summary: 'created a two-ingredient chocolate mousse canvas',
+                        user_message: 'I created the two-ingredient chocolate mousse canvas.',
+                      }),
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I created the two-ingredient chocolate mousse canvas.',
+              },
+            },
+          ],
+        }),
+      });
 
     setFetch(
       fetchMock,
@@ -2164,38 +2179,53 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       type: 'image_url' as const,
       image_url: { url: 'data:image/png;base64,pizza-recipe', detail: 'high' as const },
     };
-    const fetchMock = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: 'create-pizza',
-                  type: 'function',
-                  function: {
-                    name: 'create_cooking_document',
-                    arguments: JSON.stringify({
-                      title: 'Cold-Fermented Pizza',
-                      markdown:
-                        draft.documentMarkdown?.replace(
-                          '# Authentic Village-Style Masala Chhach',
-                          '# Cold-Fermented Pizza',
-                        ) ?? '',
-                      change_summary: 'created the attached pizza recipe canvas',
-                      user_message: 'I created the pizza recipe canvas from your screenshot.',
-                    }),
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'create-pizza',
+                    type: 'function',
+                    function: {
+                      name: 'create_cooking_document',
+                      arguments: JSON.stringify({
+                        title: 'Cold-Fermented Pizza',
+                        markdown:
+                          draft.documentMarkdown?.replace(
+                            '# Authentic Village-Style Masala Chhach',
+                            '# Cold-Fermented Pizza',
+                          ) ?? '',
+                        change_summary: 'created the attached pizza recipe canvas',
+                        user_message: 'I created the pizza recipe canvas from your screenshot.',
+                      }),
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I created the pizza recipe canvas from your screenshot.',
+              },
+            },
+          ],
+        }),
+      });
 
     setFetch(
       fetchMock,
@@ -2253,38 +2283,53 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
 
   test('planner-selected specific recipe request uses canvas instead of detailed chat recipe', async () => {
     const draft = activeDraft();
-    const fetchMock = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: 'create-1',
-                  type: 'function',
-                  function: {
-                    name: 'create_cooking_document',
-                    arguments: JSON.stringify({
-                      title: 'Classic Chocolate Mousse',
-                      markdown:
-                        draft.documentMarkdown?.replace(
-                          '# Authentic Village-Style Masala Chhach',
-                          '# Classic Chocolate Mousse',
-                        ) ?? '',
-                      change_summary: 'created a classic chocolate mousse canvas',
-                      user_message: 'I created the classic chocolate mousse canvas.',
-                    }),
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'create-1',
+                    type: 'function',
+                    function: {
+                      name: 'create_cooking_document',
+                      arguments: JSON.stringify({
+                        title: 'Classic Chocolate Mousse',
+                        markdown:
+                          draft.documentMarkdown?.replace(
+                            '# Authentic Village-Style Masala Chhach',
+                            '# Classic Chocolate Mousse',
+                          ) ?? '',
+                        change_summary: 'created a classic chocolate mousse canvas',
+                        user_message: 'I created the classic chocolate mousse canvas.',
+                      }),
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I created the classic chocolate mousse canvas.',
+              },
+            },
+          ],
+        }),
+      });
 
     setFetch(
       fetchMock,
@@ -2649,35 +2694,50 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       documentType: 'guide',
       documentMarkdown: guideMarkdown,
     });
-    const fetchMock = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: 'create-guide',
-                  type: 'function',
-                  function: {
-                    name: 'create_cooking_document',
-                    arguments: JSON.stringify({
-                      title: 'Sourdough Starter Guide',
-                      document_type: 'guide',
-                      markdown: guideMarkdown,
-                      change_summary: 'created a starter guide',
-                      user_message: 'I created a separate starter guide.',
-                    }),
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'create-guide',
+                    type: 'function',
+                    function: {
+                      name: 'create_cooking_document',
+                      arguments: JSON.stringify({
+                        title: 'Sourdough Starter Guide',
+                        document_type: 'guide',
+                        markdown: guideMarkdown,
+                        change_summary: 'created a starter guide',
+                        user_message: 'I created a separate starter guide.',
+                      }),
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I created a separate starter guide.',
+              },
+            },
+          ],
+        }),
+      });
     setFetch(fetchMock);
 
     const result = await runCookingChat({
@@ -2707,34 +2767,49 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       ...draft,
       documentMarkdown: revisedMarkdown,
     });
-    const fetchMock = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: 'revise-1',
-                  type: 'function',
-                  function: {
-                    name: 'revise_cooking_document',
-                    arguments: JSON.stringify({
-                      revision_type: 'structure',
-                      markdown: revisedMarkdown,
-                      change_summary: 'reorganized the recipe for easier scanning',
-                      user_message: 'I reorganized the canvas so the recipe is easier to follow.',
-                    }),
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'revise-1',
+                    type: 'function',
+                    function: {
+                      name: 'revise_cooking_document',
+                      arguments: JSON.stringify({
+                        revision_type: 'structure',
+                        markdown: revisedMarkdown,
+                        change_summary: 'reorganized the recipe for easier scanning',
+                        user_message: 'I reorganized the canvas so the recipe is easier to follow.',
+                      }),
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I reorganized the canvas so the recipe is easier to follow.',
+              },
+            },
+          ],
+        }),
+      });
 
     setFetch(fetchMock);
 
@@ -2764,7 +2839,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       draftChanged: true,
       text: 'I reorganized the canvas so the recipe is easier to follow.',
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   test("I don't have an immersion blender updates via revise_cooking_document", async () => {
@@ -2777,35 +2852,50 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       ...draft,
       documentMarkdown: revisedMarkdown,
     });
-    const fetchMock = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: 'revise-1',
-                  type: 'function',
-                  function: {
-                    name: 'revise_cooking_document',
-                    arguments: JSON.stringify({
-                      revision_type: 'equipment_alternative',
-                      markdown: revisedMarkdown,
-                      change_summary: 'added non-blender alternatives',
-                      user_message:
-                        'I added whisk, mathani, and jar-shake alternatives to the canvas.',
-                    }),
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'revise-1',
+                    type: 'function',
+                    function: {
+                      name: 'revise_cooking_document',
+                      arguments: JSON.stringify({
+                        revision_type: 'equipment_alternative',
+                        markdown: revisedMarkdown,
+                        change_summary: 'added non-blender alternatives',
+                        user_message:
+                          'I added whisk, mathani, and jar-shake alternatives to the canvas.',
+                      }),
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I added whisk, mathani, and jar-shake alternatives to the canvas.',
+              },
+            },
+          ],
+        }),
+      });
 
     setFetch(fetchMock);
 
@@ -2914,42 +3004,57 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(result.text).toBe('The canvas is for Authentic Village-Style Masala Chhach.');
   });
 
-  test('canvas mutation returns user_message without a second provider call', async () => {
+  test('canvas mutation goes to second provider call to generate natural confirmation', async () => {
     const draft = activeDraft();
     jest.mocked(generateCookingDraft).mockResolvedValue({
       ...draft,
       recipe: { ...draft.recipe, title: 'Authentic Village-Style Masala Chhach' },
     });
-    const fetchMock = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: 'create-1',
-                  type: 'function',
-                  function: {
-                    name: 'create_cooking_document',
-                    arguments: JSON.stringify({
-                      title: '{',
-                      markdown: draft.documentMarkdown ?? '',
-                      change_summary:
-                        'created a village-style chhach with churned dahi and roasted cumin',
-                      user_message:
-                        'I created the masala chhach canvas with churned dahi, roasted cumin, and clear chilling cues.',
-                    }),
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'create-1',
+                    type: 'function',
+                    function: {
+                      name: 'create_cooking_document',
+                      arguments: JSON.stringify({
+                        title: '{',
+                        markdown: draft.documentMarkdown ?? '',
+                        change_summary:
+                          'created a village-style chhach with churned dahi and roasted cumin',
+                        user_message:
+                          'I created the masala chhach canvas with churned dahi, roasted cumin, and clear chilling cues.',
+                      }),
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I created the masala chhach canvas with churned dahi, roasted cumin, and clear chilling cues.',
+              },
+            },
+          ],
+        }),
+      });
 
     setFetch(fetchMock);
 
@@ -2970,7 +3075,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       draft.documentMarkdown,
       'recipe',
     );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   test('retries document work with canvas tools when the model answers in prose only', async () => {
@@ -3022,6 +3127,19 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
                     },
                   },
                 ],
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I created the patatas bravas canvas.',
               },
             },
           ],
@@ -3080,35 +3198,50 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       recipe: { ...draft.recipe, title: 'Cheese Souffle' },
       documentMarkdown: markdown,
     });
-    const fetchMock = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: 'create-1',
-                  type: 'function',
-                  function: {
-                    name: 'create_cooking_document',
-                    arguments: JSON.stringify({
-                      title: 'Cheese Souffle',
-                      markdown: markdown ?? '',
-                      change_summary: 'created a cheese souffle recipe',
-                      user_message:
-                        'I created a complete cheese souffle canvas with equipment, ingredient groups, careful egg-white folding guidance, bake timing, doneness cues, recovery notes, serving notes, and practical timing advice for getting it to the table before it falls.',
-                    }),
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'create-1',
+                    type: 'function',
+                    function: {
+                      name: 'create_cooking_document',
+                      arguments: JSON.stringify({
+                        title: 'Cheese Souffle',
+                        markdown: markdown ?? '',
+                        change_summary: 'created a cheese souffle recipe',
+                        user_message:
+                          'I created a complete cheese souffle canvas with equipment, ingredient groups, careful egg-white folding guidance, bake timing, doneness cues, recovery notes, serving notes, and practical timing advice for getting it to the table before it falls.',
+                      }),
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I created Cheese Souffle in the cooking canvas.',
+              },
+            },
+          ],
+        }),
+      });
 
     setFetch(fetchMock);
 
@@ -3248,34 +3381,49 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       ...draft,
       documentMarkdown: revisedMarkdown,
     });
-    const fetchMock = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: 'revise-1',
-                  type: 'function',
-                  function: {
-                    name: 'revise_cooking_document',
-                    arguments: JSON.stringify({
-                      revision_type: 'add_component',
-                      markdown: revisedMarkdown,
-                      change_summary: 'added serving notes',
-                      user_message: 'I added serving notes to the canvas.',
-                    }),
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'revise-1',
+                    type: 'function',
+                    function: {
+                      name: 'revise_cooking_document',
+                      arguments: JSON.stringify({
+                        revision_type: 'add_component',
+                        markdown: revisedMarkdown,
+                        change_summary: 'added serving notes',
+                        user_message: 'I added serving notes to the canvas.',
+                      }),
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
-          },
-        ],
-      }),
-    });
+          ],
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I added serving notes to the canvas.',
+              },
+            },
+          ],
+        }),
+      });
 
     setFetch(fetchMock);
 
@@ -3430,6 +3578,19 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
             },
           ],
         }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'I created the Serious Eats-style souffle canvas.',
+              },
+            },
+          ],
+        }),
       });
 
     setFetch(fetchMock);
@@ -3463,7 +3624,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     );
     expect(result).toMatchObject({
       draftChanged: true,
-      text: 'I created the Serious Eats-style souffle canvas.',
+      text: expect.stringContaining('I created the Serious Eats-style souffle canvas.'),
     });
   });
 

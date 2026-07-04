@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useRecoilState } from 'recoil';
+import { useRecoilState, useRecoilValue } from 'recoil';
 import store from '~/store';
 import { useChatHelpers, useLocalize } from '~/hooks';
 import { mainTextareaId } from '~/common';
@@ -16,11 +16,14 @@ export default function VoiceAssistantWidget({
   const localize = useLocalize();
   const { ask, isSubmitting, getMessages } = useChatHelpers(index, conversationId);
   const [isActive, setIsActive] = useRecoilState(store.voiceAssistantActive);
+  const selectedVoiceName = useRecoilValue(store.voice);
+  const playbackRate = useRecoilValue(store.playbackRate);
 
   const recognitionRef = useRef<any>(null);
   const speechUttRef = useRef<SpeechSynthesisUtterance | null>(null);
   const prevIsSubmittingRef = useRef<boolean>(false);
   const activeSessionRef = useRef<boolean>(false);
+  const isSpeakingOrThinkingRef = useRef<boolean>(false);
 
   // Initialize Speech Recognition
   const initSpeechRecognition = useCallback(() => {
@@ -86,7 +89,7 @@ export default function VoiceAssistantWidget({
         setIsActive(false);
       } else if (event.error === 'no-speech') {
         setTimeout(() => {
-          if (activeSessionRef.current) {
+          if (activeSessionRef.current && !isSpeakingOrThinkingRef.current) {
             try {
               recognition.start();
             } catch {
@@ -99,7 +102,7 @@ export default function VoiceAssistantWidget({
 
     recognition.onend = () => {
       setTimeout(() => {
-        if (activeSessionRef.current) {
+        if (activeSessionRef.current && !isSpeakingOrThinkingRef.current) {
           try {
             recognition.start();
           } catch {
@@ -116,19 +119,39 @@ export default function VoiceAssistantWidget({
   // Handle TTS Speak
   const speakText = useCallback((text: string) => {
     window.speechSynthesis.cancel();
+    isSpeakingOrThinkingRef.current = true;
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      // ignore
+    }
 
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(
-      (v) =>
-        v.lang.startsWith('en') &&
-        (v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('natural')),
-    );
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
+    
+    let voiceToUse = null;
+    if (selectedVoiceName) {
+      voiceToUse = voices.find((v) => v.name === selectedVoiceName);
+    }
+    
+    if (!voiceToUse) {
+      voiceToUse = voices.find(
+        (v) =>
+          v.lang.startsWith('en') &&
+          (v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('natural')),
+      );
+    }
+    
+    if (voiceToUse) {
+      utterance.voice = voiceToUse;
+    }
+
+    if (playbackRate && typeof playbackRate === 'number') {
+      utterance.rate = playbackRate;
     }
 
     utterance.onend = () => {
+      isSpeakingOrThinkingRef.current = false;
       if (activeSessionRef.current) {
         try {
           recognitionRef.current?.start();
@@ -139,6 +162,7 @@ export default function VoiceAssistantWidget({
     };
 
     utterance.onerror = () => {
+      isSpeakingOrThinkingRef.current = false;
       if (activeSessionRef.current) {
         try {
           recognitionRef.current?.start();
@@ -150,11 +174,18 @@ export default function VoiceAssistantWidget({
 
     speechUttRef.current = utterance;
     window.speechSynthesis.speak(utterance);
-  }, []);
+  }, [selectedVoiceName, playbackRate]);
 
   // Monitor Assistant thinking completion to trigger Speech response
   useEffect(() => {
-    if (prevIsSubmittingRef.current && !isSubmitting && activeSessionRef.current) {
+    if (isSubmitting) {
+      isSpeakingOrThinkingRef.current = true;
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // ignore
+      }
+    } else if (prevIsSubmittingRef.current && !isSubmitting && activeSessionRef.current) {
       const messages = getMessages() ?? [];
       const assistantMessages = messages.filter((m) => !m.isCreatedByUser);
       if (assistantMessages.length > 0) {
@@ -166,6 +197,24 @@ export default function VoiceAssistantWidget({
             .replace(/\s+/g, ' ')
             .trim();
           speakText(cleanText);
+        } else {
+          isSpeakingOrThinkingRef.current = false;
+          if (activeSessionRef.current) {
+            try {
+              recognitionRef.current?.start();
+            } catch {
+              // ignore
+            }
+          }
+        }
+      } else {
+        isSpeakingOrThinkingRef.current = false;
+        if (activeSessionRef.current) {
+          try {
+            recognitionRef.current?.start();
+          } catch {
+            // ignore
+          }
         }
       }
     }
@@ -175,6 +224,7 @@ export default function VoiceAssistantWidget({
   // Start Assistant Session
   const startSession = useCallback(() => {
     activeSessionRef.current = true;
+    isSpeakingOrThinkingRef.current = false;
 
     const rec = recognitionRef.current || initSpeechRecognition();
     if (rec) {
@@ -189,6 +239,7 @@ export default function VoiceAssistantWidget({
   // Stop Assistant Session
   const stopSession = useCallback(() => {
     activeSessionRef.current = false;
+    isSpeakingOrThinkingRef.current = false;
     window.speechSynthesis.cancel();
     try {
       recognitionRef.current?.stop();

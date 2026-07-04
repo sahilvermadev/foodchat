@@ -446,7 +446,7 @@ function cookingDeliveryInstructions(mode: CookingDeliveryMode): string {
   if (mode === 'canvas_confirmation') {
     return [
       ...common,
-      '- Delivery mode: canvas_confirmation. After creating or revising a document, reply with one short sentence confirming the result and do not repeat the recipe.',
+      '- Delivery mode: canvas_confirmation. After creating or revising a document, reply with a brief, friendly confirmation in your own voice summarizing what you changed, why, and ask a relevant follow-up question to keep the cook engaged. Do not repeat the full recipe content.',
     ].join('\n');
   }
   return [
@@ -2900,7 +2900,9 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         draftChanged = draftChanged || result.draftChanged;
         if (result.draftChanged && result.userMessage) {
           latestCanvasUserMessage = result.userMessage;
-          fastCanvasReturn = true;
+          // Let the LLM generate the final confirmation message instead of doing a fast return,
+          // allowing for a conversational summary of changes.
+          fastCanvasReturn = false;
         }
         if (result.webSources?.length) {
           const seen = new Set(webSources.map((source) => source.url));
