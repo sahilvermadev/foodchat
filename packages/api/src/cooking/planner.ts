@@ -405,28 +405,13 @@ function normalizedAction(input: CookingPlannerInput, raw: RawCookingPlan): Cook
   if (!rawAction || !actions.has(rawAction as CookingPlannedAction)) {
     return 'direct_answer';
   }
-  let action = rawAction as CookingPlannedAction;
+  const action = rawAction as CookingPlannedAction;
   if ((action === 'revise_document' || action === 'read_document') && !input.activeDraft) {
     return 'direct_answer';
   }
   if (action === 'read_source' && !input.linkedSourceState.readRequired) {
     return 'direct_answer';
   }
-
-  // Programmatic override: If action is revise_document but the input is an inquiry/question rather than a direct command, downgrade to direct_answer.
-  if (action === 'revise_document') {
-    const text = input.text.trim().toLowerCase();
-    const isSecondPersonRequest = /^(can|could|would|will|should)\s+you\b/i.test(text);
-    const isQuestionOrInquiry =
-      (/^(is|can|should|would|how|what|why|will|could|are|does|did|do|is\s+it\s+possible)\b/i.test(text) || text.endsWith('?')) &&
-      !isSecondPersonRequest;
-    const isExplicitCommand = /\b(update|change|change\s+to|revise|modify|scale|add|remove|replace|rewrite|make\s+the\s+recipe|apply)\b/i.test(text);
-
-    if (isQuestionOrInquiry && !isExplicitCommand) {
-      action = 'direct_answer';
-    }
-  }
-
   return action;
 }
 
@@ -585,11 +570,18 @@ function plannerPrompt(input: CookingPlannerInput): PlannerChatMessage[] {
         '- Direct chat is right for ideation, comparing options, answering ingredient or technique questions, troubleshooting, explaining why a step matters, or helping the user choose a direction.',
         '- The full recipe itself belongs on the canvas. If satisfying the current turn means presenting one specific dish in detail with ingredients plus cookable method, choose create_document with promptProfile document_work when no active canvas exists.',
         '- Treat the user intent semantically rather than by surface wording: if they are asking for a complete cookable recipe, plan document work; if they are asking a narrow technique or decision-support question, plan chat.',
-        '- Do not plan revise_document for hypothetical questions (e.g., "Can I make this as cupcakes?", "How do I scale this for 10?"), statements of local availability (e.g., "I live in India so we don\'t have dill"), or simple user approvals, confirmations, and agreements (e.g., "yeah this looks good", "ok", "perfect", "sounds great"). For these, you must plan direct_answer to discuss the options or acknowledge the feedback in chat first. Only plan revise_document when the user gives a direct, explicit instruction/command to modify the document (e.g., "update the recipe to use mint", "please scale this to 10 people", or explicitly replies "yes" to your proposal to modify the recipe).',
+        '- Do not plan revise_document for hypothetical questions (e.g., "Can I make this as cupcakes?", "How do I scale this for 10?"), feasibility/substitutions queries (e.g., "is it possible to make this gluten free", "can we swap dill"), statements of local availability, or simple user approvals/confirmations. For these, you must plan direct_answer to discuss the options or acknowledge the feedback in chat first. Only plan revise_document when the user gives a direct, explicit instruction/command to modify the document (e.g., "update the recipe to use mint", "please scale this to 10 people", "change the flour to gluten free").',
         '- If there is an active canvas and the user wants the same recipe changed via an explicit command, choose revise_document with promptProfile document_work; the response can still briefly explain the change in chat after the tool succeeds.',
         '- If the current request is too underspecified to make a useful durable recipe, choose ask_clarifying_question or direct_answer that helps them choose; do not plan a long formal recipe in chat.',
         '- A user-attached recipe image is a source, not inspiration. When the user asks for "this recipe" or asks to create its canvas, choose create_document or revise_document as appropriate and preserve the attached source instead of planning a generic recipe.',
         '- The response model can inspect attached images. You only need to plan source-faithful work; do not request web research merely because the source is an image.',
+        '',
+        'Few-Shot Intent & Action Planning Examples (when activeCanvas = true):',
+        '- Prompt: "is it possible to make this gluten free" -> Answer in chat first. Result: { "intent": "document_question", "action": "direct_answer" }',
+        '- Prompt: "can you change the recipe to be gluten free" -> Explicit update command. Result: { "intent": "document_edit", "action": "revise_document" }',
+        '- Prompt: "yeah this looks good" -> Feedback/acknowledgment. Result: { "intent": "document_question", "action": "direct_answer" }',
+        '- Prompt: "can I make this as cupcakes?" -> Substitution query. Result: { "intent": "document_question", "action": "direct_answer" }',
+        '- Prompt: "make it spicier?" -> Direct command. Result: { "intent": "document_edit", "action": "revise_document" }',
         '',
         'Stickiness & State-Aware Planning Rules:',
         '- Check the provided "previousPlanState" (which includes the previous turn\'s classified intent and action) to understand what the agent was just doing.',
