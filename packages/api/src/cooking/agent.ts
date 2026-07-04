@@ -17,7 +17,7 @@ import { understandCookingTurn } from './understanding';
 import { buildTurnContext } from './context';
 import { createCookingWebContext } from './web';
 import type { CookingWebSource } from './web';
-import { planCookingTurn } from './planner';
+import { planCookingTurn, fallbackCookingTurnPlan } from './planner';
 import type {
   CookingDeliveryMode,
   CookingPlannedAction,
@@ -2094,26 +2094,44 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     linkedSourceReadRequired: sourceState.readRequired,
     preferenceSectionCount: preferenceSectionTitles(input.preferencesMarkdown).length,
   });
-  const turnPlan: CookingTurnPlan = await planCookingTurn(
-    {
+  const plannerInput = {
+    conversationId: input.conversationId,
+    text: input.text,
+    messages: input.messages,
+    turnContext,
+    activeDraft: input.activeDraft,
+    documents: input.documents,
+    linkedSourceState: sourceState,
+    attachedImageSourceState: imageSourceState,
+    preferenceSectionTitles: preferenceSectionTitles(input.preferencesMarkdown),
+    availableCapabilities: {
+      documentTools: input.allowDocumentTools !== false,
+      activeCanvas,
+      webConfigured: webContext.tools.length > 0,
+    },
+    runtimeUnderstanding: turnUnderstanding,
+  };
+
+  const isSimpleGreetingOrAffirmative = /^(hi|hello|hey|ok|okay|yes|no|thanks|thank you|yeah|looks good|perfect)\.?$/i.test(input.text.trim());
+
+  let turnPlan: CookingTurnPlan;
+  if (isSimpleGreetingOrAffirmative) {
+    turnPlan = {
+      ...fallbackCookingTurnPlan(plannerInput),
+      plannerUsed: false,
+    };
+    logCookingAgent('planner_bypassed_heuristic', {
       conversationId: input.conversationId,
       text: input.text,
-      messages: input.messages,
-      turnContext,
-      activeDraft: input.activeDraft,
-      documents: input.documents,
-      linkedSourceState: sourceState,
-      attachedImageSourceState: imageSourceState,
-      preferenceSectionTitles: preferenceSectionTitles(input.preferencesMarkdown),
-      availableCapabilities: {
-        documentTools: input.allowDocumentTools !== false,
-        activeCanvas,
-        webConfigured: webContext.tools.length > 0,
-      },
-      runtimeUnderstanding: turnUnderstanding,
-    },
-    (messages) => completeJsonOnly(messages, plannerRoute.model, 0.1),
-  );
+      intent: turnPlan.intent,
+      action: turnPlan.action,
+    });
+  } else {
+    turnPlan = await planCookingTurn(
+      plannerInput,
+      (messages) => completeJsonOnly(messages, plannerRoute.model, 0.1),
+    );
+  }
   logCookingAgent('planner_result', {
     conversationId: input.conversationId,
     durationMs: Date.now() - plannerStartedAt,
@@ -2946,6 +2964,36 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
           error: errorMessage,
           args: parseArguments(toolCall.function.arguments),
         });
+
+        if (
+          isCanvasMutationTool(toolCall.function.name) &&
+          errorMessage.toLowerCase().includes('did not change the current canvas')
+        ) {
+          logCookingAgent('canvas_revision_failed_no_change_break', {
+            conversationId: input.conversationId,
+            toolName: toolCall.function.name,
+            errorMessage,
+          });
+
+          // Disable future document tools to prevent LLM retry loops
+          availableToolState = emptyAvailableToolState();
+          turnPlan.action = 'direct_answer';
+          fastCanvasReturn = false;
+          canvasMutationToolAttempted = false;
+          missingCanvasMutationRetryUsed = true;
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({
+              ok: false,
+              error: errorMessage,
+              action: 'The recipe document did not change because it is already up to date. Provide a direct friendly response to the user explaining that the recipe is already correct and check if they need anything else.',
+            }),
+          });
+          break;
+        }
+
         messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
