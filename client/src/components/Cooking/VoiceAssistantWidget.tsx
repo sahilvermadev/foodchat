@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useRecoilState } from 'recoil';
 import store from '~/store';
 import { useChatHelpers, useLocalize } from '~/hooks';
+import { mainTextareaId } from '~/common';
 
 interface VoiceAssistantWidgetProps {
   conversationId: string;
@@ -34,7 +35,7 @@ export default function VoiceAssistantWidget({
 
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onstart = () => {
@@ -43,16 +44,39 @@ export default function VoiceAssistantWidget({
 
     recognition.onresult = (event: any) => {
       let finalTranscript = '';
+      let interimTranscript = '';
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
         }
       }
 
-      if (finalTranscript.trim()) {
+      const currentSpeech = finalTranscript + interimTranscript;
+
+      // Update the textarea in real time
+      const textarea = document.getElementById(mainTextareaId) as HTMLTextAreaElement | null;
+      if (textarea) {
+        textarea.value = currentSpeech;
+        // Dispatch 'input' event so that react-hook-form captures the change
+        const inputEvent = new Event('input', { bubbles: true });
+        textarea.dispatchEvent(inputEvent);
+      }
+
+      // Check if we have a final result from the recognition engine
+      const isFinal = event.results[event.results.length - 1]?.isFinal;
+      if (finalTranscript.trim() && isFinal) {
         recognition.stop();
         ask({ text: finalTranscript.trim() });
+        // Clear the textarea after submission
+        if (textarea) {
+          textarea.value = '';
+          const inputEvent = new Event('input', { bubbles: true });
+          textarea.dispatchEvent(inputEvent);
+        }
       }
     };
 
