@@ -5,6 +5,8 @@ import type { CookingDraft } from 'librechat-data-provider';
 import RecipeCanvas, { KitchenTimer } from './RecipeCanvas';
 
 const mockSaveRecipe = jest.fn();
+const mockUseRecipeQuery = jest.fn();
+const mockUseSavedRecipeByDraftQuery = jest.fn();
 
 jest.mock('react-markdown', () => ({
   __esModule: true,
@@ -37,6 +39,11 @@ jest.mock('~/components/MCPUIResource', () => ({
   mcpUIResourcePlugin: () => () => undefined,
 }));
 
+jest.mock('./VoiceAssistantWidget', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 jest.mock('~/Providers', () => ({
   CodeBlockProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -47,7 +54,8 @@ jest.mock('~/components/Web', () => ({
 
 jest.mock('~/data-provider', () => ({
   useSaveRecipeMutation: () => ({ isLoading: false, mutate: mockSaveRecipe }),
-  useSavedRecipeByDraftQuery: () => ({ data: null }),
+  useRecipeQuery: (...args: unknown[]) => mockUseRecipeQuery(...args),
+  useSavedRecipeByDraftQuery: (...args: unknown[]) => mockUseSavedRecipeByDraftQuery(...args),
   useUpdateSavedRecipeMutation: () => ({ isLoading: false, mutate: jest.fn() }),
 }));
 
@@ -128,6 +136,10 @@ function draftWithIngredients(ingredients: CookingDraft['recipe']['ingredients']
 describe('RecipeCanvas recipe data display', () => {
   beforeEach(() => {
     mockSaveRecipe.mockClear();
+    mockUseRecipeQuery.mockReset();
+    mockUseRecipeQuery.mockReturnValue({ data: null });
+    mockUseSavedRecipeByDraftQuery.mockReset();
+    mockUseSavedRecipeByDraftQuery.mockReturnValue({ data: null });
   });
 
   test('renders bullet Recipe Data lines as metric tiles', () => {
@@ -303,6 +315,29 @@ describe('RecipeCanvas recipe data display', () => {
         sourceDraftId: 'draft-1',
         saveList: 'cooked_already',
       }),
+    );
+  });
+
+  test('uses a saved recipe id instead of probing by draft for saved-recipe discussions', () => {
+    const draft = draftWithIngredients([]);
+
+    render(
+      <RecipeCanvas
+        markdown="# Changezi Chicken"
+        conversationId="convo-1"
+        savedRecipeId="recipe-1"
+        isPreparingDraft={false}
+        draft={draft}
+      />,
+    );
+
+    expect(mockUseRecipeQuery).toHaveBeenCalledWith(
+      'recipe-1',
+      expect.objectContaining({ enabled: true }),
+    );
+    expect(mockUseSavedRecipeByDraftQuery).toHaveBeenCalledWith(
+      'draft-1',
+      expect.objectContaining({ enabled: false }),
     );
   });
 });

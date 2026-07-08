@@ -28,6 +28,7 @@ type CookingWorkspaceProps = {
   documentsLoaded?: boolean;
   selectedDocumentId?: string;
   markdown: string;
+  savedRecipeId?: string;
   isPreparingDraft: boolean;
   index?: number;
 };
@@ -90,6 +91,7 @@ export default function CookingWorkspace({
   documentsLoaded = false,
   selectedDocumentId,
   markdown,
+  savedRecipeId,
   isPreparingDraft,
   index = 0,
 }: CookingWorkspaceProps) {
@@ -234,6 +236,7 @@ export default function CookingWorkspace({
             draft={selectedDocument}
             markdown={selectedMarkdown}
             conversationId={conversationId}
+            savedRecipeId={savedRecipeId}
             isPreparingDraft={isPreparingDraft}
           />
         </div>

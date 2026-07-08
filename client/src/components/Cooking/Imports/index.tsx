@@ -468,13 +468,14 @@ export default function SocialImports() {
   };
 
   return (
-    <main className="rekky-ui h-full overflow-y-auto bg-surface-primary-alt px-4 py-5 text-text-primary sm:px-8 sm:py-6 lg:px-14">
+    <main className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary">
       {/* Mobile Top Header Navbar */}
-      <div className="flex h-12 items-center justify-center border-b border-border-light/10 -mx-4 px-4 bg-surface-primary-alt/85 backdrop-blur sticky top-0 z-30 md:hidden">
+      <div className="flex h-12 shrink-0 items-center justify-center border-b border-border-light/10 bg-surface-primary-alt/85 backdrop-blur sticky top-0 z-30 md:hidden">
         <span className="text-[1.05rem] font-medium tracking-normal text-text-primary">{localize('com_social_imports_title')}</span>
       </div>
 
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-4 sm:gap-5 pt-3 sm:pt-0">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6 lg:px-14">
+        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 sm:gap-5 pt-3 sm:pt-0">
         <header className="pt-1">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-start justify-between gap-3 text-center sm:text-left">
             <div className="min-w-0 flex-1">
@@ -603,6 +604,7 @@ export default function SocialImports() {
             ) : null}
           </>
         ) : null}
+      </div>
       </div>
 
       <ImportDialog

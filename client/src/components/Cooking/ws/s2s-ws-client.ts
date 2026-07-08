@@ -157,8 +157,31 @@ export class S2sWsRealtimeClient extends EventTarget {
       if (!this._sessionUrl) {
         throw new Error('No session endpoint or direct URL configured');
       }
-      this._setStatus('creating-session');
-      const { grant, waited } = await this._createSessionOrQueue();
+      let grant: WsSessionInfo | undefined;
+      let waited = false;
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          this._setStatus('creating-session');
+          const res = await this._createSessionOrQueue();
+          grant = res.grant;
+          waited = res.waited;
+          break;
+        } catch (err: any) {
+          if (this._closed) throw err;
+          if (err?.code === 'queue-expired' && retries > 1) {
+            console.warn('Queue ticket expired/404, retrying session creation. Retries left:', retries - 1, err);
+            retries--;
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!grant) {
+        throw new Error('Failed to obtain a valid session grant');
+      }
+
       if (this._closed) throw _codedError('connect aborted', 'aborted');
 
       if (waited) {
@@ -270,7 +293,9 @@ export class S2sWsRealtimeClient extends EventTarget {
 
       let response;
       try {
-        response = await fetch(`api/queue/${encodeURIComponent(this._queueId)}`, {
+        const origin = this._sessionUrl.replace(/\/session\/?$/, "");
+        const queueUrl = `${origin}/api/queue/${encodeURIComponent(this._queueId)}`;
+        response = await fetch(queueUrl, {
           headers: { 'Content-Type': 'application/json' },
         });
       } catch {
@@ -407,6 +432,10 @@ export class S2sWsRealtimeClient extends EventTarget {
       const onceErr = (e: any) => {
         ws.removeEventListener('open', onceOpen);
         ws.removeEventListener('error', onceErr);
+        if (this._closed) {
+          reject(_codedError('connect aborted', 'aborted'));
+          return;
+        }
         reject(new Error(`WebSocket failed to open: ${e?.type ?? 'error'}`));
       };
       ws.addEventListener('open', onceOpen);

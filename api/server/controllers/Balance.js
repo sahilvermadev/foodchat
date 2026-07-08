@@ -4,7 +4,10 @@ async function balanceController(req, res) {
   const balanceData = await findBalanceByUser(req.user.id);
 
   if (!balanceData) {
-    return res.status(404).json({ error: 'Balance not found' });
+    return res.status(200).json({
+      tokenCredits: 0,
+      autoRefillEnabled: false,
+    });
   }
 
   const { _id: _, ...result } = balanceData;

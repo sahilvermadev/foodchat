@@ -235,7 +235,8 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
         /* this is necessary to load all existing settings */
         preset: initialConvoQuery.data as TPreset,
         modelsData: modelsQuery.data,
-        keepLatestMessage: true,
+        keepLatestMessage:
+          !isCookingMode || conversation?.conversationId === initialConvoQuery.data.conversationId,
         buildDefault: isCookingMode ? false : true,
         routeBase: isCookingMode ? '/cook' : undefined,
       });
@@ -289,11 +290,7 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
     return null;
   }
   // if conversationId not match
-  if (
-    conversation?.conversationId !== conversationId &&
-    !conversation &&
-    !canRenderNewConversationShell
-  ) {
+  if (!canRenderNewConversationShell && conversation?.conversationId !== conversationId) {
     return null;
   }
   // if conversationId is null
@@ -313,6 +310,11 @@ export default function ChatRoute({ mode = 'chat' }: { mode?: 'chat' | 'cooking'
             documents={documents}
             documentsLoaded={documentsLoaded}
             selectedDocumentId={selectedDocumentId}
+            savedRecipeId={
+              conversation?.conversationId === conversationId
+                ? conversation.savedRecipeId
+                : undefined
+            }
             markdown={getCookingCanvasMarkdown({
               draftMarkdown: activeDraft?.documentMarkdown,
             })}

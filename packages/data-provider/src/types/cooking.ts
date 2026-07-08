@@ -75,6 +75,7 @@ export type CookingDocument = {
   selected: boolean;
   documentMarkdown?: string;
   recipe: StructuredRecipe;
+  adjustments?: string[];
   sourceUrl?: string;
   expiresAt?: string;
   createdAt: string;

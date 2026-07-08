@@ -314,15 +314,16 @@ export default function RecipeLibrary() {
       : localize('com_recipes_count_short_other', { count: total });
 
   return (
-    <main className="rekky-ui h-full overflow-y-auto bg-surface-primary-alt px-5 py-5 text-text-primary sm:px-8 sm:py-7 lg:px-14">
+    <main className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary">
       {/* Mobile Top Header Navbar */}
-      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-30 -mx-5 flex h-12 items-center justify-center border-b px-5 backdrop-blur md:hidden">
+      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-30 flex h-12 shrink-0 items-center justify-center border-b px-5 backdrop-blur md:hidden">
         <span className="text-[1.05rem] font-medium tracking-[-0.04em] text-text-primary">
           {localize('com_recipes_library')}
         </span>
       </div>
 
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-5 pt-3 sm:gap-7 sm:pt-0">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-14">
+        <div className="mx-auto flex max-w-[1500px] flex-col gap-5 pt-3 sm:gap-7 sm:pt-0">
         <header className="pt-1">
           <div className="flex flex-col gap-4">
             <div>
@@ -685,6 +686,7 @@ export default function RecipeLibrary() {
             ) : null}
           </>
         ) : null}
+      </div>
       </div>
       <OGDialog
         open={recipeToDelete != null}

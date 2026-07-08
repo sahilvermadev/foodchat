@@ -1554,6 +1554,7 @@ async function executeTool(
         documentType: draft.documentType,
         title: draftTitle(draft, title) ?? markdownTitle(markdown),
         changeSummary,
+        ...(draft.adjustments?.length ? { adjustmentsApplied: draft.adjustments } : {}),
       }),
     };
   }
@@ -1606,6 +1607,7 @@ async function executeTool(
       draftId: updated._id,
       revisionType,
       changeSummary,
+      ...(updated.adjustments?.length ? { adjustmentsApplied: updated.adjustments } : {}),
     }),
   };
 }
@@ -2275,6 +2277,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
         attachedImageSourceContext(imageSourceState),
         toolStateContext(activeCanvas, availableToolState.availableTools),
         cookingDeliveryInstructions(turnPlan.deliveryMode),
+        `Deterministic Personalization Notice:
+When calling create_cooking_document or revise_cooking_document, the database manager automatically adapts the recipe structure for the user's location and kitchen setup. If any modifications are made, the tool output will contain an "adjustmentsApplied" array. Check this field in the tool response and explain these specific modifications (such as salt reduction, maida substitution, or convection oven temperature adjustments) to the user in your response.`,
         cookingSystemInstructionsForProfile(turnPlan.promptProfile),
       ]
         .filter(Boolean)

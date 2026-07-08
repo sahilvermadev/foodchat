@@ -72,7 +72,136 @@ function normalizeStep(step: RecipeStep, index: number, ingredientIds: Set<strin
   };
 }
 
-export function normalizeRecipe(recipe: StructuredRecipe): StructuredRecipe {
+function savedCountry(markdown: string | undefined): string | undefined {
+  if (!markdown) {
+    return undefined;
+  }
+  const match = markdown.match(/(?:^|\n)##\s+Location\s*\n([\s\S]*?)(?=\n##\s+|\s*$)/i);
+  const locationBody = match?.[1];
+  if (!locationBody) {
+    return undefined;
+  }
+
+  if (
+    /\bindia\b|\bdelhi\b|\bdwarka\b|\bmumbai\b|\bbengaluru\b|\bbangalore\b|\bkolkata\b|\bchennai\b|\bhyderabad\b/i.test(
+      locationBody,
+    )
+  ) {
+    return 'India';
+  }
+  if (/\bunited states\b|\busa\b|\bu\.s\.\b|\bnew york\b|\bcalifornia\b/i.test(locationBody)) {
+    return 'United States';
+  }
+  if (/\bunited kingdom\b|\buk\b|\blondon\b/i.test(locationBody)) {
+    return 'United Kingdom';
+  }
+  return undefined;
+}
+
+export function personalizeRecipe(
+  recipe: StructuredRecipe,
+  preferencesMarkdown?: string,
+): { recipe: StructuredRecipe; adjustments: string[] } {
+  const adjustments: string[] = [];
+  if (!preferencesMarkdown) {
+    return { recipe, adjustments };
+  }
+
+  const country = savedCountry(preferencesMarkdown);
+
+  const ingredients = recipe.ingredients.map((ing) => {
+    let originalText = ing.originalText;
+    let quantity = ing.quantity;
+    let unit = ing.unit;
+    let item = ing.item;
+
+    const lowerItem = item.toLowerCase();
+
+    if (country === 'India' || country === 'United Kingdom') {
+      if (lowerItem.includes('kosher salt')) {
+        item = 'fine table salt';
+        if (quantity != null) {
+          quantity = Number((quantity * 0.5).toFixed(2));
+          if (unit) {
+            originalText = `${quantity} ${unit} fine table salt`;
+          } else {
+            originalText = `${quantity} fine table salt`;
+          }
+        } else {
+          originalText = originalText.replace(/kosher salt/i, 'fine table salt (use half the amount)');
+        }
+        adjustments.push(`Converted kosher salt to fine table salt (adjusted quantity from ${ing.quantity ?? ''} to ${quantity ?? ''}) for user location (${country}).`);
+      }
+
+      if (country === 'India' && (lowerItem.includes('all-purpose flour') || lowerItem.includes('all purpose flour'))) {
+        item = 'maida (AP flour)';
+        originalText = originalText.replace(/all-purpose flour|all purpose flour/i, 'maida (AP flour)');
+        adjustments.push(`Mapped All-Purpose Flour to Maida (AP flour) for user location (India).`);
+      }
+    }
+
+    if (lowerItem.includes('packed brown sugar') || lowerItem.includes('dark brown sugar') || lowerItem.includes('light brown sugar')) {
+      if (country === 'India') {
+        originalText = `${originalText} (or white sugar + 1 tsp honey/molasses per cup)`;
+        adjustments.push('Added local brown sugar substitution tip (white sugar + honey/molasses) for India.');
+      }
+    }
+
+    if (lowerItem.includes('heavy whipping cream') || lowerItem.includes('heavy cream') || lowerItem.includes('double cream')) {
+      if (country === 'India' && !lowerItem.includes('whipped')) {
+        originalText = `${originalText} (Note: Amul fresh cream has 25% fat and won't whip; use whipping cream with 35%+ fat)`;
+        adjustments.push('Added whipping cream fat-content warning (Amul fresh cream fat limitations) for India.');
+      }
+    }
+
+    return {
+      ...ing,
+      item,
+      quantity,
+      originalText,
+    };
+  });
+
+  const hasConvection = /convection\s*oven|fan\s*oven|fan-forced\s*oven/i.test(preferencesMarkdown);
+  const steps = recipe.steps.map((step) => {
+    if (step.temperature && hasConvection) {
+      let tempVal = step.temperature.value;
+      const tempUnit = step.temperature.unit?.toUpperCase() ?? 'F';
+      if (tempUnit === 'F' || tempUnit === 'FAHRENHEIT') {
+        tempVal = Math.round(tempVal - 25);
+      } else if (tempUnit === 'C' || tempUnit === 'CELSIUS') {
+        tempVal = Math.round(tempVal - 20);
+      }
+      adjustments.push(`Adjusted baking temperature from ${step.temperature.value}°${tempUnit} to ${tempVal}°${tempUnit} for user's convection/fan oven.`);
+      return {
+        ...step,
+        temperature: {
+          ...step.temperature,
+          value: tempVal,
+        },
+        tips: [
+          ...(step.tips ?? []),
+          `Adjusted baking temperature down by ${tempUnit === 'C' ? '20°C' : '25°F'} for your convection/fan oven.`,
+        ],
+      };
+    }
+    return step;
+  });
+
+  return {
+    recipe: {
+      ...recipe,
+      ingredients,
+      steps,
+    },
+    adjustments,
+  };
+}
+
+export function normalizeRecipe(
+  recipe: StructuredRecipe,
+  preferencesMarkdown?: string,
+): StructuredRecipe {
   const title = cleanText(recipe.title, '');
   if (!title) {
     throw new CookingValidationError('Recipe title is required.');
@@ -93,7 +222,7 @@ export function normalizeRecipe(recipe: StructuredRecipe): StructuredRecipe {
   const notes = Array.isArray(recipe.notes) ? recipe.notes : [];
   const tags = Array.isArray(recipe.tags) ? recipe.tags : [];
 
-  return {
+  const normalized = {
     title,
     description: cleanText(recipe.description, ''),
     servings: Math.max(1, Number(recipe.servings)),
@@ -103,4 +232,6 @@ export function normalizeRecipe(recipe: StructuredRecipe): StructuredRecipe {
     notes: notes.map((note) => note.trim()).filter(Boolean),
     tags: tags.map((tag) => tag.trim()).filter(Boolean),
   };
+
+  return personalizeRecipe(normalized, preferencesMarkdown).recipe;
 }

@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Edit3, MessageSquare } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Button, Input, TextareaAutosize } from '@librechat/client';
+import { EModelEndpoint } from 'librechat-data-provider';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import {
   useRecipeQuery,
   useUpdateSavedRecipeMutation,
   useCreateCookingDocumentMutation,
 } from '~/data-provider';
-import { useLocalize } from '~/hooks';
+import { useLocalize, useNewConvo } from '~/hooks';
 import RecipeMetrics from './Metrics';
 import RecipeHeaderAction from './RecipeHeaderAction';
 import StructuredIngredients, { hasDisplayableIngredients } from './StructuredIngredients';
@@ -139,7 +140,7 @@ export default function RecipeDetail() {
   const { recipeId } = useParams();
   const updateRecipe = useUpdateSavedRecipeMutation();
   const createCookingDocument = useCreateCookingDocumentMutation();
-  const navigate = useNavigate();
+  const { newConversation } = useNewConvo();
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftMarkdown, setDraftMarkdown] = useState('');
@@ -233,9 +234,10 @@ export default function RecipeDetail() {
     }
 
     const newConvoId = window.crypto.randomUUID();
+    const title = `Discuss ${recipeDisplayTitle(recipe)}`;
     createCookingDocument.mutate(
       {
-        prompt: `Discuss ${recipeDisplayTitle(recipe)}`,
+        prompt: title,
         conversationId: newConvoId,
         savedRecipeId: recipe._id,
         documentMarkdown: recipe.documentMarkdown,
@@ -244,7 +246,18 @@ export default function RecipeDetail() {
       },
       {
         onSuccess: () => {
-          navigate(`/cook/${newConvoId}`);
+          newConversation({
+            template: {
+              conversationId: newConvoId,
+              title,
+              endpoint: EModelEndpoint.agents,
+              cookingCategory: 'saved_recipe',
+              savedRecipeId: recipe._id,
+            },
+            buildDefault: false,
+            keepLatestMessage: false,
+            routeBase: '/cook',
+          });
         },
       },
     );

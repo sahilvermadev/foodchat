@@ -36,6 +36,7 @@ import {
 } from '@librechat/client';
 import {
   useSaveRecipeMutation,
+  useRecipeQuery,
   useSavedRecipeByDraftQuery,
   useUpdateSavedRecipeMutation,
 } from '~/data-provider';
@@ -299,6 +300,7 @@ type RecipeCanvasProps = {
   draft?: CookingDraft;
   markdown?: string;
   conversationId?: string;
+  savedRecipeId?: string;
   isPreparingDraft?: boolean;
 };
 
@@ -371,19 +373,28 @@ export default function RecipeCanvas({
   draft,
   markdown = '',
   conversationId,
+  savedRecipeId,
   isPreparingDraft,
 }: RecipeCanvasProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const [isCopied, setIsCopied] = useState(false);
-  const savedRecipeQuery = useSavedRecipeByDraftQuery(draft?._id, {
-    enabled: Boolean(draft?._id),
-    refetchInterval: (recipe) =>
-      recipe?.categorizationStatus === 'pending' ||
-      recipe?.illustrationStatus === 'pending' ||
-      recipe?.illustrationStatus === 'generating'
-        ? 3000
-        : false,
+  const refetchSavedRecipeWhileProcessing = (recipe?: {
+    categorizationStatus?: string;
+    illustrationStatus?: string;
+  }) =>
+    recipe?.categorizationStatus === 'pending' ||
+    recipe?.illustrationStatus === 'pending' ||
+    recipe?.illustrationStatus === 'generating'
+      ? 3000
+      : false;
+  const savedRecipeByIdQuery = useRecipeQuery(savedRecipeId, {
+    enabled: Boolean(savedRecipeId),
+    refetchInterval: refetchSavedRecipeWhileProcessing,
+  });
+  const savedRecipeByDraftQuery = useSavedRecipeByDraftQuery(draft?._id, {
+    enabled: Boolean(draft?._id) && !savedRecipeId,
+    refetchInterval: refetchSavedRecipeWhileProcessing,
   });
   const saveRecipe = useSaveRecipeMutation();
   const updateSavedRecipe = useUpdateSavedRecipeMutation();
@@ -461,7 +472,7 @@ export default function RecipeCanvas({
     return null;
   }
 
-  const savedRecipe = savedRecipeQuery.data;
+  const savedRecipe = savedRecipeByIdQuery.data ?? savedRecipeByDraftQuery.data;
   const canSave = Boolean(documentMarkdown.trim());
   const hasSavedRecipe = Boolean(savedRecipe);
   const hasChangedSavedRecipe =

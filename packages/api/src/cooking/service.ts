@@ -9,7 +9,8 @@ import type {
 } from 'librechat-data-provider';
 import type { ICookingDraft, ICookingSession } from '@librechat/data-schemas';
 import { reduceSessionEvent } from './reducer';
-import { CookingValidationError, normalizeRecipe } from './validation';
+import { CookingValidationError, normalizeRecipe, personalizeRecipe } from './validation';
+import { getExistingPreferences } from '../preferences/service';
 
 function idOf(doc: { _id: unknown }): string {
   return String(doc._id);
@@ -142,9 +143,13 @@ export async function generateCookingDraft(
   const { Draft } = models();
   const cleanPrompt = assertPrompt(prompt);
   const cleanDocumentMarkdown = documentMarkdown?.trim();
-  const finalRecipe = recipe
+  const preferences = await getExistingPreferences(user);
+  const normalizedBase = recipe
     ? normalizeRecipe(recipe)
     : normalizeRecipe(blankRecipe(markdownTitle(cleanDocumentMarkdown) ?? cleanPrompt));
+  const personalized = personalizeRecipe(normalizedBase, preferences?.markdown);
+  const finalRecipe = personalized.recipe;
+  const adjustments = personalized.adjustments;
   const selectedDocumentType = assertDocumentType(documentType);
   const payload = {
     user,
@@ -163,7 +168,10 @@ export async function generateCookingDraft(
     );
   }
   const draft = await Draft.create(payload);
-  return serializeDraft(draft);
+  return {
+    ...serializeDraft(draft),
+    adjustments,
+  };
 }
 
 export const createCookingDocument = generateCookingDraft;
@@ -281,8 +289,14 @@ export async function updateCookingDraft(
   } = {};
   const cleanDocumentMarkdown = documentMarkdown?.trim();
   const documentTitle = markdownTitle(cleanDocumentMarkdown);
+  let adjustments: string[] = [];
   if (recipe) {
-    set.recipe = normalizeRecipe(documentTitle ? { ...recipe, title: documentTitle } : recipe);
+    const preferences = await getExistingPreferences(user);
+    const baseRecipe = documentTitle ? { ...recipe, title: documentTitle } : recipe;
+    const normalizedBase = normalizeRecipe(baseRecipe);
+    const personalized = personalizeRecipe(normalizedBase, preferences?.markdown);
+    set.recipe = personalized.recipe;
+    adjustments = personalized.adjustments;
   }
   if (typeof documentMarkdown === 'string') {
     set.documentMarkdown = documentMarkdown.trim();
@@ -298,7 +312,13 @@ export async function updateCookingDraft(
     { $set: set },
     { new: true },
   );
-  return draft ? serializeDraft(draft) : null;
+  if (!draft) {
+    return null;
+  }
+  return {
+    ...serializeDraft(draft),
+    adjustments,
+  };
 }
 
 export const updateCookingDocument = updateCookingDraft;

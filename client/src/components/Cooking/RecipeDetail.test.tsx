@@ -7,6 +7,7 @@ import RecipeDetail from './RecipeDetail';
 
 let mockRecipe: SavedRecipe;
 const mockCreateCookingDocument = jest.fn();
+const mockNewConversation = jest.fn();
 
 jest.mock('~/components/Chat/Messages/Content/Markdown', () => ({
   __esModule: true,
@@ -24,6 +25,7 @@ jest.mock('~/data-provider', () => ({
 
 jest.mock('~/hooks', () => ({
   useLocalize: () => (key: string) => key,
+  useNewConvo: () => ({ newConversation: mockNewConversation }),
 }));
 
 jest.mock('@librechat/client', () => ({
@@ -86,6 +88,9 @@ function renderDetail() {
 describe('RecipeDetail structured ingredients', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCreateCookingDocument.mockImplementation((_payload, options) => {
+      options?.onSuccess?.();
+    });
     Object.defineProperty(window.crypto, 'randomUUID', {
       configurable: true,
       value: jest.fn(() => 'conversation-saved-recipe'),
@@ -140,6 +145,19 @@ describe('RecipeDetail structured ingredients', () => {
         documentType: 'recipe',
       }),
       expect.any(Object),
+    );
+    expect(mockNewConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        buildDefault: false,
+        keepLatestMessage: false,
+        routeBase: '/cook',
+        template: expect.objectContaining({
+          conversationId: 'conversation-saved-recipe',
+          cookingCategory: 'saved_recipe',
+          savedRecipeId: '665f1f77bcf86cd799439011',
+          title: 'Discuss Changezi Chicken',
+        }),
+      }),
     );
   });
 });
