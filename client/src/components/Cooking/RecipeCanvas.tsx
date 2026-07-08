@@ -697,7 +697,12 @@ export default function RecipeCanvas({
           )}
         </article>
       </div>
-      {conversationId && <VoiceAssistantWidget conversationId={conversationId} />}
+      {conversationId && (
+        <VoiceAssistantWidget
+          conversationId={conversationId}
+          recipeMarkdown={documentMarkdown}
+        />
+      )}
     </section>
   );
 }

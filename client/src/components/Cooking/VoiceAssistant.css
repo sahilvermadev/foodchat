@@ -1,0 +1,468 @@
+/* Realtime Voice Mode CSS styling */
+:root {
+  --voice-accent: #c1121f; /* matching foodchat theme */
+  --voice-listening: #10b981; /* emerald listening */
+  --voice-processing: #f59e0b; /* amber thinking */
+  --voice-speaking: #8b5cf6; /* violet assistant speaking */
+  --voice-error: #ef4444; /* red error */
+  --voice-bg-blur: rgba(15, 15, 20, 0.72);
+}
+
+.voice-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--voice-bg-blur);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fadeIn 0.3s ease-out;
+  color: #f8fafc;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.voice-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 480px;
+  text-align: center;
+}
+
+/* ─── Orb visualizer wrap ────────────────────────────────────────── */
+.orb-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+}
+
+.circle {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+  display: grid;
+  place-items: center;
+  color: var(--glow, var(--voice-accent));
+  transition: transform 0.18s ease, filter 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.circle:hover {
+  filter: brightness(1.08);
+}
+
+.circle:active {
+  transform: scale(0.97);
+  filter: brightness(0.92);
+}
+
+.circle-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, var(--glow, var(--voice-accent)) 0%, transparent 65%);
+  filter: blur(24px);
+  opacity: 0.42;
+  transform: scale(1);
+  transition: opacity 0.25s, background 0.25s, transform 1.4s ease-in-out;
+  pointer-events: none;
+}
+
+.circle-ring,
+.circle-ring-outer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: opacity 0.4s ease, border-color 0.4s ease, transform 0.3s ease;
+}
+
+.circle-ring {
+  width: 82%;
+  height: 82%;
+  border: 1.5px solid color-mix(in srgb, var(--glow, var(--voice-accent)) 35%, transparent);
+  opacity: 0.35;
+}
+
+.circle-ring-outer {
+  width: 94%;
+  height: 94%;
+  border: 1px solid color-mix(in srgb, var(--glow, var(--voice-accent)) 22%, transparent);
+  opacity: 0;
+}
+
+.circle-core {
+  position: relative;
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 28%,
+    color-mix(in srgb, var(--glow, var(--voice-accent)) 28%, transparent),
+    color-mix(in srgb, var(--glow, var(--voice-accent)) 10%, transparent) 55%,
+    color-mix(in srgb, var(--glow, var(--voice-accent)) 5%, transparent)
+  );
+  border: 2px solid color-mix(in srgb, var(--glow, var(--voice-accent)) 40%, transparent);
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 0 32px color-mix(in srgb, var(--glow, var(--voice-accent)) 22%, transparent),
+    inset 0 0 28px color-mix(in srgb, var(--glow, var(--voice-accent)) 18%, transparent);
+  transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease, transform 0.4s ease;
+}
+
+.circle-indicator {
+  position: relative;
+  width: 44%;
+  height: 44%;
+  display: grid;
+  place-items: center;
+  color: var(--glow, var(--voice-accent));
+}
+
+.circle-indicator > .ind {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+
+.circle-indicator > svg.ind {
+  width: 60%;
+  height: 60%;
+}
+
+.ind-spinner {
+  width: 48%;
+  height: 48%;
+  border: 3px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0;
+  animation: ind-spin 0.9s linear infinite;
+}
+
+.ind-thinking {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 60%;
+  height: 60%;
+}
+
+.ind-thinking .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.3;
+  animation: thinking-dot 1.25s ease-in-out infinite;
+}
+
+.ind-thinking .dot:nth-child(1) { animation-delay: 0s; }
+.ind-thinking .dot:nth-child(2) { animation-delay: 0.16s; }
+.ind-thinking .dot:nth-child(3) { animation-delay: 0.32s; }
+
+.ind-bars {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 42%;
+}
+
+.ind-bars .bar {
+  width: 4px;
+  min-height: 4px;
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.7;
+  --h: var(--bar0, 0);
+  height: calc(4px + var(--h) * 36px);
+  transition: height 0.08s ease-out, opacity 0.08s ease-out;
+}
+
+.ind-bars .bar:nth-child(1) { --h: var(--bar0); }
+.ind-bars .bar:nth-child(2) { --h: var(--bar1); }
+.ind-bars .bar:nth-child(3) { --h: var(--bar2); }
+.ind-bars .bar:nth-child(4) { --h: var(--bar3); }
+.ind-bars .bar:nth-child(5) { --h: var(--bar4); }
+
+.ind-bars .bar {
+  opacity: calc(0.55 + 0.45 * var(--h));
+}
+
+.ind-voice .wave {
+  transform-origin: 50% 50%;
+  animation: voice-wave 1.35s ease-out infinite;
+}
+
+.ind-voice .wave-1 { animation-delay: 0s; }
+.ind-voice .wave-2 { animation-delay: 0.35s; }
+
+.ind-connect,
+.ind-mic {
+  color: color-mix(in srgb, var(--glow, var(--voice-accent)) 85%, white);
+}
+
+/* ─── State Activation mappings ───────────────────────────────── */
+.circle.state-idle .ind-mic,
+.circle.state-connecting .ind-spinner,
+.circle.state-connected .ind-spinner,
+.circle.state-queued .ind-spinner,
+.circle.state-processing .ind-thinking,
+.circle.state-listening .ind-bars,
+.circle.state-user-speaking .ind-bars,
+.circle.state-ai-speaking .ind-voice,
+.circle.state-error .ind-error {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ─── Keyframe Animations ─────────────────────────────────────── */
+@keyframes breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
+  50%      { transform: translate(-50%, -50%) scale(1.06); opacity: 0.15; }
+}
+
+@keyframes ring-out {
+  0%   { transform: translate(-50%, -50%) scale(1); opacity: 0.35; }
+  100% { transform: translate(-50%, -50%) scale(1.18); opacity: 0; }
+}
+
+@keyframes core-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
+}
+
+@keyframes thinking {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50%      { transform: scale(0.96); opacity: 0.45; }
+}
+
+@keyframes thinking-dot {
+  0%, 60%, 100% { transform: scale(0.7); opacity: 0.3; }
+  30%           { transform: scale(1.15); opacity: 1; }
+}
+
+@keyframes voice-wave {
+  0%   { opacity: 0; transform: scale(0.7); }
+  30%  { opacity: 1; transform: scale(1); }
+  70%  { opacity: 0.2; transform: scale(1.12); }
+  100% { opacity: 0; transform: scale(0.7); }
+}
+
+@keyframes ind-spin {
+  from { transform: scale(1) rotate(0deg); }
+  to   { transform: scale(1) rotate(360deg); }
+}
+
+/* ─── State colors ───────────────────────────────────────────── */
+.circle.state-idle         { --glow: var(--voice-accent); }
+.circle.state-connecting   { --glow: var(--voice-processing); }
+.circle.state-connected    { --glow: var(--voice-processing); }
+.circle.state-queued       { --glow: #94a3b8; }
+.circle.state-queued .ind-spinner { animation-duration: 2.4s; }
+.circle.state-queued .circle-ring { animation: breathe 2.6s ease-in-out infinite; }
+.circle.state-your-turn    { --glow: var(--voice-accent); }
+.circle.state-your-turn .circle-ring { animation: breathe 1.6s ease-in-out infinite; }
+.circle.state-listening,
+.circle.state-user-speaking { --glow: var(--voice-listening); }
+.circle.state-processing   { --glow: var(--voice-processing); }
+.circle.state-ai-speaking  { --glow: var(--voice-speaking); }
+.circle.state-error        { --glow: var(--voice-error); }
+
+.circle.state-idle .circle-ring {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+.circle.state-connecting .circle-core,
+.circle.state-connected .circle-core {
+  animation: thinking 1.4s ease-in-out infinite;
+}
+
+.circle.state-user-speaking .circle-ring {
+  animation: none;
+  opacity: calc(0.25 + 0.55 * var(--audio-level, 0));
+  transform: translate(-50%, -50%) scale(calc(1 + 0.08 * var(--audio-level, 0)));
+  transition: transform 0.08s linear, opacity 0.08s linear;
+}
+
+.circle.state-user-speaking .circle-ring-outer {
+  opacity: calc(0.1 + 0.35 * var(--audio-level, 0));
+  transform: translate(-50%, -50%) scale(calc(1 + 0.12 * var(--audio-level, 0)));
+  transition: transform 0.08s linear, opacity 0.08s linear;
+}
+
+.circle.state-listening .circle-ring {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+.circle.state-ai-speaking .circle-core {
+  animation: none;
+  transform: scale(calc(1 + 0.09 * var(--ai-audio-level, 0)));
+  transition: transform 0.08s linear;
+}
+
+.circle.state-ai-speaking .circle-ring {
+  animation: none;
+  opacity: calc(0.3 + 0.5 * var(--ai-audio-level, 0));
+  transform: translate(-50%, -50%) scale(calc(1 + 0.05 * var(--ai-audio-level, 0)));
+  transition: transform 0.08s linear, opacity 0.08s linear;
+}
+
+.circle.state-ai-speaking .circle-ring-outer {
+  animation: none;
+  opacity: calc(0.15 + 0.55 * var(--ai-audio-level, 0));
+  transform: translate(-50%, -50%) scale(calc(1 + 0.18 * var(--ai-audio-level, 0)));
+  transition: transform 0.08s linear, opacity 0.08s linear;
+}
+
+.circle.state-ai-speaking .circle-glow {
+  opacity: calc(0.35 + 0.45 * var(--ai-audio-level, 0));
+  transition: opacity 0.08s linear;
+}
+
+/* ─── Control Panels & Layout ────────────────────────────────── */
+.voice-caption {
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin: 0;
+  min-height: 20px;
+}
+
+.voice-caption.error {
+  color: var(--voice-error);
+}
+
+.voice-transcript-log {
+  width: 100%;
+  height: 120px;
+  overflow-y: auto;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-width: thin;
+}
+
+.voice-transcript-item {
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(4px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.voice-transcript-role {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.voice-transcript-role.user {
+  color: #38bdf8;
+}
+
+.voice-transcript-role.assistant {
+  color: #c084fc;
+}
+
+.voice-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.voice-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.voice-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.voice-btn.active-red {
+  background: var(--voice-accent);
+  border-color: transparent;
+}
+
+.voice-btn.active-red:hover {
+  background: #a00f19;
+}
+
+.voice-btn.muted {
+  background: #f59e0b;
+  border-color: transparent;
+  color: #0f172a;
+}
+.voice-btn.muted:hover {
+  background: #d97706;
+}
+
+/* ─── Queue your-turn countdown button ───────────────────────── */
+.voice-queue-btn {
+  padding: 10px 24px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #0f172a;
+  background: var(--voice-accent);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.2s ease;
+}
+.voice-queue-btn:hover { filter: brightness(1.08); }
+.voice-queue-btn:active { transform: scale(0.97); }
