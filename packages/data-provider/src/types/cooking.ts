@@ -59,7 +59,7 @@ export const CookingChatCategories = [
 ] as const;
 export type CookingChatCategory = (typeof CookingChatCategories)[number];
 export type CookingSessionStatus = 'active' | 'completed';
-export type RecipeCategorizationStatus = 'pending' | 'complete' | 'failed';
+export type RecipeCategorizationStatus = 'pending' | 'processing' | 'complete' | 'failed';
 export type RecipeIllustrationStatus = 'pending' | 'generating' | 'complete' | 'failed';
 export type RecipeDifficulty = 'beginner' | 'intermediate' | 'advanced';
 export type RecipeTimeBucket = 'under_15' | 'under_30' | 'under_60' | 'long_cook';
@@ -227,6 +227,24 @@ export type StartCookingSessionRequest = {
 export type CompleteCookingSessionRequest = {
   rating: number;
   note: string;
+};
+
+export type CookingVoiceConfig = {
+  enabled: boolean;
+  sessionUrl?: string;
+  shareRecipeContext: boolean;
+};
+
+export type PersistCookingVoiceTurnRequest = {
+  conversationId: string;
+  turnId: string;
+  userText: string;
+  assistantText: string;
+};
+
+export type PersistCookingVoiceTurnResponse = {
+  userMessageId: string;
+  assistantMessageId: string;
 };
 
 export type SaveRecipeRequest = {

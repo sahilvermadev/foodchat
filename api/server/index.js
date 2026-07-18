@@ -21,10 +21,12 @@ const {
   handleJsonParseError,
   GenerationJobManager,
   createStreamServices,
+  startSocialImportJobScheduler,
   startSocialPlaylistSyncScheduler,
   initializeFileStorage,
   updateInterfacePermissions,
   preAuthTenantMiddleware,
+  processQueuedSocialImportJobs,
   sweepStuckSocialImports,
 } = require('@librechat/api');
 const { connectDb, indexSync } = require('~/db');
@@ -71,9 +73,7 @@ const startServer = async () => {
 
   logger.info('Connected to MongoDB');
   await runAsSystem(() => migrateCookingDocuments(mongoose.connection));
-  indexSync().catch((err) => {
-    logger.error('[indexSync] Background sync failed:', err);
-  });
+  await indexSync();
 
   app.disable('x-powered-by');
   app.set('trust proxy', trusted_proxy);
@@ -93,9 +93,13 @@ const startServer = async () => {
   runAsSystem(sweepOrphanedPreviews).catch((err) => {
     logger.error('[sweepOrphanedPreviews] Background sweep failed:', err);
   });
-  runAsSystem(sweepStuckSocialImports).catch((err) => {
-    logger.error('[sweepStuckSocialImports] Background sweep failed:', err);
+  runAsSystem(async () => {
+    await sweepStuckSocialImports();
+    await processQueuedSocialImportJobs();
+  }).catch((err) => {
+    logger.error('[SocialImportJobs] Background recovery failed:', err);
   });
+  startSocialImportJobScheduler();
   startSocialPlaylistSyncScheduler();
   const appConfig = await getAppConfig({ baseOnly: true });
   initializeFileStorage(appConfig);
@@ -281,7 +285,6 @@ const startServer = async () => {
       const { createMCPServersRegistry, createMCPManager } = require('~/config');
       createMCPServersRegistry(mongoose);
       await createMCPManager(appConfig.config?.mcpServers || {});
-
 
       const inspectFlags = process.execArgv.some((arg) => arg.startsWith('--inspect'));
       if (inspectFlags || isEnabled(process.env.MEM_DIAG)) {

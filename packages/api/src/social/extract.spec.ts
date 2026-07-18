@@ -53,6 +53,26 @@ describe('social web recipe extraction', () => {
     expect(extractRecipeFromHtml(html)).toBeUndefined();
   });
 
+  test('extracts and resolves an available web recipe thumbnail', () => {
+    const html = `
+      <script type="application/ld+json">
+        ${JSON.stringify({
+          '@type': 'Recipe',
+          name: 'Chicken Tacos',
+          image: { '@type': 'ImageObject', contentUrl: '/images/chicken-tacos.jpg' },
+          recipeIngredient: ['2 chicken thighs', '4 tortillas'],
+          recipeInstructions: ['Cook the chicken.', 'Fill the tortillas.'],
+        })}
+      </script>
+    `;
+
+    expect(
+      extractRecipeFromHtml(html, 'https://recipes.example/dinner/chicken-tacos'),
+    ).toMatchObject({
+      thumbnailUrl: 'https://recipes.example/images/chicken-tacos.jpg',
+    });
+  });
+
   test('prioritizes likely recipe links from social descriptions', () => {
     const links = recipeLinksFromText(`
       COOK the full recipe on https://nickskitchen.com/chipotle-chicken-quesadillas

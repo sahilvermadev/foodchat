@@ -18,7 +18,7 @@ import type {
   UpdateSocialPlaylistSubscriptionRequest,
   UpdateSocialImportRequest,
 } from 'librechat-data-provider';
-import { logger } from '@librechat/data-schemas';
+import { logger, runAsSystem } from '@librechat/data-schemas';
 import type {
   ISocialImport,
   ISocialImportJob,
@@ -42,7 +42,9 @@ const maxLimit = 1000;
 const webExtractionEnabledInTest = 'SOCIAL_IMPORT_ENABLE_WEB_EXTRACTION_IN_TEST';
 const jobsEnabledInTest = 'SOCIAL_IMPORT_ENABLE_JOBS_IN_TEST';
 const autoRunJobsEnabledInTest = 'SOCIAL_IMPORT_AUTO_RUN_JOBS_IN_TEST';
+const socialImportJobLeaseMs = 10 * 60 * 1000;
 let playlistSyncInterval: NodeJS.Timeout | undefined;
+let socialImportJobInterval: NodeJS.Timeout | undefined;
 const trackingParams = new Set([
   'utm_source',
   'utm_medium',
@@ -142,7 +144,10 @@ function cleanText(value: string | null | undefined, maxLength: number): string 
   return clean ? clean.slice(0, maxLength) : undefined;
 }
 
-function cleanMultilineText(value: string | null | undefined, maxLength: number): string | undefined {
+function cleanMultilineText(
+  value: string | null | undefined,
+  maxLength: number,
+): string | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -254,7 +259,11 @@ function normalizeTikTok(url: URL): NormalizedSource {
 
 function normalizeSource(raw: string): NormalizedSource {
   const url = cleanUrl(raw);
-  if (url.hostname === 'youtube.com' || url.hostname === 'm.youtube.com' || url.hostname === 'youtu.be') {
+  if (
+    url.hostname === 'youtube.com' ||
+    url.hostname === 'm.youtube.com' ||
+    url.hostname === 'youtu.be'
+  ) {
     return normalizeYoutube(url);
   }
   if (url.hostname === 'instagram.com') {
@@ -324,11 +333,17 @@ function statusForAvailableText(
   userSuppliedText: string | undefined,
   extractedText?: string,
 ): SocialImportStatus {
-  return userSuppliedText?.trim() || extractedText?.trim() ? 'draft_ready' : initialStatus(provider);
+  return userSuppliedText?.trim() || extractedText?.trim()
+    ? 'draft_ready'
+    : initialStatus(provider);
 }
 
 function draftSummaryForDetails(userSuppliedText: string): string {
-  const firstLine = userSuppliedText.split('\n').find((line) => line.trim())?.trim() ?? '';
+  const firstLine =
+    userSuppliedText
+      .split('\n')
+      .find((line) => line.trim())
+      ?.trim() ?? '';
   return firstLine
     ? `User-provided source details: ${firstLine}`.slice(0, 500)
     : 'User-provided source details are available for drafting.';
@@ -396,9 +411,7 @@ async function shouldQueueSourceExtraction(
   userSuppliedText?: string,
 ): Promise<boolean> {
   return (
-    !userSuppliedText?.trim() &&
-    shouldRunImportJobs() &&
-    (await canExtractSource(user, source))
+    !userSuppliedText?.trim() && shouldRunImportJobs() && (await canExtractSource(user, source))
   );
 }
 
@@ -473,18 +486,20 @@ async function extractSourceText(source: NormalizedSource): Promise<ExtractedSou
         thumbnailUrl: metadata?.thumbnailUrl,
       };
     }
+    let draftSummary = 'Found source-provided text from YouTube metadata.';
+    if (transcript.status === 'found') {
+      draftSummary = 'Found source-provided text from the YouTube transcript.';
+    }
+    if (linkedRecipe) {
+      draftSummary = 'Found the creator-linked recipe page from the YouTube description.';
+    }
     return {
       title: linkedRecipe?.title ?? metadata?.title,
       creatorName: metadata?.creatorName,
       creatorUrl: metadata?.creatorUrl,
       thumbnailUrl: metadata?.thumbnailUrl,
       extractedText,
-      draftSummary:
-        linkedRecipe
-          ? 'Found the creator-linked recipe page from the YouTube description.'
-          : transcript.status === 'found'
-          ? 'Found source-provided text from the YouTube transcript.'
-          : 'Found source-provided text from YouTube metadata.',
+      draftSummary,
     };
   }
   if (source.provider !== 'web' || !shouldExtractWebRecipe()) {
@@ -666,7 +681,9 @@ function buildFilter(user: string, query: SocialImportsQuery): SocialImportListF
   return filter;
 }
 
-function importTitle(socialImport: Pick<SocialImport, 'title' | 'providerContentId' | 'canonicalUrl'>): string {
+function importTitle(
+  socialImport: Pick<SocialImport, 'title' | 'providerContentId' | 'canonicalUrl'>,
+): string {
   return socialImport.title?.trim() || socialImport.providerContentId || socialImport.canonicalUrl;
 }
 
@@ -726,13 +743,13 @@ function draftPromptFromImport(socialImport: SocialImport): string {
     '- Produce the final cookable recipe the user expects to see, not a dump of scraped description, transcript, captions, links, or extraction notes.',
     '- Use every available source signal: YouTube description, transcript/captions, user-provided caption text, linked recipe text, creator title, and source metadata.',
     '- Reconstruct the recipe shown or described in the video as closely as possible.',
-    '- Apply the user\'s saved cooking preferences, dietary rules, location, equipment, and taste profile where available.',
+    "- Apply the user's saved cooking preferences, dietary rules, location, equipment, and taste profile where available.",
     '- Preserve exact source facts when they exist. When the source is incomplete, make a practical cookable version and label estimated quantities or inferred steps as estimated.',
     '- Keep attribution concise in a Notes section; do not expose raw source evidence in the visible recipe.',
     '',
-    sourceEvidence || 'No detailed source evidence was extracted yet. Ask the user for the caption, recipe link, or ingredient notes if critical facts are missing.',
-  ]
-    .join('\n\n');
+    sourceEvidence ||
+      'No detailed source evidence was extracted yet. Ask the user for the caption, recipe link, or ingredient notes if critical facts are missing.',
+  ].join('\n\n');
 }
 
 function documentMarkdownFromImport(socialImport: SocialImport): string {
@@ -787,17 +804,23 @@ function jobErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 500) : 'Unknown import job failure.';
 }
 
+function isDuplicateKeyError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 11000);
+}
+
 export async function processSocialImportJob(jobId: string): Promise<void> {
-  const job = await jobModel().findById(jobId);
-  if (!job || job.status === 'succeeded') {
+  const job = await jobModel().findOneAndUpdate(
+    { _id: jobId, status: 'queued' },
+    {
+      $set: { status: 'processing', stage: 'extract_source_text', startedAt: new Date() },
+      $inc: { attemptCount: 1 },
+      $unset: { lastErrorCode: 1, lastErrorMessage: 1 },
+    },
+    { new: true },
+  );
+  if (!job) {
     return;
   }
-
-  await job.updateOne({
-    $set: { status: 'processing', stage: 'extract_source_text', startedAt: new Date() },
-    $inc: { attemptCount: 1 },
-    $unset: { lastErrorCode: 1, lastErrorMessage: 1 },
-  });
 
   try {
     const socialImport = await model().findOne({ _id: job.socialImportId, user: job.user });
@@ -810,6 +833,7 @@ export async function processSocialImportJob(jobId: string): Promise<void> {
           lastErrorMessage: 'Social import no longer exists.',
           completedAt: new Date(),
         },
+        $unset: { activeKey: 1 },
       });
       return;
     }
@@ -834,6 +858,7 @@ export async function processSocialImportJob(jobId: string): Promise<void> {
         ),
         job.updateOne({
           $set: { status: 'succeeded', stage: 'no_recipe_text', completedAt: new Date() },
+          $unset: { activeKey: 1 },
         }),
       ]);
       return;
@@ -861,6 +886,7 @@ export async function processSocialImportJob(jobId: string): Promise<void> {
       ),
       job.updateOne({
         $set: { status: 'succeeded', stage: 'extracted_source_text', completedAt: new Date() },
+        $unset: { activeKey: 1 },
       }),
     ]);
   } catch (error) {
@@ -871,7 +897,8 @@ export async function processSocialImportJob(jobId: string): Promise<void> {
         {
           $set: {
             status: 'failed',
-            reviewMessage: 'Saved, but Rekky could not read the source. Paste details to create a draft.',
+            reviewMessage:
+              'Saved, but Rekky could not read the source. Paste details to create a draft.',
             draftSummary: message,
             provenance: 'unknown',
           },
@@ -885,6 +912,7 @@ export async function processSocialImportJob(jobId: string): Promise<void> {
           lastErrorMessage: message,
           completedAt: new Date(),
         },
+        $unset: { activeKey: 1 },
       }),
     ]);
     if (process.env.NODE_ENV !== 'test') {
@@ -894,23 +922,40 @@ export async function processSocialImportJob(jobId: string): Promise<void> {
 }
 
 async function queueSocialImportJob(doc: ISocialImport): Promise<void> {
-  const activeJob = await jobModel().findOne({
+  const activeJobFilter = { user: doc.user, socialImportId: idOf(doc), activeKey: 'active' };
+  let job = await jobModel().findOne({
     user: doc.user,
     socialImportId: idOf(doc),
     status: { $in: ['queued', 'processing'] },
   });
-  if (activeJob) {
-    return;
+  if (!job) {
+    try {
+      job = await jobModel().findOneAndUpdate(
+        activeJobFilter,
+        {
+          $setOnInsert: {
+            user: doc.user,
+            socialImportId: idOf(doc),
+            provider: doc.provider,
+            providerContentId: doc.providerContentId,
+            status: 'queued',
+            stage: 'queued',
+            attemptCount: 0,
+            activeKey: 'active',
+          },
+        },
+        { new: true, upsert: true, setDefaultsOnInsert: true },
+      );
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+      job = await jobModel().findOne(activeJobFilter);
+    }
   }
-  const job = await jobModel().create({
-    user: doc.user,
-    socialImportId: idOf(doc),
-    provider: doc.provider,
-    providerContentId: doc.providerContentId,
-    status: 'queued',
-    stage: 'queued',
-    attemptCount: 0,
-  });
+  if (!job) {
+    throw new Error('Failed to queue social import job.');
+  }
   if (process.env.NODE_ENV !== 'test' || process.env[autoRunJobsEnabledInTest] === 'true') {
     void processSocialImportJob(idOf(job));
   }
@@ -930,6 +975,15 @@ export async function createSocialImport(
   const queueExtraction = await shouldQueueSourceExtraction(user, source, userSuppliedText);
   const title = cleanText(payload.title, 140);
   const detailsReady = Boolean(userSuppliedText?.trim());
+  let review = reviewMessage(source.provider);
+  let draftSummaryUpdate: { draftSummary?: string } = {};
+  if (queueExtraction) {
+    review = processingReviewMessage(source.provider);
+    draftSummaryUpdate = { draftSummary: 'Source extraction queued.' };
+  } else if (detailsReady) {
+    review = readyReviewMessage(source.provider);
+    draftSummaryUpdate = { draftSummary: draftSummaryForDetails(userSuppliedText!) };
+  }
   const update = {
     ...source,
     ...(title ? { title } : {}),
@@ -937,16 +991,8 @@ export async function createSocialImport(
     status: queueExtraction
       ? ('processing' as const)
       : statusForAvailableText(source.provider, userSuppliedText),
-    reviewMessage: queueExtraction
-      ? processingReviewMessage(source.provider)
-      : detailsReady
-        ? readyReviewMessage(source.provider)
-        : reviewMessage(source.provider),
-    ...(queueExtraction
-      ? { draftSummary: 'Source extraction queued.' }
-      : detailsReady
-        ? { draftSummary: draftSummaryForDetails(userSuppliedText!) }
-        : {}),
+    reviewMessage: review,
+    ...draftSummaryUpdate,
     provenance: detailsReady ? ('user_edited' as const) : ('unknown' as const),
   };
   const doc = await model().findOneAndUpdate(
@@ -1015,7 +1061,10 @@ export async function listSocialImports(
   const filter = buildFilter(user, query);
   const [total, imports] = await Promise.all([
     model().countDocuments(filter),
-    model().find(filter).sort({ createdAt: -1, _id: -1 }).limit(limit + 1),
+    model()
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit + 1),
   ]);
   const page = imports.slice(0, limit).map(serializeSocialImport);
   const nextCursor = imports.length > limit ? iso(imports[limit - 1].createdAt) : undefined;
@@ -1180,9 +1229,7 @@ export async function createSocialPlaylistSubscription(
 export async function listSocialPlaylistSubscriptions(
   user: string,
 ): Promise<SocialPlaylistSubscriptionsResponse> {
-  const subscriptions = await playlistModel()
-    .find({ user })
-    .sort({ updatedAt: -1, _id: -1 });
+  const subscriptions = await playlistModel().find({ user }).sort({ updatedAt: -1, _id: -1 });
   return { subscriptions: subscriptions.map(serializeSocialPlaylistSubscription) };
 }
 
@@ -1222,13 +1269,22 @@ export async function processDueSocialPlaylistSyncs(limit = 10): Promise<number>
   if (!process.env.YOUTUBE_API_KEY?.trim()) {
     return 0;
   }
-  const subscriptions = await playlistModel()
-    .find({
-      status: 'active',
-      $or: [{ nextSyncAt: { $lte: new Date() } }, { nextSyncAt: { $exists: false } }],
-    })
-    .sort({ nextSyncAt: 1, updatedAt: 1 })
-    .limit(Math.max(1, Math.min(Math.floor(limit), 50)));
+  const subscriptions: ISocialPlaylistSubscription[] = [];
+  const claimLimit = Math.max(1, Math.min(Math.floor(limit), 50));
+  for (let index = 0; index < claimLimit; index += 1) {
+    const subscription = await playlistModel().findOneAndUpdate(
+      {
+        status: 'active',
+        $or: [{ nextSyncAt: { $lte: new Date() } }, { nextSyncAt: { $exists: false } }],
+      },
+      { $set: { nextSyncAt: nextPlaylistSyncDate() } },
+      { new: true, sort: { nextSyncAt: 1, updatedAt: 1 } },
+    );
+    if (!subscription) {
+      break;
+    }
+    subscriptions.push(subscription);
+  }
   await Promise.all(
     subscriptions.map((subscription) =>
       syncSocialPlaylistSubscription(subscription.user, idOf(subscription), false),
@@ -1242,7 +1298,7 @@ export function startSocialPlaylistSyncScheduler(): void {
     return;
   }
   playlistSyncInterval = setInterval(() => {
-    void processDueSocialPlaylistSyncs().catch((error) => {
+    void runAsSystem(processDueSocialPlaylistSyncs).catch((error) => {
       logger.warn('[SocialPlaylistSync] scheduler failed', { error: jobErrorMessage(error) });
     });
   }, playlistSchedulerIntervalMs());
@@ -1284,14 +1340,15 @@ export async function retrySocialImportProcessing(
 
 export async function sweepStuckSocialImports(): Promise<number> {
   const activeJobs = await jobModel().find({
-    status: { $in: ['queued', 'processing'] },
+    status: 'processing',
+    startedAt: { $lt: new Date(Date.now() - socialImportJobLeaseMs) },
   });
   if (!activeJobs.length) {
     return 0;
   }
-  const jobIds = activeJobs.map(j => idOf(j));
-  const importIds = activeJobs.map(j => j.socialImportId);
-  
+  const jobIds = activeJobs.map((j) => idOf(j));
+  const importIds = activeJobs.map((j) => j.socialImportId);
+
   await Promise.all([
     jobModel().updateMany(
       { _id: { $in: jobIds } },
@@ -1302,8 +1359,9 @@ export async function sweepStuckSocialImports(): Promise<number> {
           lastErrorCode: 'server_restart',
           lastErrorMessage: 'Import interrupted by server restart.',
           completedAt: new Date(),
-        }
-      }
+        },
+        $unset: { activeKey: 1 },
+      },
     ),
     model().updateMany(
       { _id: { $in: importIds }, status: 'processing' },
@@ -1313,13 +1371,15 @@ export async function sweepStuckSocialImports(): Promise<number> {
           reviewMessage: 'Saved, but the import was interrupted. Click retry to resume.',
           draftSummary: 'Import interrupted by server restart.',
           provenance: 'unknown',
-        }
-      }
-    )
+        },
+      },
+    ),
   ]);
-  
+
   if (process.env.NODE_ENV !== 'test') {
-    logger.info(`[sweepStuckSocialImports] Marked ${activeJobs.length} stuck social import jobs as failed.`);
+    logger.info(
+      `[sweepStuckSocialImports] Marked ${activeJobs.length} stuck social import jobs as failed.`,
+    );
   }
   return activeJobs.length;
 }
@@ -1331,6 +1391,27 @@ export async function processQueuedSocialImportJobs(limit = 10): Promise<number>
     .limit(Math.max(1, Math.min(Math.floor(limit), 50)));
   await Promise.all(jobs.map((job) => processSocialImportJob(idOf(job))));
   return jobs.length;
+}
+
+export function startSocialImportJobScheduler(): void {
+  if (socialImportJobInterval || process.env.SOCIAL_IMPORT_JOB_SCHEDULER === 'false') {
+    return;
+  }
+  const configuredInterval = Number(process.env.SOCIAL_IMPORT_JOB_SCHEDULER_INTERVAL_MS);
+  const intervalMs = Number.isFinite(configuredInterval)
+    ? Math.max(10_000, configuredInterval)
+    : 60_000;
+  socialImportJobInterval = setInterval(() => {
+    void runAsSystem(async () => {
+      await sweepStuckSocialImports();
+      await processQueuedSocialImportJobs();
+    }).catch((error) => {
+      logger.warn('[SocialImportJobs] recovery scheduler failed', {
+        error: jobErrorMessage(error),
+      });
+    });
+  }, intervalMs);
+  socialImportJobInterval.unref?.();
 }
 
 export async function updateSocialImport(
@@ -1359,8 +1440,19 @@ export async function updateSocialImport(
   const autoStatus = detailsWereUpdated
     ? statusForAvailableText(existing.provider, userSuppliedText, existing.extractedText)
     : undefined;
+  const nextStatus = payload.status ?? autoStatus;
+  let detailReviewMessage = reviewMessage(existing.provider);
+  let detailProvenance: SocialImport['provenance'] = 'unknown';
+  if (sourceTextReady) {
+    detailReviewMessage = sourceTextReviewMessage(existing.provider);
+    detailProvenance = 'source_exact';
+  }
+  if (detailsReady) {
+    detailReviewMessage = readyReviewMessage(existing.provider);
+    detailProvenance = 'user_edited';
+  }
   const update = {
-    ...(payload.status ? { status: payload.status } : autoStatus ? { status: autoStatus } : {}),
+    ...(nextStatus ? { status: nextStatus } : {}),
     ...(cleanText(payload.title, 140) ? { title: cleanText(payload.title, 140) } : {}),
     ...(cleanText(payload.creatorName, 120)
       ? { creatorName: cleanText(payload.creatorName, 120) }
@@ -1368,16 +1460,8 @@ export async function updateSocialImport(
     ...(payload.userSuppliedText !== undefined
       ? {
           userSuppliedText,
-          reviewMessage: detailsReady
-            ? readyReviewMessage(existing.provider)
-            : sourceTextReady
-              ? sourceTextReviewMessage(existing.provider)
-              : reviewMessage(existing.provider),
-          provenance: detailsReady
-            ? ('user_edited' as const)
-            : sourceTextReady
-              ? ('source_exact' as const)
-              : ('unknown' as const),
+          reviewMessage: detailReviewMessage,
+          provenance: detailProvenance,
         }
       : {}),
     ...(detailsReady && userSuppliedText
@@ -1393,7 +1477,11 @@ export async function updateSocialImport(
   if (!Object.keys(update).length) {
     throw new SocialImportValidationError('Social import update is empty.');
   }
-  const doc = await model().findOneAndUpdate({ _id: importId, user }, { $set: update }, { new: true });
+  const doc = await model().findOneAndUpdate(
+    { _id: importId, user },
+    { $set: update },
+    { new: true },
+  );
   return doc ? serializeSocialImport(doc) : null;
 }
 

@@ -53,11 +53,7 @@ export class RecipeCategorizationError extends Error {
 }
 
 function cleanCategory(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ');
+  return value.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
 }
 
 function normalizeArray(value: string[] | undefined): string[] {
@@ -79,10 +75,7 @@ function normalizeTimeBucket(value: string | undefined): RecipeTimeBucket | unde
 }
 
 function normalizeShortDescription(value: string | undefined): string {
-  const clean = (value ?? '')
-    .replace(/\s+/g, ' ')
-    .replace(/[{}]/g, '')
-    .trim();
+  const clean = (value ?? '').replace(/\s+/g, ' ').replace(/[{}]/g, '').trim();
 
   if (!clean) {
     throw new RecipeCategorizationError('Recipe categorization returned no short description.');
@@ -101,7 +94,10 @@ function normalizeShortDescription(value: string | undefined): string {
     return description.replace(/\s+([.,;:!?])/g, '$1');
   }
 
-  return `${description.slice(0, 169).trimEnd().replace(/[.,;:!?-]+$/, '')}…`;
+  return `${description
+    .slice(0, 169)
+    .trimEnd()
+    .replace(/[.,;:!?-]+$/, '')}…`;
 }
 
 export function inferTimeBucket(recipe?: StructuredRecipe): RecipeTimeBucket | undefined {

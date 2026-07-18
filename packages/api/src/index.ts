@@ -32,6 +32,7 @@ export * from './agents';
 export * from './skills';
 /* Cooking */
 export * from './cooking';
+export * from './illustrations/media';
 /* Recipes */
 export * from './recipes';
 /* Social imports */

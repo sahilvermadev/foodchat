@@ -10,6 +10,7 @@ const {
   deleteSocialPlaylistSubscription,
   deleteSocialImport,
   getExistingPreferences,
+  fetchRemoteImage,
   limiterCache,
   listSocialImportJobs,
   listSocialImports,
@@ -24,119 +25,31 @@ const { requireJwtAuth, configMiddleware } = require('~/server/middleware');
 
 const router = express.Router();
 
-const fs = require('fs');
-const path = require('path');
-const dns = require('dns').promises;
+const socialImageProxyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.SOCIAL_IMAGE_PROXY_RATE_LIMIT_MAX) || 240,
+  store: limiterCache('social_image_proxy'),
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) =>
+    res.status(429).json({ error: 'Too many image requests. Please try again later.' }),
+});
 
-const CACHE_DIR = path.join(__dirname, '../../..', 'uploads', 'image-cache');
-
-try {
-  if (!fs.existsSync(CACHE_DIR)) {
-    fs.mkdirSync(CACHE_DIR, { recursive: true });
-  }
-} catch (err) {
-  console.error('Failed to create image cache directory:', err);
-}
-
-function getCacheKey(url) {
-  return crypto.createHash('md5').update(url).digest('hex');
-}
-
-async function isPrivateIP(hostname) {
-  try {
-    const lookup = await dns.lookup(hostname);
-    const ip = lookup.address;
-
-    if (ip === '::1' || ip === 'localhost') {
-      return true;
-    }
-
-    const parts = ip.split('.').map(Number);
-    if (parts.length === 4) {
-      const [p1, p2] = parts;
-      if (p1 === 10) return true;
-      if (p1 === 127) return true;
-      if (p1 === 172 && p2 >= 16 && p2 <= 31) return true;
-      if (p1 === 192 && p2 === 168) return true;
-      if (p1 === 169 && p2 === 254) return true;
-      if (p1 === 0) return true;
-    } else if (ip.includes(':')) {
-      const cleanIp = ip.toLowerCase();
-      if (cleanIp === '::1') return true;
-      if (cleanIp.startsWith('fe80:')) return true;
-      if (cleanIp.startsWith('fc00:') || cleanIp.startsWith('fd00:')) return true;
-    }
-
-    return false;
-  } catch {
-    return true;
-  }
-}
-
-router.get('/image-proxy', async (req, res) => {
+router.get('/image-proxy', socialImageProxyLimiter, async (req, res) => {
   try {
     const imageUrl = req.query.url;
     if (!imageUrl) {
       return res.status(400).json({ error: 'URL is required' });
     }
-    const parsed = new URL(imageUrl);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return res.status(400).json({ error: 'Invalid URL protocol' });
-    }
-
-    if (await isPrivateIP(parsed.hostname)) {
-      return res.status(400).json({ error: 'Access to private network is restricted' });
-    }
-
-    const cacheKey = getCacheKey(imageUrl);
-    const binPath = path.join(CACHE_DIR, `${cacheKey}.bin`);
-    const metaPath = path.join(CACHE_DIR, `${cacheKey}.meta`);
-
-    if (fs.existsSync(binPath) && fs.existsSync(metaPath)) {
-      try {
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-        const buffer = fs.readFileSync(binPath);
-        res.set({
-          'Content-Type': meta.contentType,
-          'Cache-Control': 'public, max-age=31536000, immutable',
-        });
-        return res.send(buffer);
-      } catch {
-        // Fallback to fetching
-      }
-    }
-
-    const response = await fetch(imageUrl, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-    });
-    if (!response.ok) {
-      return res.status(response.status).send(`Failed to fetch image: ${response.statusText}`);
-    }
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    if (!contentType.startsWith('image/')) {
-      return res.status(400).send('URL must point to an image');
-    }
-
-    const buffer = await response.arrayBuffer();
-    const nodeBuffer = Buffer.from(buffer);
-
-    try {
-      fs.writeFileSync(binPath, nodeBuffer);
-      fs.writeFileSync(metaPath, JSON.stringify({ contentType }), 'utf8');
-    } catch {
-      // Ignore cache write errors
-    }
+    const image = await fetchRemoteImage(imageUrl);
 
     res.set({
-      'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Type': image.contentType,
+      'Cache-Control': 'public, max-age=3600',
     });
-    return res.send(nodeBuffer);
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
+    return res.send(image.buffer);
+  } catch (_error) {
+    return res.status(400).json({ error: 'Unable to fetch that image.' });
   }
 });
 

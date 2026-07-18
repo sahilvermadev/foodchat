@@ -13,7 +13,11 @@ import type {
 import type { ISavedRecipe, ISocialImport } from '@librechat/data-schemas';
 import { categorizeRecipe } from './categorize';
 import { illustrateRecipe } from './illustrate';
-import { createIllustrationThumbnail, decodeIllustrationDataUrl } from '../illustrations/media';
+import {
+  createIllustrationThumbnail,
+  decodeIllustrationDataUrl,
+  fetchRemoteImage,
+} from '../illustrations/media';
 import type { IllustrationMedia } from '../illustrations/media';
 import { CookingValidationError, normalizeRecipe } from '../cooking/validation';
 
@@ -21,8 +25,8 @@ const maxLimit = 50;
 const pendingTimeoutMs = 1000 * 60 * 2;
 const externalImageFetchTimeoutMs = 5000;
 const maxExternalImageBytes = 5 * 1024 * 1024;
-const externalImageContentTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const activeIllustrationJobs = new Set<string>();
+const activeCategorizationJobs = new Set<string>();
 const usersWithRepairedTitles = new Set<string>();
 const usersWithRepairedSaveLists = new Set<string>();
 
@@ -56,71 +60,15 @@ function socialImportModel() {
   return mongoose.model<ISocialImport>('SocialImport');
 }
 
-function cleanExternalImageUrl(value: string | undefined): string | undefined {
-  const candidate = value?.trim();
-  if (!candidate) {
-    return undefined;
-  }
-  try {
-    const url = new URL(candidate);
-    return url.protocol === 'https:' ? url.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function cleanTrustedExternalImageUrl(value: string | undefined): string | undefined {
-  const candidate = cleanExternalImageUrl(value);
-  if (!candidate) {
-    return undefined;
-  }
-  const hostname = new URL(candidate).hostname.toLowerCase();
-  if (hostname === 'ytimg.com' || hostname.endsWith('.ytimg.com')) {
-    return candidate;
-  }
-  if (hostname === 'img.youtube.com') {
-    return candidate;
-  }
-  return undefined;
-}
-
-function responseContentType(response: Response): string | undefined {
-  return response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
-}
-
 async function fetchExternalImage(url: string): Promise<IllustrationMedia | null> {
-  const trustedUrl = cleanTrustedExternalImageUrl(url);
-  if (!trustedUrl) {
-    return null;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), externalImageFetchTimeoutMs);
   try {
-    const response = await globalThis.fetch(trustedUrl, {
-      redirect: 'follow',
-      signal: controller.signal,
+    return await fetchRemoteImage(url, {
+      allowedHosts: ['ytimg.com', 'img.youtube.com'],
+      maxBytes: maxExternalImageBytes,
+      timeoutMs: externalImageFetchTimeoutMs,
     });
-    if (!response.ok) {
-      return null;
-    }
-    const contentType = responseContentType(response);
-    if (!contentType || !externalImageContentTypes.has(contentType)) {
-      return null;
-    }
-    const contentLength = Number(response.headers.get('content-length') ?? 0);
-    if (contentLength > maxExternalImageBytes) {
-      return null;
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length === 0 || buffer.length > maxExternalImageBytes) {
-      return null;
-    }
-    return { buffer, contentType };
   } catch {
     return null;
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -156,7 +104,7 @@ async function socialImportThumbnailUrl(
     .findOne({ user, draftId: sourceDraftId })
     .select('thumbnailUrl')
     .lean<{ thumbnailUrl?: string }>();
-  return cleanExternalImageUrl(socialImport?.thumbnailUrl);
+  return socialImport?.thumbnailUrl?.trim() || undefined;
 }
 
 async function markSocialImportSavedRecipe(
@@ -798,28 +746,30 @@ async function failStalePending(user: string): Promise<void> {
     model().updateMany(
       {
         user,
-        categorizationStatus: 'pending',
+        categorizationStatus: 'processing',
         updatedAt: staleUpdatedAt,
       },
-      { $set: { categorizationStatus: 'failed' } },
+      { $set: { categorizationStatus: 'pending' } },
     ),
     model().updateMany(
       {
         user,
-        illustrationStatus: { $in: ['pending', 'generating'] },
+        illustrationStatus: 'generating',
         updatedAt: staleUpdatedAt,
       },
-      { $set: { illustrationStatus: 'failed' } },
+      { $set: { illustrationStatus: 'pending' } },
     ),
   ]);
 }
 
 async function runCategorization(recipeId: string, version: number): Promise<void> {
   const Recipe = model();
-  const recipe = await Recipe.findById(recipeId).select(
-    '-illustrationUrl -illustrationData -illustrationThumbnail',
-  );
-  if (!recipe || recipe.categorizationVersion !== version) {
+  const recipe = await Recipe.findOneAndUpdate(
+    { _id: recipeId, categorizationVersion: version, categorizationStatus: 'pending' },
+    { $set: { categorizationStatus: 'processing' } },
+    { new: true },
+  ).select('-illustrationUrl -illustrationData -illustrationThumbnail');
+  if (!recipe) {
     return;
   }
 
@@ -828,19 +778,35 @@ async function runCategorization(recipeId: string, version: number): Promise<voi
       serializeSavedRecipe(recipe),
     );
     await Recipe.updateOne(
-      { _id: recipeId, categorizationVersion: version },
+      { _id: recipeId, categorizationVersion: version, categorizationStatus: 'processing' },
       { $set: { categorization, shortDescription, categorizationStatus: 'complete' } },
     );
   } catch {
     await Recipe.updateOne(
-      { _id: recipeId, categorizationVersion: version },
+      { _id: recipeId, categorizationVersion: version, categorizationStatus: 'processing' },
       { $set: { categorizationStatus: 'failed' } },
     );
   }
 }
 
 function scheduleCategorization(recipeId: string, version: number): void {
-  void runCategorization(recipeId, version);
+  const jobKey = `${recipeId}:${version}`;
+  if (activeCategorizationJobs.has(jobKey)) {
+    return;
+  }
+  activeCategorizationJobs.add(jobKey);
+  void runCategorization(recipeId, version).finally(() => {
+    activeCategorizationJobs.delete(jobKey);
+  });
+}
+
+function scheduleMissingCategorizations(recipes: ISavedRecipe[]): void {
+  for (const recipe of recipes) {
+    if (recipe.documentType !== 'recipe' || recipe.categorizationStatus !== 'pending') {
+      continue;
+    }
+    scheduleCategorization(idOf(recipe), recipe.categorizationVersion);
+  }
 }
 
 async function runIllustration(recipeId: string, version: number): Promise<void> {
@@ -930,6 +896,16 @@ export async function saveRecipe(user: string, payload: SaveRecipeRequest): Prom
   );
   const documentType = payload.documentType ?? 'recipe';
   const enrichRecipe = documentType === 'recipe';
+  let illustrationFields = {};
+  if (importedSocialThumbnail) {
+    illustrationFields = {
+      illustrationData: importedSocialThumbnail.illustration.buffer,
+      illustrationContentType: importedSocialThumbnail.illustration.contentType,
+      illustrationThumbnail: importedSocialThumbnail.thumbnail.buffer,
+    };
+  } else if (socialThumbnailUrl) {
+    illustrationFields = { illustrationUrl: socialThumbnailUrl };
+  }
   const saved = await Recipe.create({
     user,
     title,
@@ -945,15 +921,7 @@ export async function saveRecipe(user: string, payload: SaveRecipeRequest): Prom
     ...(recipe ? { recipe } : {}),
     ...(payload.sourceConversationId ? { sourceConversationId: payload.sourceConversationId } : {}),
     ...(payload.sourceDraftId ? { sourceDraftId: payload.sourceDraftId } : {}),
-    ...(importedSocialThumbnail
-      ? {
-          illustrationData: importedSocialThumbnail.illustration.buffer,
-          illustrationContentType: importedSocialThumbnail.illustration.contentType,
-          illustrationThumbnail: importedSocialThumbnail.thumbnail.buffer,
-        }
-      : socialThumbnailUrl
-        ? { illustrationUrl: socialThumbnailUrl }
-        : {}),
+    ...illustrationFields,
     categorizationStatus: enrichRecipe ? 'pending' : 'complete',
     illustrationStatus: socialThumbnailUrl ? 'complete' : 'pending',
     categorizationVersion: 1,
@@ -1126,6 +1094,7 @@ export async function listRecipes(
     Recipe.countDocuments(listFilter(user, query, false)),
   ]);
   scheduleMissingIllustrations(recipes);
+  scheduleMissingCategorizations(recipes);
   const page = recipes.slice(0, limit).map(serializeSavedRecipeSummary);
   const next = recipes.length > limit ? recipes[limit - 1] : undefined;
   return {

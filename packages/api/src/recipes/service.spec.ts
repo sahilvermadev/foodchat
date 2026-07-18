@@ -16,6 +16,18 @@ import {
 import { categorizeRecipe } from './categorize';
 import { illustrateRecipe } from './illustrate';
 
+type StoredRecipe = {
+  title: string;
+  recipe: StructuredRecipe;
+  saveList: string;
+  illustrationStatus: string;
+  illustrationData?: Buffer;
+};
+
+async function findStoredRecipe(id: unknown): Promise<StoredRecipe | null> {
+  return mongoose.models.SavedRecipe.findById(id).lean<StoredRecipe>();
+}
+
 jest.mock('./categorize', () => ({
   categorizeRecipe: jest.fn(),
 }));
@@ -25,6 +37,7 @@ jest.mock('./illustrate', () => ({
 }));
 
 jest.mock('../illustrations/media', () => ({
+  fetchRemoteImage: jest.fn(),
   decodeIllustrationDataUrl: jest.fn((url) => {
     if (url === 'data:image/png;base64,mockimagedata') {
       return { buffer: Buffer.from('mockimagedata'), contentType: 'image/png' };
@@ -108,7 +121,7 @@ describe('saved recipe title integrity', () => {
     expect(saved.title).toBe('Thai Iced Tea');
     expect(saved.recipe?.title).toBe('Thai Iced Tea');
 
-    const persisted = await mongoose.models.SavedRecipe.findById(saved._id).lean();
+    const persisted = await findStoredRecipe(saved._id);
     expect(persisted?.title).toBe('Thai Iced Tea');
     expect(persisted?.recipe.title).toBe('Thai Iced Tea');
   });
@@ -180,7 +193,7 @@ describe('saved recipe title integrity', () => {
     const result = await listRecipes('legacy-recipe-user', {});
 
     expect(result.recipes[0]?.title).toBe('Thai Iced Tea');
-    const repaired = await mongoose.models.SavedRecipe.findById(created._id).lean();
+    const repaired = await findStoredRecipe(created._id);
     expect(repaired?.title).toBe('Thai Iced Tea');
     expect(repaired?.recipe.title).toBe('Thai Iced Tea');
   });
@@ -265,7 +278,7 @@ describe('saved recipe lists', () => {
 
     const cooked = await listRecipes('legacy-recipe-list-user', { saveList: 'cooked_already' });
     const wanted = await listRecipes('legacy-recipe-list-user', { saveList: 'want_to_cook' });
-    const repaired = await mongoose.models.SavedRecipe.findById(created._id).lean();
+    const repaired = await findStoredRecipe(created._id);
 
     expect(cooked.recipes).toHaveLength(0);
     expect(wanted.recipes).toHaveLength(1);
@@ -390,14 +403,14 @@ describe('saved recipe illustrations', () => {
     });
 
     await listRecipes('pending-image-user', {});
-    let generating = await mongoose.models.SavedRecipe.findById(stored._id).lean();
+    let generating = await findStoredRecipe(stored._id);
     for (
       let attempt = 0;
       attempt < 10 && generating?.illustrationStatus !== 'generating';
       attempt += 1
     ) {
       await new Promise<void>((resolve) => setImmediate(resolve));
-      generating = await mongoose.models.SavedRecipe.findById(stored._id).lean();
+      generating = await findStoredRecipe(stored._id);
     }
     expect(generating?.illustrationStatus).toBe('generating');
 
@@ -465,7 +478,7 @@ describe('saved recipe illustrations', () => {
     expect(updated?.illustrationStatus).toBe('complete');
     expect(updated?.illustrationUrl).toContain(`/api/recipes/${stored._id}/illustration?v=`);
 
-    const persisted = await mongoose.models.SavedRecipe.findById(stored._id).lean();
+    const persisted = await findStoredRecipe(stored._id);
     expect(persisted?.illustrationStatus).toBe('complete');
     expect(persisted?.illustrationData).toBeDefined();
     expect(illustrateRecipe).not.toHaveBeenCalled();
@@ -497,14 +510,14 @@ describe('saved recipe illustrations', () => {
     expect(updated?.title).toBe('Green Iced Tea');
     expect(updated?.illustrationStatus).toBe('pending');
 
-    let persisted = await mongoose.models.SavedRecipe.findById(stored._id).lean();
+    let persisted = await findStoredRecipe(stored._id);
     for (
       let attempt = 0;
       attempt < 30 && persisted?.illustrationStatus !== 'complete';
       attempt += 1
     ) {
       await new Promise<void>((resolve) => setImmediate(resolve));
-      persisted = await mongoose.models.SavedRecipe.findById(stored._id).lean();
+      persisted = await findStoredRecipe(stored._id);
     }
 
     expect(persisted?.illustrationStatus).toBe('complete');

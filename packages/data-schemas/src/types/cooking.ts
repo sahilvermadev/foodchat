@@ -115,6 +115,7 @@ export interface ISocialImportJob extends Document {
   status: 'queued' | 'processing' | 'succeeded' | 'failed';
   stage: string;
   attemptCount: number;
+  activeKey?: 'active';
   lastErrorCode?: string;
   lastErrorMessage?: string;
   startedAt?: Date;
@@ -157,8 +158,7 @@ export interface ISocialPlaylistSubscription extends Document {
   updatedAt?: Date;
 }
 
-export interface IGuestLimit extends Document {
-  _id: string;
+export interface IGuestLimit extends Document<string> {
   count: number;
   expiresAt: Date;
   createdAt?: Date;

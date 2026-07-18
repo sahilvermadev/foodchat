@@ -22,9 +22,7 @@ export type TranscriptResult =
   | { status: 'not_available'; reason: string }
   | { status: 'temporarily_failed'; reason: string; retryAfterHours: number };
 
-export type ExperimentalYouTubeTranscriptFetcher = (
-  videoId: string,
-) => Promise<TranscriptResult>;
+export type ExperimentalYouTubeTranscriptFetcher = (videoId: string) => Promise<TranscriptResult>;
 
 let testFetcher: ExperimentalYouTubeTranscriptFetcher | undefined;
 
@@ -32,7 +30,12 @@ function model() {
   return mongoose.model<ISocialTranscript>('SocialTranscript');
 }
 
-function cleanNumber(value: string | undefined, fallback: number, min: number, max: number): number {
+function cleanNumber(
+  value: string | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
     return fallback;
@@ -269,7 +272,9 @@ async function recordTranscriptResult(
         failureReason: result.reason,
         lastErrorMessage: result.reason,
         nextAttemptAt:
-          result.status === 'temporarily_failed' ? retryDate(result.retryAfterHours) : retryDate(72),
+          result.status === 'temporarily_failed'
+            ? retryDate(result.retryAfterHours)
+            : retryDate(72),
       },
       $inc: { attemptCount: 1 },
     },

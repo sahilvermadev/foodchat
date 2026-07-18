@@ -19,7 +19,9 @@ const {
   ErrorController,
   performStartupChecks,
   handleJsonParseError,
+  startSocialImportJobScheduler,
   startSocialPlaylistSyncScheduler,
+  processQueuedSocialImportJobs,
   initializeFileStorage,
   preAuthTenantMiddleware,
   sweepStuckSocialImports,
@@ -217,9 +219,7 @@ if (cluster.isMaster) {
     await runAsSystem(() => migrateCookingDocuments(mongoose.connection));
 
     /** Background index sync (non-blocking) */
-    indexSync().catch((err) => {
-      logger.error(`[Worker ${process.pid}][indexSync] Background sync failed:`, err);
-    });
+    await indexSync();
 
     app.disable('x-powered-by');
     app.set('trust proxy', trusted_proxy);
@@ -231,10 +231,14 @@ if (cluster.isMaster) {
     runAsSystem(sweepOrphanedPreviews).catch((err) => {
       logger.error('[sweepOrphanedPreviews] Background sweep failed:', err);
     });
-    runAsSystem(sweepStuckSocialImports).catch((err) => {
-      logger.error('[sweepStuckSocialImports] Background sweep failed:', err);
+    runAsSystem(async () => {
+      await sweepStuckSocialImports();
+      await processQueuedSocialImportJobs();
+    }).catch((err) => {
+      logger.error('[SocialImportJobs] Background recovery failed:', err);
     });
 
+    startSocialImportJobScheduler();
     startSocialPlaylistSyncScheduler();
     /** Initialize app configuration */
     const appConfig = await getAppConfig();

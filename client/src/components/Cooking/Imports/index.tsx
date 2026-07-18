@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useToastContext } from '@librechat/client';
@@ -33,7 +33,6 @@ import {
 } from './components';
 import type { SourceFilter, ViewFilter } from './helpers';
 import {
-  displayTitle,
   errorMessage,
   groupImportsByTimeline,
   isYouTubePlaylistUrl,
@@ -68,7 +67,7 @@ export default function SocialImports() {
       q: debouncedQuery,
       view: viewFilter === 'all' ? undefined : viewFilter,
       provider: sourceFilter === 'all' ? undefined : sourceFilter,
-      limit: 500, // Load all recipes on the first page to allow fast local filtering/sorting
+      limit: 500,
     }),
     [debouncedQuery, sourceFilter, viewFilter],
   );
@@ -77,9 +76,10 @@ export default function SocialImports() {
       data?.pages.some((page) =>
         page.imports.some((socialImport) => socialImport.status === 'processing'),
       )
-        ? 3000
+        ? 10000
         : false,
   });
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = importsQuery;
   const playlistsQuery = useSocialPlaylistSubscriptionsQuery();
   const createImport = useCreateSocialImportMutation();
   const createPlaylist = useCreateSocialPlaylistSubscriptionMutation();
@@ -90,9 +90,19 @@ export default function SocialImports() {
   const updatePlaylist = useUpdateSocialPlaylistSubscriptionMutation();
   const syncPlaylist = useSyncSocialPlaylistSubscriptionMutation();
   const deletePlaylist = useDeleteSocialPlaylistSubscriptionMutation();
-  const imports = importsQuery.data?.pages.flatMap((page) => page.imports) ?? [];
+  const imports = useMemo(
+    () => importsQuery.data?.pages.flatMap((page) => page.imports) ?? [],
+    [importsQuery.data?.pages],
+  );
   const playlists = playlistsQuery.data?.subscriptions ?? [];
-  
+
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) {
+      return;
+    }
+    void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
   const creators = useMemo(() => {
     const set = new Set<string>();
     imports.forEach((imp) => {
@@ -124,9 +134,13 @@ export default function SocialImports() {
 
     // 3. Sort by criteria
     if (sortBy === 'newest') {
-      result.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+      result.sort(
+        (a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
+      );
     } else if (sortBy === 'oldest') {
-      result.sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
+      result.sort(
+        (a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime(),
+      );
     } else if (sortBy === 'title_asc') {
       result.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''));
     } else if (sortBy === 'title_desc') {
@@ -174,13 +188,6 @@ export default function SocialImports() {
     return count;
   }, [viewFilter, sourceFilter, selectedCategory, selectedCreator, sortBy]);
 
-  const activeFiltersCountInPanel = useMemo(() => {
-    let count = 0;
-    if (viewFilter !== 'all') count++;
-    if (sortBy !== 'newest') count++;
-    return count;
-  }, [viewFilter, sortBy]);
-
   const clearAllFilters = () => {
     setViewFilter('all');
     setSourceFilter('all');
@@ -193,24 +200,25 @@ export default function SocialImports() {
     setFiltersExpanded((prev) => !prev);
   };
 
-  const showPlaylistSyncResult = (result: {
-    subscription: SocialPlaylistSubscription;
-    importsCreated: number;
-  }) => {
-    if (result.subscription.status === 'failed') {
+  const showPlaylistSyncResult = useCallback(
+    (result: { subscription: SocialPlaylistSubscription; importsCreated: number }) => {
+      if (result.subscription.status === 'failed') {
+        showToast({
+          status: 'error',
+          message:
+            result.subscription.lastErrorMessage || localize('com_social_imports_playlist_error'),
+        });
+        return;
+      }
       showToast({
-        status: 'error',
-        message: result.subscription.lastErrorMessage || localize('com_social_imports_playlist_error'),
+        status: 'success',
+        message: localize('com_social_imports_playlist_synced', {
+          count: result.importsCreated,
+        }),
       });
-      return;
-    }
-    showToast({
-      status: 'success',
-      message: localize('com_social_imports_playlist_synced', {
-        count: result.importsCreated,
-      }),
-    });
-  };
+    },
+    [localize, showToast],
+  );
 
   useEffect(() => {
     setDetailsByImport((current) => {
@@ -276,7 +284,15 @@ export default function SocialImports() {
       },
       { onSuccess, onError },
     );
-  }, [createImport, createPlaylist, localize, searchParams, setSearchParams, showToast]);
+  }, [
+    createImport,
+    createPlaylist,
+    localize,
+    searchParams,
+    setSearchParams,
+    showPlaylistSyncResult,
+    showToast,
+  ]);
 
   const submitImport = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -362,30 +378,11 @@ export default function SocialImports() {
     );
   };
 
-  const updateDetails = (importId: string, value: string) => {
-    setDetailsByImport((current) => ({ ...current, [importId]: value }));
-  };
-
-  const saveDetails = (socialImport: SocialImport) => {
-    const userSuppliedText = detailsByImport[socialImport._id] ?? '';
-    updateImport.mutate(
-      { importId: socialImport._id, payload: { userSuppliedText } },
-      {
-        onSuccess: (updatedImport) => {
-          setDetailsByImport((current) => ({
-            ...current,
-            [socialImport._id]: updatedImport.userSuppliedText ?? '',
-          }));
-          showToast({ status: 'success', message: localize('com_social_imports_details_saved') });
-        },
-        onError: () => {
-          showToast({ status: 'error', message: localize('com_social_imports_details_error') });
-        },
-      },
-    );
-  };
-
-  const draftWithRekky = (socialImport: SocialImport, detailsValue: string, detailsDirty: boolean) => {
+  const draftWithRekky = (
+    socialImport: SocialImport,
+    detailsValue: string,
+    detailsDirty: boolean,
+  ) => {
     if (socialImport.draftConversationId && !detailsDirty) {
       navigate(`/cook/${socialImport.draftConversationId}`);
       return;
@@ -458,153 +455,148 @@ export default function SocialImports() {
   };
 
   const hasMoreLocal = filteredAndSortedImports.length > visibleLimit;
-  const hasMore = hasMoreLocal || importsQuery.hasNextPage;
+  const hasMore = hasMoreLocal;
   const loadMore = () => {
     if (hasMoreLocal) {
       setVisibleLimit((prev) => prev + 24);
-    } else if (importsQuery.hasNextPage) {
-      void importsQuery.fetchNextPage();
     }
   };
+
+  const isLoadingImports = importsQuery.isLoading || hasNextPage || isFetchingNextPage;
 
   return (
     <main className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary">
       {/* Mobile Top Header Navbar */}
-      <div className="flex h-12 shrink-0 items-center justify-center border-b border-border-light/10 bg-surface-primary-alt/85 backdrop-blur sticky top-0 z-30 md:hidden">
-        <span className="text-[1.05rem] font-medium tracking-normal text-text-primary">{localize('com_social_imports_title')}</span>
+      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-30 flex h-12 shrink-0 items-center justify-center border-b backdrop-blur md:hidden">
+        <span className="text-[1.05rem] font-medium tracking-normal text-text-primary">
+          {localize('com_social_imports_title')}
+        </span>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6 lg:px-14">
-        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 sm:gap-5 pt-3 sm:pt-0">
-        <header className="pt-1">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-start justify-between gap-3 text-center sm:text-left">
-            <div className="min-w-0 flex-1">
-              <h1
-                id="social-imports-title"
-                className="text-[1.9rem] font-medium leading-none text-text-primary min-[380px]:text-[2rem] sm:text-[3rem] hidden sm:block"
-              >
-                {localize('com_social_imports_title')}
-              </h1>
-              <p className="mt-2 text-sm font-medium text-text-secondary hidden sm:block">
-                {localize(
-                  total === 1
-                    ? 'com_social_imports_count_one'
-                    : 'com_social_imports_count_other',
-                  { count: total },
-                )}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="inline-flex h-9 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-submit px-3 text-sm font-medium text-white transition-colors hover:bg-surface-submit-hover sm:h-10 sm:w-auto sm:gap-2 sm:px-4"
-              onClick={() => setImportDialogOpen(true)}
-            >
-              <Plus className="size-4" aria-hidden="true" />
-              {localize('com_social_imports_save_source')}
-            </button>
-          </div>
-
-          {playlists.length > 0 ? (
-            <PlaylistSyncSummary
-              subscriptions={playlists}
-              localize={localize}
-              syncDisabled={syncPlaylist.isLoading}
-              updateDisabled={updatePlaylist.isLoading}
-              deleteDisabled={deletePlaylist.isLoading}
-              onSync={syncPlaylistNow}
-              onToggle={togglePlaylist}
-              onRemove={removePlaylist}
-            />
-          ) : null}
-
-          <FilterToolbar
-            viewFilter={viewFilter}
-            sourceFilter={sourceFilter}
-            query={query}
-            showSearch
-            localize={localize}
-            onViewFilterChange={setViewFilter}
-            onSourceFilterChange={setSourceFilter}
-            onQueryChange={setQuery}
-            categoryFilter={selectedCategory}
-            onCategoryFilterChange={setSelectedCategory}
-            creatorFilter={selectedCreator}
-            onCreatorFilterChange={setSelectedCreator}
-            sortBy={sortBy}
-            onSortByChange={setSortBy}
-            creators={creators}
-            filtersExpanded={filtersExpanded}
-            onToggleFilters={toggleFiltersPanel}
-            onClearAll={clearAllFilters}
-            activeFiltersCount={activeFiltersCount}
-            activeFiltersCountInPanel={activeFiltersCountInPanel}
-          />
-        </header>
-
-        {importsQuery.isLoading ? <SocialImportSkeleton /> : null}
-        {!importsQuery.isLoading && imports.length === 0 ? (
-          <EmptyImports localize={localize} />
-        ) : null}
-        {!importsQuery.isLoading && imports.length > 0 ? (
-          <>
-            {timelineGroups.map((group) => (
-              <section key={group.id} className="flex flex-col gap-3">
-                <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-text-secondary">
-                  {localize(group.labelKey)}
-                </h2>
-                <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                  {group.imports.map((socialImport) => {
-                    const detailsValue =
-                      detailsByImport[socialImport._id] ?? socialImport.userSuppliedText ?? '';
-                    const detailsDirty = detailsValue !== (socialImport.userSuppliedText ?? '');
-                    const isDrafting =
-                      createDraft.isLoading && draftingImportId === socialImport._id;
-                    const isRetrying =
-                      retryImport.isLoading && retryingImportId === socialImport._id;
-                    return (
-                      <SocialImportCard
-                        key={socialImport._id}
-                        socialImport={socialImport}
-                        detailsValue={detailsValue}
-                        detailsDirty={detailsDirty}
-                        isDrafting={isDrafting}
-                        isRetrying={isRetrying}
-                        draftDisabled={createDraft.isLoading}
-                        updateDisabled={updateImport.isLoading}
-                        retryDisabled={retryImport.isLoading}
-                        localize={localize}
-                        onOpen={openRecipeImport}
-                        onRecreate={recreateRecipeImport}
-                        onMarkInspiration={markInspiration}
-                        onDetailsChange={updateDetails}
-                        onSaveDetails={saveDetails}
-                        onRetry={retryProcessing}
-                        onDelete={setImportToDelete}
-                      />
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-            {hasMore ? (
-              <div className="flex justify-center mt-6">
-                <button
-                  type="button"
-                  className="rounded-lg border border-border-light bg-surface-primary px-5 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={importsQuery.isFetchingNextPage}
-                  onClick={loadMore}
+        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 pt-3 sm:gap-5 sm:pt-0">
+          <header className="pt-1">
+            <div className="flex flex-col items-stretch justify-between gap-3 text-center sm:flex-row sm:items-start sm:text-left">
+              <div className="min-w-0 flex-1">
+                <h1
+                  id="social-imports-title"
+                  className="hidden text-[1.9rem] font-medium leading-none text-text-primary min-[380px]:text-[2rem] sm:block sm:text-[3rem]"
                 >
+                  {localize('com_social_imports_title')}
+                </h1>
+                <p className="mt-2 hidden text-sm font-medium text-text-secondary sm:block">
                   {localize(
-                    importsQuery.isFetchingNextPage
-                      ? 'com_social_imports_loading_more'
-                      : 'com_social_imports_load_more',
+                    total === 1 ? 'com_social_imports_count_one' : 'com_social_imports_count_other',
+                    { count: total },
                   )}
-                </button>
+                </p>
               </div>
+              <button
+                type="button"
+                className="inline-flex h-9 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-submit px-3 text-sm font-medium text-white transition-colors hover:bg-surface-submit-hover sm:h-10 sm:w-auto sm:gap-2 sm:px-4"
+                onClick={() => setImportDialogOpen(true)}
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                {localize('com_social_imports_save_source')}
+              </button>
+            </div>
+
+            {playlists.length > 0 ? (
+              <PlaylistSyncSummary
+                subscriptions={playlists}
+                localize={localize}
+                syncDisabled={syncPlaylist.isLoading}
+                updateDisabled={updatePlaylist.isLoading}
+                deleteDisabled={deletePlaylist.isLoading}
+                onSync={syncPlaylistNow}
+                onToggle={togglePlaylist}
+                onRemove={removePlaylist}
+              />
             ) : null}
-          </>
-        ) : null}
-      </div>
+
+            <FilterToolbar
+              viewFilter={viewFilter}
+              sourceFilter={sourceFilter}
+              query={query}
+              showSearch
+              localize={localize}
+              onViewFilterChange={setViewFilter}
+              onSourceFilterChange={setSourceFilter}
+              onQueryChange={setQuery}
+              categoryFilter={selectedCategory}
+              onCategoryFilterChange={setSelectedCategory}
+              creatorFilter={selectedCreator}
+              onCreatorFilterChange={setSelectedCreator}
+              sortBy={sortBy}
+              onSortByChange={setSortBy}
+              creators={creators}
+              filtersExpanded={filtersExpanded}
+              onToggleFilters={toggleFiltersPanel}
+              onClearAll={clearAllFilters}
+              activeFiltersCount={activeFiltersCount}
+            />
+          </header>
+
+          {isLoadingImports ? <SocialImportSkeleton /> : null}
+          {!isLoadingImports && imports.length === 0 ? <EmptyImports localize={localize} /> : null}
+          {!isLoadingImports && imports.length > 0 ? (
+            <>
+              {timelineGroups.map((group) => (
+                <section key={group.id} className="flex flex-col gap-3">
+                  <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-text-secondary">
+                    {localize(group.labelKey)}
+                  </h2>
+                  <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                    {group.imports.map((socialImport) => {
+                      const detailsValue =
+                        detailsByImport[socialImport._id] ?? socialImport.userSuppliedText ?? '';
+                      const detailsDirty = detailsValue !== (socialImport.userSuppliedText ?? '');
+                      const isDrafting =
+                        createDraft.isLoading && draftingImportId === socialImport._id;
+                      const isRetrying =
+                        retryImport.isLoading && retryingImportId === socialImport._id;
+                      return (
+                        <SocialImportCard
+                          key={socialImport._id}
+                          socialImport={socialImport}
+                          detailsValue={detailsValue}
+                          detailsDirty={detailsDirty}
+                          isDrafting={isDrafting}
+                          isRetrying={isRetrying}
+                          draftDisabled={createDraft.isLoading}
+                          updateDisabled={updateImport.isLoading}
+                          retryDisabled={retryImport.isLoading}
+                          localize={localize}
+                          onOpen={openRecipeImport}
+                          onRecreate={recreateRecipeImport}
+                          onMarkInspiration={markInspiration}
+                          onRetry={retryProcessing}
+                          onDelete={setImportToDelete}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+              {hasMore ? (
+                <div className="mt-6 flex justify-center">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-border-light bg-surface-primary px-5 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={importsQuery.isFetchingNextPage}
+                    onClick={loadMore}
+                  >
+                    {localize(
+                      importsQuery.isFetchingNextPage
+                        ? 'com_social_imports_loading_more'
+                        : 'com_social_imports_load_more',
+                    )}
+                  </button>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
       </div>
 
       <ImportDialog

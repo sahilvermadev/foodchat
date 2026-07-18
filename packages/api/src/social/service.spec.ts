@@ -213,7 +213,9 @@ describe('social import service', () => {
       userSuppliedText: 'Video caption:\r\n1 block tofu\r\nCrisp it in a hot pan.',
     });
 
-    expect(socialImport.userSuppliedText).toBe('Video caption:\n1 block tofu\nCrisp it in a hot pan.');
+    expect(socialImport.userSuppliedText).toBe(
+      'Video caption:\n1 block tofu\nCrisp it in a hot pan.',
+    );
     expect(socialImport.status).toBe('draft_ready');
     expect(socialImport.provenance).toBe('user_edited');
     expect(socialImport.reviewMessage).toContain('Creator details saved');
@@ -264,6 +266,7 @@ describe('social import service', () => {
           '@context': 'https://schema.org',
           '@type': 'Recipe',
           name: 'Lemon Rice',
+          image: 'https://images.example/lemon-rice.jpg',
           recipeIngredient: ['2 cups rice', '1 lemon', '1 tsp mustard seeds'],
           recipeInstructions: ['Toast mustard seeds.', 'Fold in rice and lemon.'],
         })}
@@ -296,11 +299,45 @@ describe('social import service', () => {
       status: 'draft_ready',
       provenance: 'source_exact',
       title: 'Lemon Rice',
+      thumbnailUrl: 'https://images.example/lemon-rice.jpg',
     });
     expect(processedImport.imports[0].extractedText).toContain('2 cups rice');
     expect(processedJob).toMatchObject({
       status: 'succeeded',
       stage: 'extracted_source_text',
+    });
+  });
+
+  test('atomically claims a queued import job once', async () => {
+    process.env.SOCIAL_IMPORT_ENABLE_WEB_EXTRACTION_IN_TEST = 'true';
+    process.env.SOCIAL_IMPORT_ENABLE_JOBS_IN_TEST = 'true';
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        `<script type="application/ld+json">${JSON.stringify({
+          '@type': 'Recipe',
+          name: 'Claimed Soup',
+          recipeIngredient: ['1 cup stock', '1 cup beans'],
+          recipeInstructions: ['Simmer together.'],
+        })}</script>`,
+        { status: 200, headers: { 'content-type': 'text/html' } },
+      ),
+    );
+    const socialImport = await createSocialImport('user-a', {
+      sourceUrl: 'https://example.com/claimed-soup',
+    });
+    const job = await mongoose.models.SocialImportJob.findOne({
+      socialImportId: socialImport._id,
+    });
+
+    await Promise.all([
+      processSocialImportJob(String(job._id)),
+      processSocialImportJob(String(job._id)),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await expect(mongoose.models.SocialImportJob.findById(job._id).lean()).resolves.toMatchObject({
+      status: 'succeeded',
+      attemptCount: 1,
     });
   });
 
@@ -571,9 +608,9 @@ describe('social import service', () => {
       status: 'paused',
     });
     expect(paused?.status).toBe('paused');
-    await expect(deleteSocialPlaylistSubscription('user-a', created.subscription._id)).resolves.toBe(
-      true,
-    );
+    await expect(
+      deleteSocialPlaylistSubscription('user-a', created.subscription._id),
+    ).resolves.toBe(true);
   });
 
   test('saves a playlist subscription when automatic sync is not configured', async () => {

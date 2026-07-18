@@ -101,7 +101,17 @@ export const cookingDraftSchema = new Schema<ICookingDraft>(
 
 cookingDraftSchema.index({ user: 1, status: 1, updatedAt: -1, tenantId: 1 });
 cookingDraftSchema.index({ user: 1, conversationId: 1, status: 1, tenantId: 1 });
-cookingDraftSchema.index({ user: 1, conversationId: 1, selected: 1, tenantId: 1 });
+cookingDraftSchema.index(
+  { user: 1, conversationId: 1, selected: 1, tenantId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      selected: true,
+      status: 'active',
+      conversationId: { $type: 'string' },
+    },
+  },
+);
 
 export const cookingSessionSchema = new Schema<ICookingSession>(
   {
@@ -206,7 +216,7 @@ export const savedRecipeSchema = new Schema<ISavedRecipe>(
     categorization: { type: recipeCategorizationSchema },
     categorizationStatus: {
       type: String,
-      enum: ['pending', 'complete', 'failed'],
+      enum: ['pending', 'processing', 'complete', 'failed'],
       default: 'pending',
       required: true,
     },
@@ -305,6 +315,7 @@ export const socialImportJobSchema = new Schema<ISocialImportJob>(
     },
     stage: { type: String, default: 'queued', required: true },
     attemptCount: { type: Number, default: 0, required: true },
+    activeKey: { type: String, enum: ['active'] },
     lastErrorCode: { type: String },
     lastErrorMessage: { type: String },
     startedAt: { type: Date },
@@ -317,6 +328,10 @@ export const socialImportJobSchema = new Schema<ISocialImportJob>(
 socialImportJobSchema.index({ socialImportId: 1, createdAt: -1, tenantId: 1 });
 socialImportJobSchema.index({ user: 1, provider: 1, createdAt: -1, tenantId: 1 });
 socialImportJobSchema.index({ status: 1, updatedAt: 1, tenantId: 1 });
+socialImportJobSchema.index(
+  { user: 1, socialImportId: 1, activeKey: 1, tenantId: 1 },
+  { unique: true, partialFilterExpression: { activeKey: 'active' } },
+);
 
 export const socialTranscriptSchema = new Schema<ISocialTranscript>(
   {
@@ -352,10 +367,7 @@ export const socialTranscriptSchema = new Schema<ISocialTranscript>(
   { timestamps: true },
 );
 
-socialTranscriptSchema.index(
-  { provider: 1, providerContentId: 1, tenantId: 1 },
-  { unique: true },
-);
+socialTranscriptSchema.index({ provider: 1, providerContentId: 1, tenantId: 1 }, { unique: true });
 socialTranscriptSchema.index({ status: 1, nextAttemptAt: 1, tenantId: 1 });
 
 export const socialPlaylistSubscriptionSchema = new Schema<ISocialPlaylistSubscription>(

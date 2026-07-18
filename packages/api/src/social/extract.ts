@@ -78,7 +78,10 @@ function cleanLines(values: unknown[]): string[] {
 }
 
 function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : value == null ? [] : [value];
+  if (Array.isArray(value)) {
+    return value;
+  }
+  return value == null ? [] : [value];
 }
 
 function hasRecipeType(value: unknown): boolean {
@@ -113,8 +116,9 @@ function imageUrlFromJsonLd(value: unknown): string | undefined {
   }
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>;
-    if (typeof record.url === 'string') {
-      return record.url.trim();
+    const url = record.url ?? record.contentUrl;
+    if (typeof url === 'string') {
+      return url.trim();
     }
   }
   return undefined;
@@ -189,10 +193,13 @@ function textFromCandidate(candidate: RecipeCandidate): string {
 }
 
 function ogImageFromHtml(html: string): string | undefined {
-  const ogPattern = /<meta\b[^>]*(?:property|name)\s*=\s*["']og:image["'][^>]*content\s*=\s*["']([^"']+)["']/i;
-  const contentPattern = /<meta\b[^>]*content\s*=\s*["']([^"']+)["'][^>]*(?:property|name)\s*=\s*["']og:image["']/i;
-  const twitterPattern = /<meta\b[^>]*(?:property|name)\s*=\s*["']twitter:image["'][^>]*content\s*=\s*["']([^"']+)["']/i;
-  
+  const ogPattern =
+    /<meta\b[^>]*(?:property|name)\s*=\s*["']og:image["'][^>]*content\s*=\s*["']([^"']+)["']/i;
+  const contentPattern =
+    /<meta\b[^>]*content\s*=\s*["']([^"']+)["'][^>]*(?:property|name)\s*=\s*["']og:image["']/i;
+  const twitterPattern =
+    /<meta\b[^>]*(?:property|name)\s*=\s*["']twitter:image["'][^>]*content\s*=\s*["']([^"']+)["']/i;
+
   const ogMatch = html.match(ogPattern) || html.match(contentPattern) || html.match(twitterPattern);
   if (ogMatch && ogMatch[1]) {
     return decodeHtmlEntities(ogMatch[1]).trim();
@@ -200,7 +207,22 @@ function ogImageFromHtml(html: string): string | undefined {
   return undefined;
 }
 
-export function extractRecipeFromHtml(html: string): ExtractedWebRecipe | undefined {
+function absoluteImageUrl(value: string | undefined, sourceUrl?: string): string | undefined {
+  if (!value || !sourceUrl) {
+    return value;
+  }
+  try {
+    const url = new URL(value, sourceUrl);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function extractRecipeFromHtml(
+  html: string,
+  sourceUrl?: string,
+): ExtractedWebRecipe | undefined {
   for (const block of jsonLdBlocks(html)) {
     try {
       const candidate = recipeFromJsonLd(JSON.parse(block));
@@ -210,7 +232,10 @@ export function extractRecipeFromHtml(html: string): ExtractedWebRecipe | undefi
           text: textFromCandidate(candidate),
           ingredientCount: candidate.ingredients.length,
           instructionCount: candidate.instructions.length,
-          thumbnailUrl: candidate.thumbnailUrl || ogImageFromHtml(html),
+          thumbnailUrl: absoluteImageUrl(
+            candidate.thumbnailUrl || ogImageFromHtml(html),
+            sourceUrl,
+          ),
         };
       }
     } catch {
@@ -275,7 +300,7 @@ async function fetchHtml(url: URL, redirects = 0): Promise<string> {
 
 export async function extractWebRecipe(url: string): Promise<ExtractedWebRecipe | undefined> {
   const safeUrl = await assertSafeWebUrl(url);
-  return extractRecipeFromHtml(await fetchHtml(safeUrl));
+  return extractRecipeFromHtml(await fetchHtml(safeUrl), safeUrl.toString());
 }
 
 function urlsFromText(text: string): string[] {
@@ -300,7 +325,9 @@ function candidateScore(url: URL): number {
   if (/recipe|recipes|cook|cooking|kitchen|food|meal|dish|quesadilla/i.test(text)) {
     score += 25;
   }
-  if (/subscribe|newsletter|shop|store|amazon|instagram|tiktok|facebook|youtube|sponsor/i.test(text)) {
+  if (
+    /subscribe|newsletter|shop|store|amazon|instagram|tiktok|facebook|youtube|sponsor/i.test(text)
+  ) {
     score -= 20;
   }
   if (url.searchParams.size > 0) {
@@ -458,7 +485,9 @@ async function fetchYouTubePlaylistTitle(
   url.searchParams.set('id', playlistId);
   url.searchParams.set('key', apiKey);
   url.searchParams.set('fields', 'items(snippet(title))');
-  const data = (await fetchYouTubeJson(url)) as { items?: Array<{ snippet?: Record<string, unknown> }> };
+  const data = (await fetchYouTubeJson(url)) as {
+    items?: Array<{ snippet?: Record<string, unknown> }>;
+  };
   return cleanMetadataText(data.items?.[0]?.snippet?.title, 140);
 }
 
@@ -506,8 +535,7 @@ export async function fetchYouTubePlaylist(
         description: cleanMetadataText(item.snippet?.description, 500),
         creatorName: cleanMetadataText(item.snippet?.channelTitle, 120),
         thumbnailUrl: snippetThumbnail(item.snippet),
-        position:
-          typeof item.snippet?.position === 'number' ? item.snippet.position : undefined,
+        position: typeof item.snippet?.position === 'number' ? item.snippet.position : undefined,
       });
     });
     if (!data.nextPageToken || !data.items?.length) {

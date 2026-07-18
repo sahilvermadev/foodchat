@@ -25,13 +25,64 @@ export const sourceFilters: SourceFilter[] = ['all', 'youtube', 'instagram', 'ti
 export const recipeCategories = [
   { id: 'all', label: 'All Categories' },
   { id: 'chicken', label: 'Chicken', keywords: ['chicken'] },
-  { id: 'dessert', label: 'Desserts & Baking', keywords: ['cake', 'dessert', 'brownie', 'chocolate', 'donut', 'sweet', 'mousse', 'caramel', 'fondant', 'cookie', 'custard', 'pudding', 'tart', 'pie'] },
+  {
+    id: 'dessert',
+    label: 'Desserts & Baking',
+    keywords: [
+      'cake',
+      'dessert',
+      'brownie',
+      'chocolate',
+      'donut',
+      'sweet',
+      'mousse',
+      'caramel',
+      'fondant',
+      'cookie',
+      'custard',
+      'pudding',
+      'tart',
+      'pie',
+    ],
+  },
   { id: 'pizza', label: 'Pizza', keywords: ['pizza'] },
-  { id: 'pasta', label: 'Pasta & Noodles', keywords: ['pasta', 'noodle', 'spaghetti', 'lasagna', 'pad thai', 'macaroni'] },
-  { id: 'bread', label: 'Bread & Dough', keywords: ['bread', 'pita', 'dough', 'bun', 'croissant', 'bagel'] },
-  { id: 'sauce', label: 'Sauces & Dips', keywords: ['sauce', 'dip', 'gravy', 'pesto', 'hummus', 'tzatziki', 'demiglace', 'demi-glace', 'spread', 'chutney', 'aioli'] },
-  { id: 'sandwich', label: 'Sandwiches & Burgers', keywords: ['sandwich', 'burger', 'sub', 'hoagie', 'panini'] },
-  { id: 'breakfast', label: 'Breakfast & Eggs', keywords: ['breakfast', 'egg', 'toast', 'pancake', 'omelette', 'omurice', 'french toast'] },
+  {
+    id: 'pasta',
+    label: 'Pasta & Noodles',
+    keywords: ['pasta', 'noodle', 'spaghetti', 'lasagna', 'pad thai', 'macaroni'],
+  },
+  {
+    id: 'bread',
+    label: 'Bread & Dough',
+    keywords: ['bread', 'pita', 'dough', 'bun', 'croissant', 'bagel'],
+  },
+  {
+    id: 'sauce',
+    label: 'Sauces & Dips',
+    keywords: [
+      'sauce',
+      'dip',
+      'gravy',
+      'pesto',
+      'hummus',
+      'tzatziki',
+      'demiglace',
+      'demi-glace',
+      'spread',
+      'chutney',
+      'aioli',
+    ],
+  },
+  {
+    id: 'sandwich',
+    label: 'Sandwiches & Burgers',
+    keywords: ['sandwich', 'burger', 'sub', 'hoagie', 'panini'],
+  },
+  {
+    id: 'breakfast',
+    label: 'Breakfast & Eggs',
+    keywords: ['breakfast', 'egg', 'toast', 'pancake', 'omelette', 'omurice', 'french toast'],
+  },
   { id: 'soup', label: 'Soups & Stews', keywords: ['soup', 'broth', 'stew', 'ramen'] },
 ];
 
@@ -69,15 +120,6 @@ export const sourceLabelKeys: Record<SourceFilter, TranslationKeys> = {
   web: 'com_social_imports_provider_web',
   unknown: 'com_social_imports_provider_unknown',
 };
-
-export function dateLabel(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
 
 export function displayTitle(socialImport: SocialImport, fallback: string): string {
   return socialImport.title?.trim() || socialImport.providerContentId || fallback;
@@ -130,9 +172,9 @@ export function groupImportsByTimeline(imports: SocialImport[]): TimelineGroup[]
   const groups = new Map<TranslationKeys, SocialImport[]>();
   imports
     .slice()
-    .sort((first, second) => (
-      new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime()
-    ))
+    .sort(
+      (first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime(),
+    )
     .forEach((socialImport) => {
       const labelKey = timelineLabelKey(socialImport.createdAt);
       groups.set(labelKey, [...(groups.get(labelKey) ?? []), socialImport]);
@@ -178,7 +220,9 @@ export function isYouTubePlaylistUrl(value: string): boolean {
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase().replace(/^www\./, '');
-    return (host === 'youtube.com' || host === 'm.youtube.com') && Boolean(url.searchParams.get('list'));
+    return (
+      (host === 'youtube.com' || host === 'm.youtube.com') && Boolean(url.searchParams.get('list'))
+    );
   } catch {
     return false;
   }
