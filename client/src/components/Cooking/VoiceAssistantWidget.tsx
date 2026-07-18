@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import store from '~/store';
 import { useChatHelpers } from '~/hooks';
+import { useCookingVoiceConfigQuery, usePersistCookingVoiceTurnMutation } from '~/data-provider';
 import { S2sWsRealtimeClient } from './ws/s2s-ws-client';
 import { mainTextareaId } from '~/common';
 
@@ -11,8 +12,8 @@ interface VoiceAssistantWidgetProps {
   index?: number;
 }
 
-const DEFAULT_LB_SESSION_URL = 'https://kaa1l6rplzb1gg3y.us-east-1.aws.endpoints.huggingface.cloud/session';
-const DEFAULT_INSTRUCTIONS = 'You are a real-time cooking assistant. Help the user cook. Keep answers short, conversational, and direct because they are spoken out loud. Follow the recipe context closely. You are listening in a noisy kitchen. If the transcribed user speech is gibberish, incomplete background chatter, or completely unrelated to cooking, recipes, or kitchen tasks, do not respond. Remain silent and output exactly "<silent/>" and absolutely nothing else.';
+const DEFAULT_INSTRUCTIONS =
+  'You are a real-time cooking assistant. Help the user cook. Keep answers short, conversational, and direct because they are spoken out loud. Follow the recipe context closely. You are listening in a noisy kitchen. If the transcribed user speech is gibberish, incomplete background chatter, or completely unrelated to cooking, recipes, or kitchen tasks, do not respond. Remain silent and output exactly "<silent/>" and absolutely nothing else.';
 
 function isSilentResponse(text: string): boolean {
   const clean = text.trim().toLowerCase();
@@ -37,6 +38,8 @@ export default function VoiceAssistantWidget({
   const [isActive, setIsActive] = useRecoilState(store.voiceAssistantActive);
   const selectedVoiceName = useRecoilValue(store.voice) || 'Aiden';
   const { getMessages, setMessages } = useChatHelpers(index, conversationId);
+  const voiceConfig = useCookingVoiceConfigQuery();
+  const persistVoiceTurn = usePersistCookingVoiceTurnMutation();
 
   const clientRef = useRef<S2sWsRealtimeClient | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
@@ -64,6 +67,12 @@ export default function VoiceAssistantWidget({
 
   const setMessagesRef = useRef(setMessages);
   setMessagesRef.current = setMessages;
+
+  const voiceConfigRef = useRef(voiceConfig.data);
+  voiceConfigRef.current = voiceConfig.data;
+
+  const persistVoiceTurnRef = useRef(persistVoiceTurn.mutate);
+  persistVoiceTurnRef.current = persistVoiceTurn.mutate;
 
   const scrollChatToBottom = useCallback(() => {
     setTimeout(() => {
@@ -98,6 +107,12 @@ export default function VoiceAssistantWidget({
   const handleStart = useCallback(async () => {
     await cleanSession();
 
+    const config = voiceConfigRef.current;
+    if (!config?.enabled || !config.sessionUrl) {
+      setIsActive(false);
+      return;
+    }
+
     const MIC_CONSTRAINTS = {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     };
@@ -120,9 +135,10 @@ export default function VoiceAssistantWidget({
       return stream;
     };
 
-    const instructions = recipeMarkdownRef.current
-      ? `${DEFAULT_INSTRUCTIONS}\nHere is the recipe the user is currently cooking:\n${recipeMarkdownRef.current}`
-      : DEFAULT_INSTRUCTIONS;
+    const instructions =
+      config.shareRecipeContext && recipeMarkdownRef.current
+        ? `${DEFAULT_INSTRUCTIONS}\nHere is the recipe the user is currently cooking:\n${recipeMarkdownRef.current}`
+        : DEFAULT_INSTRUCTIONS;
 
     const SUPPORTED_VOICES = [
       'Aiden',
@@ -140,7 +156,7 @@ export default function VoiceAssistantWidget({
       : 'Aiden';
 
     const client = new S2sWsRealtimeClient({
-      sessionUrl: DEFAULT_LB_SESSION_URL,
+      sessionUrl: config.sessionUrl,
       voice: voiceToUse,
       instructions: instructions,
       acquireMic: acquireMicStream,
@@ -244,6 +260,21 @@ export default function VoiceAssistantWidget({
           }
           hasFlushedTurnRef.current = false;
         } else {
+          if (lastUserTextRef.current.trim() && transcript?.trim()) {
+            persistVoiceTurnRef.current(
+              {
+                conversationId: conversationIdRef.current,
+                turnId: responseId,
+                userText: lastUserTextRef.current,
+                assistantText: transcript,
+              },
+              {
+                onError: (error) => {
+                  console.error('Failed to persist voice turn:', error);
+                },
+              },
+            );
+          }
           const currentList = getMessagesRef.current() || [];
           if (!hasFlushedTurnRef.current) {
             // Flush turn now if it was missed during streaming
@@ -302,9 +333,12 @@ export default function VoiceAssistantWidget({
       console.error('Failed to establish voice session:', err);
       setIsActive(false);
     }
-  }, [cleanSession, setIsActive]);
+  }, [cleanSession, scrollChatToBottom, setIsActive]);
 
   useEffect(() => {
+    if (isActive && voiceConfig.isLoading) {
+      return;
+    }
     if (isActive) {
       handleStart();
     } else {
@@ -313,7 +347,7 @@ export default function VoiceAssistantWidget({
     return () => {
       cleanSession();
     };
-  }, [isActive, handleStart, cleanSession]);
+  }, [isActive, voiceConfig.isLoading, handleStart, cleanSession]);
 
   return null;
 }

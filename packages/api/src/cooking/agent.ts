@@ -27,6 +27,7 @@ import type {
 import { generateCookingDraft, getCookingDraftByConversation, updateCookingDraft } from './service';
 import { CookingValidationError } from './validation';
 import { buildPreferenceBrief } from './brief';
+import type { ChatMessage, ChatRole, CookingImageBlock, ToolCall } from './chat';
 import { validateCookingResponseHardBoundaries, validateCookingResponseWithJudge } from './quality';
 import type { CookingQualityFailureLabel } from './quality';
 import { routeCookingModels, routeCookingPlanner } from './routing';
@@ -44,25 +45,6 @@ import {
 
 export { sanitizePromptSuggestions, extractTextPromptSuggestions } from './suggestions';
 
-type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
-
-type CookingImageBlock = {
-  type: 'image_url';
-  image_url: string | { url: string; detail?: 'auto' | 'low' | 'high' };
-};
-
-type CookingTextBlock = {
-  type: 'text';
-  text: string;
-};
-
-type ChatMessage = {
-  role: ChatRole;
-  content: string | Array<CookingTextBlock | CookingImageBlock> | null;
-  tool_call_id?: string;
-  tool_calls?: ToolCall[];
-};
-
 type CookingHistoryMessage = TMessage & {
   image_urls?: CookingImageBlock[];
 };
@@ -71,15 +53,6 @@ type AttachedImageSourceState = {
   currentImageCount: number;
   historicalImageCount: number;
   available: boolean;
-};
-
-type ToolCall = {
-  id: string;
-  type: 'function';
-  function: {
-    name: string;
-    arguments: string;
-  };
 };
 
 type CookingToolName =
@@ -127,6 +100,13 @@ type CompletionChoice = {
 
 type CompletionResponse = {
   choices?: CompletionChoice[];
+  usage?: ProviderUsage;
+};
+
+type ProviderUsage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
 };
 
 type ToolChoice =
@@ -146,6 +126,7 @@ type StreamingCompletionChoice = {
 
 type StreamingCompletionResponse = {
   choices?: StreamingCompletionChoice[];
+  usage?: ProviderUsage;
 };
 
 type ToolCallDelta = {
@@ -184,6 +165,16 @@ type CookingChatInput = {
   onTextDelta?: (delta: string, isFinal?: boolean) => void | Promise<void>;
   onStep?: (event: { type: string; payload: Record<string, unknown> }) => void | Promise<void>;
   image_urls?: CookingImageBlock[];
+  signal?: AbortSignal;
+  onUsage?: (usage: CookingUsage) => void;
+};
+
+export type CookingUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  model: string;
+  provider: 'openrouter';
 };
 
 export type CookingChatResult = {
@@ -195,6 +186,7 @@ export type CookingChatResult = {
   activeIntent?: CookingTurnIntent;
   activeAction?: CookingPlannedAction;
   activeCategory?: CookingChatCategory;
+  usage: CookingUsage[];
 };
 
 export type CookingChatTimingEvent = {
@@ -1206,9 +1198,15 @@ function draftTitle(draft: CookingDraft | undefined, fallback?: string): string 
   );
 }
 
-async function recoverEmptyResponse(messages: ChatMessage[], model: string): Promise<string> {
+type CompleteFn = typeof complete;
+
+async function recoverEmptyResponse(
+  messages: ChatMessage[],
+  model: string,
+  completion: CompleteFn,
+): Promise<string> {
   try {
-    const recovered = await complete(
+    const recovered = await completion(
       [
         ...messages,
         {
@@ -1619,6 +1617,8 @@ async function complete(
   onTextDelta?: (delta: string) => void | Promise<void>,
   toolChoice: ToolChoice = 'auto',
   temperature?: number,
+  signal?: AbortSignal,
+  onUsage?: (usage: ProviderUsage, model: string) => void,
 ): Promise<ChatMessage> {
   const key = apiKey();
   if (!key) {
@@ -1639,6 +1639,12 @@ async function complete(
   });
 
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) {
+    controller.abort();
+  } else {
+    signal?.addEventListener('abort', abort, { once: true });
+  }
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs());
   let response: Response;
   try {
@@ -1655,6 +1661,7 @@ async function complete(
         tools: availableTools,
         tool_choice: toolChoice,
         stream: true,
+        stream_options: { include_usage: true },
         ...(temperature !== undefined ? { temperature } : {}),
       }),
     });
@@ -1670,6 +1677,9 @@ async function complete(
       const message = body.choices?.[0]?.message;
       if (!message) {
         throw new Error('Cooking chat completion returned no message.');
+      }
+      if (body.usage) {
+        onUsage?.(body.usage, model);
       }
       return message;
     }
@@ -1691,6 +1701,7 @@ async function complete(
     let buffer = '';
     let streamedTextTail = '';
     let suppressLeakedSuggestionCall = false;
+    let usage: ProviderUsage | undefined;
 
     const emitVisibleText = async (delta: string) => {
       if (!onTextDelta || suppressLeakedSuggestionCall) {
@@ -1725,6 +1736,7 @@ async function complete(
         return;
       }
       const parsed = JSON.parse(payload) as StreamingCompletionResponse;
+      usage = parsed.usage ?? usage;
       const delta = parsed.choices?.[0]?.delta;
       if (!delta) {
         return;
@@ -1784,6 +1796,9 @@ async function complete(
     if (!suppressLeakedSuggestionCall && streamedTextTail) {
       await onTextDelta?.(streamedTextTail);
     }
+    if (usage) {
+      onUsage?.(usage, model);
+    }
 
     return {
       role: 'assistant',
@@ -1802,12 +1817,16 @@ async function complete(
         : {}),
     };
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) {
+      throw new Error('Cooking chat request aborted.');
+    }
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('Cooking chat provider timed out. Please try again.');
     }
     throw error;
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
   }
 }
 
@@ -1815,8 +1834,9 @@ async function completeJsonOnly(
   messages: Array<{ role: 'system' | 'user'; content: string }>,
   model: string,
   temperature?: number,
+  completion: CompleteFn = complete,
 ): Promise<string> {
-  const assistant = await complete(messages, model, [], undefined, 'auto', temperature);
+  const assistant = await completion(messages, model, [], undefined, 'auto', temperature);
   const contentStr = typeof assistant.content === 'string' ? assistant.content : '';
   return contentStr.trim();
 }
@@ -1826,8 +1846,9 @@ async function repairCookingResponse(
   responseText: string,
   repairInstruction: string,
   model: string,
+  completion: CompleteFn,
 ): Promise<string> {
-  const repaired = await complete(
+  const repaired = await completion(
     [
       ...messages,
       {
@@ -1849,6 +1870,7 @@ async function sanitizeResponseText(
   text: string,
   failureLabels: CookingQualityFailureLabel[],
   model: string,
+  completion: CompleteFn,
 ): Promise<string> {
   const instructions: string[] = [
     'You are a high-speed post-processing text filter. Your job is to strictly sanitize the provided cooking reply based on the failure reasons.',
@@ -1878,7 +1900,7 @@ async function sanitizeResponseText(
   instructions.push('\nText to sanitize:\n' + text);
 
   try {
-    const response = await complete(
+    const response = await completion(
       [
         {
           role: 'system',
@@ -2012,6 +2034,37 @@ function isCanvasMutationTool(
 }
 
 export async function runCookingChat(input: CookingChatInput): Promise<CookingChatResult> {
+  const usage: CookingUsage[] = [];
+  const completeForTurn: CompleteFn = (
+    messages,
+    model,
+    availableTools,
+    onTextDelta,
+    toolChoice,
+    temperature,
+  ) =>
+    complete(
+      messages,
+      model,
+      availableTools,
+      onTextDelta,
+      toolChoice,
+      temperature,
+      input.signal,
+      (providerUsage, usageModel) => {
+        const collectedUsage = {
+          input_tokens: providerUsage.prompt_tokens ?? 0,
+          output_tokens: providerUsage.completion_tokens ?? 0,
+          total_tokens:
+            providerUsage.total_tokens ??
+            (providerUsage.prompt_tokens ?? 0) + (providerUsage.completion_tokens ?? 0),
+          model: usageModel,
+          provider: 'openrouter',
+        } satisfies CookingUsage;
+        usage.push(collectedUsage);
+        input.onUsage?.(collectedUsage);
+      },
+    );
   const logCookingAgent = (event: string, payload: Record<string, unknown>) => {
     globalLogCookingAgent(event, payload);
     if (input.onStep) {
@@ -2114,7 +2167,10 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
     runtimeUnderstanding: turnUnderstanding,
   };
 
-  const isSimpleGreetingOrAffirmative = /^(hi|hello|hey|ok|okay|yes|no|thanks|thank you|yeah|looks good|perfect)\.?$/i.test(input.text.trim());
+  const isSimpleGreetingOrAffirmative =
+    /^(hi|hello|hey|ok|okay|yes|no|thanks|thank you|yeah|looks good|perfect)\.?$/i.test(
+      input.text.trim(),
+    );
 
   let turnPlan: CookingTurnPlan;
   if (isSimpleGreetingOrAffirmative) {
@@ -2129,9 +2185,8 @@ export async function runCookingChat(input: CookingChatInput): Promise<CookingCh
       action: turnPlan.action,
     });
   } else {
-    turnPlan = await planCookingTurn(
-      plannerInput,
-      (messages) => completeJsonOnly(messages, plannerRoute.model, 0.1),
+    turnPlan = await planCookingTurn(plannerInput, (messages) =>
+      completeJsonOnly(messages, plannerRoute.model, 0.1, completeForTurn),
     );
   }
   logCookingAgent('planner_result', {
@@ -2393,7 +2448,7 @@ When calling create_cooking_document or revise_cooking_document, the database ma
       model,
       sourceLimit,
       providerModels(model),
-      complete,
+      completeForTurn,
     );
 
     if (isLowRiskTurn) {
@@ -2434,7 +2489,7 @@ When calling create_cooking_document or revise_cooking_document, the database ma
     }
     let quality = await validateCookingResponseWithJudge(
       qualityInput(citedResponse.text, citedResponse.sources),
-      (judgeMessages) => completeJsonOnly(judgeMessages, model),
+      (judgeMessages) => completeJsonOnly(judgeMessages, model, undefined, completeForTurn),
     );
     const originalFailureLabels = quality.failureLabels;
     let repairAttempted = false;
@@ -2455,6 +2510,7 @@ When calling create_cooking_document or revise_cooking_document, the database ma
           citedResponse.text,
           quality.repairInstruction,
           modelRoutes.repair.model,
+          completeForTurn,
         );
         const repairedCitedResponse = await ensureInlineSourceCitations(
           messages,
@@ -2463,11 +2519,12 @@ When calling create_cooking_document or revise_cooking_document, the database ma
           modelRoutes.repair.model,
           sourceLimit,
           providerModels(modelRoutes.repair.model),
-          complete,
+          completeForTurn,
         );
         const repairedQuality = await validateCookingResponseWithJudge(
           qualityInput(repairedCitedResponse.text, repairedCitedResponse.sources),
-          (judgeMessages) => completeJsonOnly(judgeMessages, modelRoutes.repair.model),
+          (judgeMessages) =>
+            completeJsonOnly(judgeMessages, modelRoutes.repair.model, undefined, completeForTurn),
         );
         if (repairedQuality.ok) {
           citedResponse = repairedCitedResponse;
@@ -2501,12 +2558,14 @@ When calling create_cooking_document or revise_cooking_document, the database ma
             citedResponse.text,
             quality.failureLabels,
             modelRoutes.repair.model,
+            completeForTurn,
           );
 
           // Re-validate the sanitized text
           const sanitizedQuality = await validateCookingResponseWithJudge(
             qualityInput(sanitizedText, citedResponse.sources),
-            (judgeMessages) => completeJsonOnly(judgeMessages, modelRoutes.repair.model),
+            (judgeMessages) =>
+              completeJsonOnly(judgeMessages, modelRoutes.repair.model, undefined, completeForTurn),
           );
 
           if (sanitizedQuality.ok) {
@@ -2683,7 +2742,7 @@ When calling create_cooking_document or revise_cooking_document, the database ma
           requiresCanvasMutation(turnPlan) || turnPlan.promptProfile === 'document_work'
             ? 0.1
             : 0.7;
-        assistant = await complete(
+        assistant = await completeForTurn(
           messages,
           attemptModel,
           availableToolState.availableTools,
@@ -2779,7 +2838,8 @@ When calling create_cooking_document or revise_cooking_document, the database ma
       }
       const extracted = extractTextPromptSuggestions(assistantText);
       const responseText =
-        extracted.text || (await recoverEmptyResponse(messages, selectedAttemptModel));
+        extracted.text ||
+        (await recoverEmptyResponse(messages, selectedAttemptModel, completeForTurn));
       const validatedResponse = await validateAndRepairResponse(
         responseText,
         webSources,
@@ -2808,7 +2868,7 @@ When calling create_cooking_document or revise_cooking_document, the database ma
               validatedResponse.text,
               selectedAttemptModel,
               cookingTool('set_prompt_suggestions')!,
-              complete,
+              completeForTurn,
             );
             if (generated && generated.length > 0) {
               responseSuggestions = generated;
@@ -2843,6 +2903,10 @@ When calling create_cooking_document or revise_cooking_document, the database ma
         draftChanged,
         promptSuggestions: responseSuggestions,
         webSources: validatedResponse.sources,
+        activeIntent: turnPlan.intent,
+        activeAction: turnPlan.action,
+        activeCategory: turnPlan.category,
+        usage,
       };
     }
 
@@ -2994,7 +3058,8 @@ When calling create_cooking_document or revise_cooking_document, the database ma
             content: JSON.stringify({
               ok: false,
               error: errorMessage,
-              action: 'The recipe document did not change because it is already up to date. Provide a direct friendly response to the user explaining that the recipe is already correct and check if they need anything else.',
+              action:
+                'The recipe document did not change because it is already up to date. Provide a direct friendly response to the user explaining that the recipe is already correct and check if they need anything else.',
             }),
           });
           break;
@@ -3054,12 +3119,14 @@ When calling create_cooking_document or revise_cooking_document, the database ma
         activeIntent: turnPlan.intent,
         activeAction: turnPlan.action,
         activeCategory: turnPlan.category,
+        usage,
       };
     }
   }
 
   const extracted = extractTextPromptSuggestions(assistantText);
-  const responseText = extracted.text || (await recoverEmptyResponse(messages, resolvedModel));
+  const responseText =
+    extracted.text || (await recoverEmptyResponse(messages, resolvedModel, completeForTurn));
   const validatedResponse = await validateAndRepairResponse(
     responseText,
     webSources,
@@ -3091,7 +3158,7 @@ When calling create_cooking_document or revise_cooking_document, the database ma
         validatedResponse.text,
         resolvedModel,
         cookingTool('set_prompt_suggestions')!,
-        complete,
+        completeForTurn,
       );
       if (generated && generated.length > 0) {
         promptSuggestions = generated;
@@ -3125,5 +3192,6 @@ When calling create_cooking_document or revise_cooking_document, the database ma
     activeIntent: turnPlan.intent,
     activeAction: turnPlan.action,
     activeCategory: turnPlan.category,
+    usage,
   };
 }

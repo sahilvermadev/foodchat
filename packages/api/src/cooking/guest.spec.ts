@@ -70,7 +70,7 @@ describe('cooking guest helper', () => {
     const day = new Date().toISOString().slice(0, 10);
     const hash = generateGuestUserId(ip);
     const key = `${day}:${hash}`;
-    const doc = await mongoose.models.GuestLimit.findById(key).lean();
+    const doc = await mongoose.models.GuestLimit.findById(key).lean<{ count: number }>();
     expect(doc?.count).toBe(3);
   });
 
@@ -83,7 +83,7 @@ describe('cooking guest helper', () => {
 
     const day = new Date().toISOString().slice(0, 10);
     const key = `${day}:${generateGuestUserId(ip)}`;
-    const doc = await mongoose.models.GuestLimit.findById(key).lean();
+    const doc = await mongoose.models.GuestLimit.findById(key).lean<{ count: number }>();
     expect(doc?.count).toBe(0);
   });
 
@@ -100,7 +100,7 @@ describe('cooking guest helper', () => {
     expect(await hasConsumedGuestTrial(guestId)).toBe(true);
 
     await commitGuestTrial(guestId);
-    const trial = await mongoose.models.GuestLimit.findOne({}).lean();
+    const trial = await mongoose.models.GuestLimit.findOne({}).lean<{ expiresAt: Date }>();
     expect(trial?.expiresAt.getTime()).toBeGreaterThan(Date.now() + 29 * 24 * 60 * 60 * 1000);
 
     await refundGuestTrial(guestId);

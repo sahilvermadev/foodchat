@@ -26,7 +26,18 @@ import type {
   UpdateSavedRecipeRequest,
   StartCookingSessionRequest,
   CompleteCookingSessionRequest,
+  PersistCookingVoiceTurnRequest,
+  PersistCookingVoiceTurnResponse,
 } from 'librechat-data-provider';
+
+export const usePersistCookingVoiceTurnMutation = (): UseMutationResult<
+  PersistCookingVoiceTurnResponse,
+  unknown,
+  PersistCookingVoiceTurnRequest
+> =>
+  useMutation([MutationKeys.persistCookingVoiceTurn], {
+    mutationFn: (payload) => dataService.persistCookingVoiceTurn(payload),
+  });
 
 export const useGenerateCookingDraftMutation = (): UseMutationResult<
   CookingDraft,

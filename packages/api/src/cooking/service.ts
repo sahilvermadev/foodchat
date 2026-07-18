@@ -8,7 +8,6 @@ import type {
   StructuredRecipe,
 } from 'librechat-data-provider';
 import type { ICookingDraft, ICookingSession } from '@librechat/data-schemas';
-import { reduceSessionEvent } from './reducer';
 import { CookingValidationError, normalizeRecipe, personalizeRecipe } from './validation';
 import { getExistingPreferences } from '../preferences/service';
 
@@ -132,6 +131,35 @@ function blankRecipe(title: string): StructuredRecipe {
   };
 }
 
+function isDuplicateKeyError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 11000);
+}
+
+async function selectDraft(
+  user: string,
+  conversationId: string,
+  documentId: unknown,
+): Promise<void> {
+  const { Draft } = models();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await Draft.updateMany(
+      { user, conversationId, status: 'active', selected: true },
+      { $set: { selected: false } },
+    );
+    try {
+      await Draft.updateOne(
+        { _id: documentId, user, conversationId, status: 'active' },
+        { $set: { selected: true } },
+      );
+      return;
+    } catch (error) {
+      if (!isDuplicateKeyError(error) || attempt === 2) {
+        throw error;
+      }
+    }
+  }
+}
+
 export async function generateCookingDraft(
   user: string,
   prompt: string,
@@ -157,17 +185,18 @@ export async function generateCookingDraft(
     prompt: cleanPrompt,
     status: 'active',
     documentType: selectedDocumentType,
-    selected: true,
+    selected: false,
     ...(cleanDocumentMarkdown ? { documentMarkdown: cleanDocumentMarkdown } : {}),
     recipe: finalRecipe,
   };
-  if (conversationId) {
-    await Draft.updateMany(
-      { user, conversationId, status: 'active', selected: true },
-      { $set: { selected: false } },
-    );
-  }
   const draft = await Draft.create(payload);
+  if (conversationId) {
+    await selectDraft(user, conversationId, draft._id);
+    draft.selected = true;
+  } else {
+    draft.selected = true;
+    await draft.save();
+  }
   return {
     ...serializeDraft(draft),
     adjustments,
@@ -207,7 +236,7 @@ export async function listCookingDocuments(
   let selectedDocument = documents.find((document) => document.selected);
   if (!selectedDocument) {
     selectedDocument = documents[0];
-    await Draft.updateOne({ _id: selectedDocument._id, user }, { $set: { selected: true } });
+    await selectDraft(user, conversationId, selectedDocument._id);
     documents = documents.map((document) => {
       if (idOf(document) === idOf(selectedDocument!)) {
         document.selected = true;
@@ -250,11 +279,7 @@ export async function selectCookingDocument(
   if (!selected?.conversationId) {
     return null;
   }
-  await Draft.updateMany(
-    { user, conversationId: selected.conversationId, status: 'active' },
-    { $set: { selected: false } },
-  );
-  await Draft.updateOne({ _id: selected._id, user }, { $set: { selected: true } });
+  await selectDraft(user, selected.conversationId, selected._id);
   return listCookingDocuments(user, selected.conversationId);
 }
 
@@ -360,22 +385,75 @@ export async function appendCookingSessionEvent(params: {
   event: CookingSessionEvent;
 }): Promise<CookingSession | null> {
   const { Session, Event } = models();
-  const session = await Session.findOne({ _id: params.sessionId, user: params.user });
+  const event = params.event;
+  const set: Record<string, unknown> = {};
+  const push: Record<string, unknown> = {};
+  const inc: Record<string, number> = {};
+
+  if (event.type === 'navigation') {
+    if (event.action === 'next') {
+      inc.currentStepIndex = 1;
+    } else if (event.action === 'previous') {
+      inc.currentStepIndex = -1;
+    } else if (event.action === 'jump') {
+      set.currentStepIndex = Math.max(0, event.stepIndex ?? 0);
+    }
+  } else if (event.type === 'note') {
+    push['summary.notes'] = event.text;
+  } else if (event.type === 'substitution') {
+    push['summary.substitutions'] = {
+      ...(event.ingredientId ? { ingredientId: event.ingredientId } : {}),
+      text: event.text,
+    };
+  } else if (event.type === 'problem') {
+    push['summary.problems'] = event.text;
+  } else if (event.type === 'review') {
+    set['summary.rating'] = event.rating;
+    set['summary.reviewNote'] = event.note;
+  }
+
+  const update = {
+    ...(Object.keys(set).length ? { $set: set } : {}),
+    ...(Object.keys(push).length ? { $push: push } : {}),
+    ...(Object.keys(inc).length ? { $inc: inc } : {}),
+  };
+  const session = Object.keys(update).length
+    ? await Session.findOneAndUpdate({ _id: params.sessionId, user: params.user }, update, {
+        new: true,
+      })
+    : await Session.findOne({ _id: params.sessionId, user: params.user });
   if (!session) {
     return null;
   }
-  const serialized = serializeSession(session);
-  const next = reduceSessionEvent(serialized, params.event);
+
   await Event.create({
     user: params.user,
     sessionId: params.sessionId,
-    stepIndex: 'stepIndex' in params.event ? params.event.stepIndex : undefined,
-    event: params.event,
+    stepIndex: 'stepIndex' in event ? event.stepIndex : undefined,
+    event,
   });
-  session.currentStepIndex = next.currentStepIndex;
-  session.summary = next.summary;
-  session.status = next.status;
-  await session.save();
+
+  const lastStepIndex = Math.max(0, session.recipeSnapshot.steps.length - 1);
+  if (session.currentStepIndex < 0 || session.currentStepIndex > lastStepIndex) {
+    const clamped = await Session.findOneAndUpdate(
+      {
+        _id: params.sessionId,
+        user: params.user,
+        currentStepIndex: session.currentStepIndex,
+      },
+      {
+        $set: {
+          currentStepIndex: Math.min(lastStepIndex, Math.max(0, session.currentStepIndex)),
+        },
+      },
+      { new: true },
+    );
+    if (clamped) {
+      return serializeSession(clamped);
+    }
+    const latest = await Session.findOne({ _id: params.sessionId, user: params.user });
+    return latest ? serializeSession(latest) : null;
+  }
   return serializeSession(session);
 }
 
@@ -397,7 +475,12 @@ export async function completeCookingSession(params: {
   const { Session } = models();
   const completed = await Session.findOneAndUpdate(
     { _id: params.sessionId, user: params.user },
-    { $set: { status: 'completed', completedAt: new Date() } },
+    {
+      $set: {
+        status: 'completed',
+        completedAt: new Date(),
+      },
+    },
     { new: true },
   );
   return completed ? serializeSession(completed) : null;

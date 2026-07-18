@@ -709,10 +709,7 @@ export default function RecipeCanvas({
         </article>
       </div>
       {conversationId && (
-        <VoiceAssistantWidget
-          conversationId={conversationId}
-          recipeMarkdown={documentMarkdown}
-        />
+        <VoiceAssistantWidget conversationId={conversationId} recipeMarkdown={documentMarkdown} />
       )}
     </section>
   );

@@ -9,6 +9,7 @@ import type {
   CookingDraft,
   ConversationCookingDocuments,
   CookingSession,
+  CookingVoiceConfig,
   SavedRecipe,
   SavedRecipesQuery,
   SavedRecipesResponse,
@@ -17,6 +18,20 @@ import type {
   SocialImportsQuery,
   SocialImportsResponse,
 } from 'librechat-data-provider';
+
+export const useCookingVoiceConfigQuery = (
+  enabled = true,
+): QueryObserverResult<CookingVoiceConfig> =>
+  useQuery<CookingVoiceConfig>(
+    [QueryKeys.cookingVoiceConfig],
+    () => dataService.getCookingVoiceConfig(),
+    {
+      enabled,
+      retry: false,
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
+    },
+  );
 
 export const useCookingDraftByConversationQuery = (
   conversationId: string | undefined,

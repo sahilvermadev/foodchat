@@ -5,6 +5,9 @@ const crypto = require('crypto');
 const { isValidObjectIdString, logger } = require('@librechat/data-schemas');
 const {
   CookingValidationError,
+  getBalanceConfig,
+  getTransactionsConfig,
+  recordCollectedUsage,
   runCookingChat,
   resolveCookingChatCategory,
   curatePendingPreferences,
@@ -37,7 +40,7 @@ const {
 } = require('@librechat/api');
 const { Constants, VisionModes } = require('librechat-data-provider');
 const { encodeAndFormat } = require('~/server/services/Files/images/encode');
-const { requireJwtAuth, configMiddleware } = require('~/server/middleware');
+const { checkBan, configMiddleware, moderateText, requireJwtAuth } = require('~/server/middleware');
 const { loadAuthValues } = require('~/server/services/Tools/credentials');
 
 const router = express.Router();
@@ -78,6 +81,16 @@ const guestBurstLimiter = rateLimit({
   legacyHeaders: false,
   handler: (_req, res) =>
     res.status(429).json({ error: 'Too many guest requests. Please try again later.' }),
+});
+const authenticatedCookingChatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.REKKY_AUTHENTICATED_CHAT_MAX_PER_MINUTE) || 20,
+  keyGenerator: userId,
+  store: limiterCache('rekky_authenticated_chat'),
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) =>
+    res.status(429).json({ error: 'Too many cooking requests. Please try again shortly.' }),
 });
 
 function parsedCookies(req) {
@@ -284,11 +297,67 @@ function assertCompletionBody(body) {
   }
 }
 
+function assertVoiceTurnBody(body) {
+  const payload = isObject(body) ? body : {};
+  for (const [key, maxLength] of [
+    ['conversationId', 128],
+    ['turnId', 256],
+    ['userText', 4000],
+    ['assistantText', 8000],
+  ]) {
+    if (
+      typeof payload[key] !== 'string' ||
+      !payload[key].trim() ||
+      payload[key].length > maxLength
+    ) {
+      throw new CookingValidationError('Voice turn payload is malformed.');
+    }
+  }
+}
+
 function handleError(res, error) {
   if (error instanceof CookingValidationError) {
     return res.status(400).json({ error: error.message });
   }
   return res.status(500).json({ error: error.message });
+}
+
+async function recordCookingChatUsage({
+  req,
+  db,
+  conversationId,
+  messageId,
+  model,
+  collectedUsage,
+}) {
+  if (!collectedUsage.length) {
+    return;
+  }
+  try {
+    await recordCollectedUsage(
+      {
+        spendTokens: db.spendTokens,
+        spendStructuredTokens: db.spendStructuredTokens,
+        pricing: { getMultiplier: db.getMultiplier, getCacheMultiplier: db.getCacheMultiplier },
+        bulkWriteOps: {
+          insertMany: db.bulkInsertTransactions,
+          updateBalance: db.updateBalance,
+        },
+      },
+      {
+        user: userId(req),
+        conversationId,
+        collectedUsage,
+        context: 'message',
+        messageId,
+        balance: getBalanceConfig(req.config),
+        transactions: getTransactionsConfig(req.config),
+        model,
+      },
+    );
+  } catch (usageError) {
+    logger.error('[CookingChat] failed to record provider usage', usageError);
+  }
 }
 
 function sendEvent(res, payload) {
@@ -717,9 +786,91 @@ router.post('/guest/chat', guestBurstLimiter, configMiddleware, async (req, res)
   }
 });
 
-router.use(requireJwtAuth, configMiddleware);
+router.use(requireJwtAuth, checkBan, configMiddleware);
 
-router.post('/chat', async (req, res) => {
+router.get('/voice/config', (_req, res) => {
+  const sessionUrl = process.env.REKKY_VOICE_SESSION_URL?.trim();
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  return res.json({
+    enabled: Boolean(sessionUrl),
+    ...(sessionUrl ? { sessionUrl } : {}),
+    shareRecipeContext: process.env.REKKY_VOICE_SHARE_RECIPE_CONTEXT === 'true',
+  });
+});
+
+router.post('/voice/turns', authenticatedCookingChatLimiter, async (req, res) => {
+  try {
+    assertVoiceTurnBody(req.body);
+    const db = models();
+    const user = userId(req);
+    const conversationId = req.body.conversationId.trim();
+    const conversation = await db.getConvo(user, conversationId);
+    if (!conversation) {
+      return res.sendStatus(404);
+    }
+
+    const turnKey = crypto
+      .createHash('sha256')
+      .update(`${user}:${conversationId}:${req.body.turnId}`)
+      .digest('hex')
+      .slice(0, 32);
+    const userMessageId = `voice-user-${turnKey}`;
+    const assistantMessageId = `voice-assistant-${turnKey}`;
+    const existing = await db.getMessages({
+      user,
+      conversationId,
+      messageId: { $in: [userMessageId, assistantMessageId] },
+    });
+    const existingIds = new Set(existing.map((message) => message.messageId));
+    if (existingIds.has(userMessageId) && existingIds.has(assistantMessageId)) {
+      return res.json({ userMessageId, assistantMessageId });
+    }
+
+    const messages = await db.getMessages({ user, conversationId }, 'messageId');
+    const parentMessageId = messages.at(-1)?.messageId ?? Constants.NO_PARENT;
+    if (!existingIds.has(userMessageId)) {
+      await db.saveMessage(
+        requestContext(req),
+        {
+          messageId: userMessageId,
+          parentMessageId,
+          conversationId,
+          sender: 'User',
+          text: req.body.userText.trim(),
+          isCreatedByUser: true,
+          error: false,
+          user,
+          metadata: { cookingVoiceTurn: true },
+        },
+        { context: 'POST /api/cooking/voice/turns - user message' },
+      );
+    }
+    if (!existingIds.has(assistantMessageId)) {
+      await db.saveMessage(
+        requestContext(req),
+        {
+          messageId: assistantMessageId,
+          parentMessageId: userMessageId,
+          conversationId,
+          sender: cookingAssistantName,
+          endpoint: 'agents',
+          model: 'realtime-voice',
+          text: req.body.assistantText.trim(),
+          isCreatedByUser: false,
+          error: false,
+          user,
+          metadata: { cookingVoiceTurn: true },
+        },
+        { context: 'POST /api/cooking/voice/turns - assistant message' },
+      );
+    }
+    return res.status(201).json({ userMessageId, assistantMessageId });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+router.post('/chat', authenticatedCookingChatLimiter, moderateText, async (req, res) => {
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   if (!text) {
     return res.status(400).json({ error: 'Prompt is required.' });
@@ -738,9 +889,18 @@ router.post('/chat', async (req, res) => {
   const parentMessageId =
     typeof req.body?.parentMessageId === 'string' ? req.body.parentMessageId : Constants.NO_PARENT;
   const endpoint = req.body?.endpoint || 'agents';
-  const model = typeof req.body?.model === 'string' ? req.body.model : undefined;
+  const model = process.env.COOKING_AGENT_MODEL?.trim() || undefined;
   const reqCtx = requestContext(req);
   const perf = createChatPerfTrace({ conversationId, endpoint, model, isNewConvo });
+  const collectedUsage = [];
+  let usageRecorded = false;
+  const abortController = new AbortController();
+  const abortOnClose = () => {
+    if (!res.writableEnded && !abortController.signal.aborted) {
+      abortController.abort();
+    }
+  };
+  res.on('close', abortOnClose);
   perf.mark('request_validated', {
     promptChars: text.length,
     clientMessageCount: Array.isArray(req.body?.messages) ? req.body.messages.length : 0,
@@ -770,8 +930,23 @@ router.post('/chat', async (req, res) => {
   sendEvent(res, { message: requestMessage, created: true, cooking: true });
   perf.mark('request_message_event_sent');
 
+  const db = models();
+  const recordUsageOnce = async (usage) => {
+    if (usageRecorded || !usage.length) {
+      return;
+    }
+    usageRecorded = true;
+    await recordCookingChatUsage({
+      req,
+      db,
+      conversationId,
+      messageId: responseMessageId,
+      model,
+      collectedUsage: usage,
+    });
+  };
+
   try {
-    const db = models();
     const contextStartedAt = Date.now();
     const [preferences, documentCollection, existingConversation] = await Promise.all([
       getExistingPreferences(userId(req)),
@@ -844,7 +1019,6 @@ router.post('/chat', async (req, res) => {
       conversationId,
       text,
       model,
-      promptPrefix: req.body?.promptPrefix,
       preferencesMarkdown: preferences?.markdown,
       messages: historyMessages,
       activeDraft,
@@ -853,6 +1027,8 @@ router.post('/chat', async (req, res) => {
       loadAuthValues,
       conversationCreatedAt: req.body?.createdAt || new Date(),
       image_urls: imageUrls,
+      signal: abortController.signal,
+      onUsage: (usage) => collectedUsage.push(usage),
       onTiming: (event) => agentTiming.push(event),
       onStep: (step) => {
         sendEvent(res, {
@@ -953,6 +1129,7 @@ router.post('/chat', async (req, res) => {
       });
     }
     perf.mark('assistant_text_stream_completed');
+    await recordUsageOnce(collectedUsage.length ? collectedUsage : (result.usage ?? []));
     const persistenceStartedAt = Date.now();
     await db.saveMessage(reqCtx, requestMessage, {
       context: 'POST /api/cooking/chat - user message',
@@ -984,6 +1161,11 @@ router.post('/chat', async (req, res) => {
     perf.log('info', { status: 'ok' });
     res.end();
   } catch (error) {
+    await recordUsageOnce(collectedUsage);
+    if (abortController.signal.aborted) {
+      perf.log('info', { status: 'client_disconnected' });
+      return;
+    }
     perf.mark('chat_failed', {
       error: error instanceof Error ? error.message : 'unknown error',
     });
@@ -1001,7 +1183,6 @@ router.post('/chat', async (req, res) => {
       user: userId(req),
     };
     try {
-      const db = models();
       const errorPersistenceStartedAt = Date.now();
       await db.saveMessage(reqCtx, requestMessage, {
         context: 'POST /api/cooking/chat - user message before error',

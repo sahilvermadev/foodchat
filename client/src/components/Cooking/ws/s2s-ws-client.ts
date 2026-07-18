@@ -105,11 +105,10 @@ export class S2sWsRealtimeClient extends EventTarget {
     this.options = options;
     this._tools = options.tools ?? [];
     this._directUrl = options.directUrl ?? '';
-    this._sessionUrl = options.sessionUrl
-      ? options.sessionUrl
-      : options.loadBalancerUrl
-        ? `${trimTrailingSlash(options.loadBalancerUrl)}/session`
-        : '';
+    this._sessionUrl = options.sessionUrl ?? '';
+    if (!this._sessionUrl && options.loadBalancerUrl) {
+      this._sessionUrl = `${trimTrailingSlash(options.loadBalancerUrl)}/session`;
+    }
     this._acquireMic = options.acquireMic ?? null;
     this._noiseGate = options.noiseGate ?? { enabled: false, thresholdDb: -45 };
     try {
@@ -170,7 +169,11 @@ export class S2sWsRealtimeClient extends EventTarget {
         } catch (err: any) {
           if (this._closed) throw err;
           if (err?.code === 'queue-expired' && retries > 1) {
-            console.warn('Queue ticket expired/404, retrying session creation. Retries left:', retries - 1, err);
+            console.warn(
+              'Queue ticket expired/404, retrying session creation. Retries left:',
+              retries - 1,
+              err,
+            );
             retries--;
             continue;
           }
@@ -293,7 +296,7 @@ export class S2sWsRealtimeClient extends EventTarget {
 
       let response;
       try {
-        const origin = this._sessionUrl.replace(/\/session\/?$/, "");
+        const origin = this._sessionUrl.replace(/\/session\/?$/, '');
         const queueUrl = `${origin}/api/queue/${encodeURIComponent(this._queueId)}`;
         response = await fetch(queueUrl, {
           headers: { 'Content-Type': 'application/json' },
@@ -323,9 +326,7 @@ export class S2sWsRealtimeClient extends EventTarget {
   }
 
   _emitQueue(position: number) {
-    this.dispatchEvent(
-      new CustomEvent('queue', { detail: { position, queueId: this._queueId } }),
-    );
+    this.dispatchEvent(new CustomEvent('queue', { detail: { position, queueId: this._queueId } }));
   }
 
   _queueSleep(ms: number) {
@@ -554,14 +555,14 @@ export class S2sWsRealtimeClient extends EventTarget {
         const audible = responseId ? this._audibleResponses.has(responseId) : false;
         this._audibleResponses.delete(responseId);
         const transcript =
-          extractResponseTranscript(event.response) ||
-          this._asstDisplay(responseId) ||
-          '';
+          extractResponseTranscript(event.response) || this._asstDisplay(responseId) || '';
         this._asstTranscriptByResp.delete(responseId);
         this._asstFullByResp.delete(responseId);
-        this.dispatchEvent(new CustomEvent('response-finished', {
-          detail: { responseId, status, audible, transcript },
-        }));
+        this.dispatchEvent(
+          new CustomEvent('response-finished', {
+            detail: { responseId, status, audible, transcript },
+          }),
+        );
         this._flushQueuedCreate();
         break;
       }
@@ -571,9 +572,11 @@ export class S2sWsRealtimeClient extends EventTarget {
         const args = typeof event.arguments === 'string' ? event.arguments : '{}';
         const callId = typeof event.call_id === 'string' ? event.call_id : '';
         if (name) {
-          this.dispatchEvent(new CustomEvent('toolcall', {
-            detail: { name, arguments: args, callId },
-          }));
+          this.dispatchEvent(
+            new CustomEvent('toolcall', {
+              detail: { name, arguments: args, callId },
+            }),
+          );
         }
         break;
       }
@@ -618,10 +621,15 @@ export class S2sWsRealtimeClient extends EventTarget {
         const rid = typeof event.response_id === 'string' ? event.response_id : '';
         const delta = typeof event.delta === 'string' ? event.delta : '';
         if (delta) {
-          this._asstTranscriptByResp.set(rid, (this._asstTranscriptByResp.get(rid) || "") + delta);
+          this._asstTranscriptByResp.set(rid, (this._asstTranscriptByResp.get(rid) || '') + delta);
           this.dispatchEvent(
             new CustomEvent('transcript', {
-              detail: { role: 'assistant', text: this._asstDisplay(rid), partial: true, responseId: rid },
+              detail: {
+                role: 'assistant',
+                text: this._asstDisplay(rid),
+                partial: true,
+                responseId: rid,
+              },
             }),
           );
         }
@@ -654,8 +662,10 @@ export class S2sWsRealtimeClient extends EventTarget {
       case 'error': {
         const err = event.error;
         console.error('[ws] server error:', err);
-        if (err?.type === 'conversation_already_has_active_response' ||
-            err?.code === 'conversation_already_has_active_response') {
+        if (
+          err?.type === 'conversation_already_has_active_response' ||
+          err?.code === 'conversation_already_has_active_response'
+        ) {
           if (this._createInFlight) {
             this._createInFlight = false;
             this._createQueue.push({});
@@ -663,7 +673,9 @@ export class S2sWsRealtimeClient extends EventTarget {
           break;
         }
         this.dispatchEvent(
-          new CustomEvent('server-error', { detail: { error: new Error(err?.message ?? 'Server error') } }),
+          new CustomEvent('server-error', {
+            detail: { error: new Error(err?.message ?? 'Server error') },
+          }),
         );
         break;
       }

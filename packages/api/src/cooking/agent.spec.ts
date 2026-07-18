@@ -519,6 +519,8 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
               '',
               'data: {"choices":[{"delta":{"content":"pan."}}]}',
               '',
+              'data: {"choices":[],"usage":{"prompt_tokens":40,"completion_tokens":5,"total_tokens":45}}',
+              '',
               'data: [DONE]',
               '',
             ].join('\n'),
@@ -533,6 +535,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       body: stream,
     });
     const deltas: string[] = [];
+    const usage: Array<{ total_tokens: number }> = [];
 
     setFetch(fetchMock, quickPlannerContent());
 
@@ -543,11 +546,16 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       onTextDelta: (delta) => {
         deltas.push(delta);
       },
+      onUsage: (item) => usage.push(item),
     });
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
 
     expect(body.stream).toBe(true);
+    expect(result.usage).toEqual([
+      expect.objectContaining({ input_tokens: 40, output_tokens: 5, total_tokens: 45 }),
+    ]);
+    expect(usage).toEqual([expect.objectContaining({ total_tokens: 45 })]);
     expect(deltas).toEqual(['Use a wide pan.']);
     expect(deltas.join('')).toBe('Use a wide pan.');
     expect(result.text).toBe('Use a wide pan.');
@@ -1322,7 +1330,10 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       user: 'user-1',
       conversationId: 'conversation-1',
       text: "gigi hadid's pasta",
-      webSearchConfig: { searchProvider: 'tavily', scraperProvider: 'tavily' },
+      webSearchConfig: {
+        searchProvider: SearchProviders.TAVILY,
+        scraperProvider: ScraperProviders.TAVILY,
+      },
       loadAuthValues: async () => ({ TAVILY_API_KEY: 'test-key' }),
     });
 
@@ -2256,6 +2267,7 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
         {
           messageId: 'm2',
           conversationId: 'conversation-1',
+          parentMessageId: 'm1',
           isCreatedByUser: false,
           text: 'I can create that recipe canvas.',
         },
@@ -3049,7 +3061,8 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
             {
               message: {
                 role: 'assistant',
-                content: 'I created the masala chhach canvas with churned dahi, roasted cumin, and clear chilling cues.',
+                content:
+                  'I created the masala chhach canvas with churned dahi, roasted cumin, and clear chilling cues.',
               },
             },
           ],
@@ -4279,14 +4292,14 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
       text: 'tell me about cumin seeds',
     });
 
-    const globalFetch = global.fetch as jest.Mock;
+    const globalFetch = jest.mocked(global.fetch);
 
     // The first call is the planner (temperature 0.1)
-    const plannerCallBody = JSON.parse(globalFetch.mock.calls[0][1].body);
+    const plannerCallBody = JSON.parse(String(globalFetch.mock.calls[0]?.[1]?.body));
     expect(plannerCallBody.temperature).toBe(0.1);
 
     // The second call is the main conversational responder (temperature 0.7)
-    const responderCallBody = JSON.parse(globalFetch.mock.calls[1][1].body);
+    const responderCallBody = JSON.parse(String(globalFetch.mock.calls[1]?.[1]?.body));
     expect(responderCallBody.temperature).toBe(0.7);
   });
 
@@ -4348,14 +4361,17 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(result.text).toContain('local private address');
 
     // Check that the tool execution call passed the standard json block
-    const globalFetch = global.fetch as jest.Mock;
+    const globalFetch = jest.mocked(global.fetch);
     const toolCorrectionCall = globalFetch.mock.calls.find((call) => {
       if (!call[1]?.body) return false;
-      const body = JSON.parse(call[1].body);
+      const body = JSON.parse(String(call[1].body));
       return body.messages?.some((m: { role: string }) => m.role === 'tool');
     });
     expect(toolCorrectionCall).toBeDefined();
-    const toolCallMessage = JSON.parse(toolCorrectionCall[1].body).messages.find(
+    if (!toolCorrectionCall) {
+      throw new Error('Expected a tool correction request.');
+    }
+    const toolCallMessage = JSON.parse(String(toolCorrectionCall[1]?.body)).messages.find(
       (m: { role: string }) => m.role === 'tool',
     );
     expect(toolCallMessage).toBeDefined();
@@ -4417,17 +4433,20 @@ set_prompt_suggestions(suggestions=["Draft the baguette recipe.", "How should I 
     expect(result.text).toContain('pancetta is generally a great substitute');
 
     // Check that the tool execution call passed the fallback error message in the history
-    const globalFetch = global.fetch as jest.Mock;
+    const globalFetch = jest.mocked(global.fetch);
     const toolCallBody = globalFetch.mock.calls.find((call) => {
       if (!call[1]?.body) return false;
-      const body = JSON.parse(call[1].body);
+      const body = JSON.parse(String(call[1].body));
       return body.messages?.some(
         (m: { role: string; tool_call_id?: string }) =>
           m.role === 'tool' && m.tool_call_id === 'epicure-fail-1',
       );
     });
     expect(toolCallBody).toBeDefined();
-    const messages = JSON.parse(toolCallBody[1].body).messages;
+    if (!toolCallBody) {
+      throw new Error('Expected a tool result request.');
+    }
+    const messages = JSON.parse(String(toolCallBody[1]?.body)).messages;
     const toolMsg = messages.find((m: { role: string }) => m.role === 'tool');
     expect(toolMsg.content).toContain('The flavor database is temporarily unavailable');
   });

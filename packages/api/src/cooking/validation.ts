@@ -112,7 +112,7 @@ export function personalizeRecipe(
   const ingredients = recipe.ingredients.map((ing) => {
     let originalText = ing.originalText;
     let quantity = ing.quantity;
-    let unit = ing.unit;
+    const unit = ing.unit;
     let item = ing.item;
 
     const lowerItem = item.toLowerCase();
@@ -128,29 +128,52 @@ export function personalizeRecipe(
             originalText = `${quantity} fine table salt`;
           }
         } else {
-          originalText = originalText.replace(/kosher salt/i, 'fine table salt (use half the amount)');
+          originalText = originalText.replace(
+            /kosher salt/i,
+            'fine table salt (use half the amount)',
+          );
         }
-        adjustments.push(`Converted kosher salt to fine table salt (adjusted quantity from ${ing.quantity ?? ''} to ${quantity ?? ''}) for user location (${country}).`);
+        adjustments.push(
+          `Converted kosher salt to fine table salt (adjusted quantity from ${ing.quantity ?? ''} to ${quantity ?? ''}) for user location (${country}).`,
+        );
       }
 
-      if (country === 'India' && (lowerItem.includes('all-purpose flour') || lowerItem.includes('all purpose flour'))) {
+      if (
+        country === 'India' &&
+        (lowerItem.includes('all-purpose flour') || lowerItem.includes('all purpose flour'))
+      ) {
         item = 'maida (AP flour)';
-        originalText = originalText.replace(/all-purpose flour|all purpose flour/i, 'maida (AP flour)');
+        originalText = originalText.replace(
+          /all-purpose flour|all purpose flour/i,
+          'maida (AP flour)',
+        );
         adjustments.push(`Mapped All-Purpose Flour to Maida (AP flour) for user location (India).`);
       }
     }
 
-    if (lowerItem.includes('packed brown sugar') || lowerItem.includes('dark brown sugar') || lowerItem.includes('light brown sugar')) {
+    if (
+      lowerItem.includes('packed brown sugar') ||
+      lowerItem.includes('dark brown sugar') ||
+      lowerItem.includes('light brown sugar')
+    ) {
       if (country === 'India') {
         originalText = `${originalText} (or white sugar + 1 tsp honey/molasses per cup)`;
-        adjustments.push('Added local brown sugar substitution tip (white sugar + honey/molasses) for India.');
+        adjustments.push(
+          'Added local brown sugar substitution tip (white sugar + honey/molasses) for India.',
+        );
       }
     }
 
-    if (lowerItem.includes('heavy whipping cream') || lowerItem.includes('heavy cream') || lowerItem.includes('double cream')) {
+    if (
+      lowerItem.includes('heavy whipping cream') ||
+      lowerItem.includes('heavy cream') ||
+      lowerItem.includes('double cream')
+    ) {
       if (country === 'India' && !lowerItem.includes('whipped')) {
         originalText = `${originalText} (Note: Amul fresh cream has 25% fat and won't whip; use whipping cream with 35%+ fat)`;
-        adjustments.push('Added whipping cream fat-content warning (Amul fresh cream fat limitations) for India.');
+        adjustments.push(
+          'Added whipping cream fat-content warning (Amul fresh cream fat limitations) for India.',
+        );
       }
     }
 
@@ -172,7 +195,9 @@ export function personalizeRecipe(
       } else if (tempUnit === 'C' || tempUnit === 'CELSIUS') {
         tempVal = Math.round(tempVal - 20);
       }
-      adjustments.push(`Adjusted baking temperature from ${step.temperature.value}°${tempUnit} to ${tempVal}°${tempUnit} for user's convection/fan oven.`);
+      adjustments.push(
+        `Adjusted baking temperature from ${step.temperature.value}°${tempUnit} to ${tempVal}°${tempUnit} for user's convection/fan oven.`,
+      );
       return {
         ...step,
         temperature: {

@@ -1,22 +1,5 @@
 import type { CookingWebSource } from './web';
-
-export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
-
-export type ToolCall = {
-  id: string;
-  type: 'function';
-  function: {
-    name: string;
-    arguments: string;
-  };
-};
-
-export type ChatMessage = {
-  role: ChatRole;
-  content: string | any[] | null;
-  tool_call_id?: string;
-  tool_calls?: ToolCall[];
-};
+import type { ChatMessage } from './chat';
 
 export type CookingToolDefinition = {
   type: 'function';

@@ -252,6 +252,7 @@ describe('cooking planner', () => {
           {
             messageId: 'm1',
             conversationId: 'conversation-1',
+            parentMessageId: null,
             isCreatedByUser: true,
             text: "can you give me chef john from food wishes.com's patatas bravas recipe?",
           },
@@ -284,12 +285,14 @@ describe('cooking planner', () => {
           {
             messageId: 'm1',
             conversationId: 'conversation-1',
+            parentMessageId: null,
             isCreatedByUser: true,
             text: 'How do I make chocolate mousse?',
           },
           {
             messageId: 'm2',
             conversationId: 'conversation-1',
+            parentMessageId: 'm1',
             isCreatedByUser: true,
             text: 'i had heard you could make a mousse with just water and chocolate',
           },
@@ -440,12 +443,14 @@ describe('cooking planner', () => {
           {
             messageId: 'm1',
             conversationId: 'conversation-1',
+            parentMessageId: null,
             isCreatedByUser: true,
             text: 'create a recipe canvas for egg bhurji',
           },
           {
             messageId: 'm2',
             conversationId: 'conversation-1',
+            parentMessageId: 'm1',
             isCreatedByUser: false,
             text: 'I have created the egg bhurji canvas for you!',
             metadata: {

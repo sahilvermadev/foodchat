@@ -104,7 +104,9 @@ describe('Recipe Personalization Engine', () => {
 
     const step = recipe.steps[0];
     expect(step.temperature?.value).toBe(350); // 375 - 25
-    expect(step.tips).toContain('Adjusted baking temperature down by 25°F for your convection/fan oven.');
+    expect(step.tips).toContain(
+      'Adjusted baking temperature down by 25°F for your convection/fan oven.',
+    );
     expect(adjustments.some((a) => a.includes('Adjusted baking temperature'))).toBe(true);
   });
 });

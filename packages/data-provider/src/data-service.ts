@@ -23,6 +23,9 @@ import type {
   UpdateCookingDocumentRequest,
   StartCookingSessionRequest,
   CompleteCookingSessionRequest,
+  CookingVoiceConfig,
+  PersistCookingVoiceTurnRequest,
+  PersistCookingVoiceTurnResponse,
   SavedRecipe,
   SavedRecipesQuery,
   SavedRecipesResponse,
@@ -160,6 +163,16 @@ export function completeCookingSession(
   return request.post(endpoints.cookingSessionComplete(sessionId), payload);
 }
 
+export function getCookingVoiceConfig(): Promise<CookingVoiceConfig> {
+  return request.get(endpoints.cookingVoiceConfig());
+}
+
+export function persistCookingVoiceTurn(
+  payload: PersistCookingVoiceTurnRequest,
+): Promise<PersistCookingVoiceTurnResponse> {
+  return request.post(endpoints.cookingVoiceTurns(), payload);
+}
+
 function savedRecipesQueryString(params: SavedRecipesQuery): string {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -200,9 +213,7 @@ export function createSocialImport(payload: CreateSocialImportRequest): Promise<
   return request.post(endpoints.socialImports(), payload);
 }
 
-export function getSocialImports(
-  params: SocialImportsQuery = {},
-): Promise<SocialImportsResponse> {
+export function getSocialImports(params: SocialImportsQuery = {}): Promise<SocialImportsResponse> {
   return request.get(endpoints.socialImports(socialImportsQueryString(params)));
 }
 

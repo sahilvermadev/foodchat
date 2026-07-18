@@ -232,12 +232,13 @@ export const cookingSessionEvents = (sessionId: string) =>
   `${cookingRoot}/sessions/${encodeURIComponent(sessionId)}/events`;
 export const cookingSessionComplete = (sessionId: string) =>
   `${cookingRoot}/sessions/${encodeURIComponent(sessionId)}/complete`;
+export const cookingVoiceConfig = () => `${cookingRoot}/voice/config`;
+export const cookingVoiceTurns = () => `${cookingRoot}/voice/turns`;
 export const recipes = (query = '') => `${recipesRoot}${query ? `?${query}` : ''}`;
 export const recipe = (recipeId: string) => `${recipesRoot}/${encodeURIComponent(recipeId)}`;
 export const recipeByDraft = (draftId: string) =>
   `${recipesRoot}/by-draft/${encodeURIComponent(draftId)}`;
-export const socialImports = (query = '') =>
-  `${socialImportsRoot}${query ? `?${query}` : ''}`;
+export const socialImports = (query = '') => `${socialImportsRoot}${query ? `?${query}` : ''}`;
 export const socialImport = (importId: string) =>
   `${socialImportsRoot}/${encodeURIComponent(importId)}`;
 export const socialImportDraft = (importId: string) =>

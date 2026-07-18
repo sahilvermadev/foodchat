@@ -61,6 +61,7 @@ beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   createModels(mongoose);
   await mongoose.connect(mongoServer.getUri());
+  await mongoose.models.CookingDraft.syncIndexes();
 });
 
 afterEach(async () => {
@@ -144,7 +145,9 @@ describe('cooking service', () => {
     expect(draft.recipe.notes).toEqual(['Serve chilled']);
     expect(draft.recipe.tags).toEqual(['beverage']);
 
-    const persisted = await mongoose.models.CookingDraft.findById(draft._id).lean();
+    const persisted = await mongoose.models.CookingDraft.findById(draft._id).lean<{
+      recipe: StructuredRecipe;
+    }>();
     expect(persisted?.recipe.title).toBe('Custom tea');
     expect(persisted?.recipe.servings).toBe(4);
   });
@@ -186,6 +189,20 @@ describe('cooking service', () => {
     collection = (await deleteCookingDocument(userA, guide._id))!;
     expect(collection.selectedDocumentId).toBe(bread._id);
     expect(collection.documents).toHaveLength(1);
+  });
+
+  test('concurrent document creation leaves exactly one selected document', async () => {
+    await Promise.all([
+      generateCookingDraft(userA, 'First recipe', 'concurrent-conversation'),
+      generateCookingDraft(userA, 'Second recipe', 'concurrent-conversation'),
+    ]);
+
+    const selected = await mongoose.models.CookingDraft.find({
+      user: userA,
+      conversationId: 'concurrent-conversation',
+      selected: true,
+    }).lean();
+    expect(selected).toHaveLength(1);
   });
 
   test('migrates non-expired legacy drafts into durable recipe documents', async () => {
@@ -358,13 +375,15 @@ describe('cooking service', () => {
       title: 'Changed after session start',
     });
     const refetchedSession = await getCookingSession(userA, session?._id ?? '');
-    const refetchedDraft = await mongoose.models.CookingDraft.findById(draft._id).lean();
+    const refetchedDraft = await mongoose.models.CookingDraft.findById(draft._id).lean<{
+      recipe: StructuredRecipe;
+    }>();
 
     expect(refetchedSession?.recipeSnapshot.title).toBe(originalTitle);
     expect(refetchedDraft?.recipe.title).toBe('Changed after session start');
   });
 
-  test('append events persists event docs and updates derived session state', async () => {
+  test('append events persist event docs and atomically update derived session state', async () => {
     const draft = await generateCookingDraft(userA, 'lentil soup with rice');
     const recipe = editedRecipe(draft.recipe);
     recipe.steps = [
@@ -422,6 +441,33 @@ describe('cooking service', () => {
       'problem',
     ]);
     expect(persisted[1].stepIndex).toBe(1);
+  });
+
+  test('concurrent session events do not overwrite one another', async () => {
+    const { session } = await createStartedSession(userA);
+
+    await Promise.all([
+      appendCookingSessionEvent({
+        user: userA,
+        sessionId: session._id,
+        event: { type: 'note', text: 'First note' },
+      }),
+      appendCookingSessionEvent({
+        user: userA,
+        sessionId: session._id,
+        event: { type: 'note', text: 'Second note' },
+      }),
+      appendCookingSessionEvent({
+        user: userA,
+        sessionId: session._id,
+        event: { type: 'problem', text: 'Pan was too small' },
+      }),
+    ]);
+
+    const current = await getCookingSession(userA, session._id);
+    expect(current?.summary.notes).toEqual(expect.arrayContaining(['First note', 'Second note']));
+    expect(current?.summary.notes).toHaveLength(2);
+    expect(current?.summary.problems).toEqual(['Pan was too small']);
   });
 
   test('complete session stores review summary and completion timestamp', async () => {

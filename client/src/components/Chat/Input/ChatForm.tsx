@@ -20,6 +20,7 @@ import {
 import useGuestCookingTrial from '~/hooks/useGuestCookingTrial';
 import { mainTextareaId, BadgeItem } from '~/common';
 import { GuestAuthActions } from '~/components/Auth/GuestAuth';
+import { useCookingVoiceConfigQuery } from '~/data-provider';
 import AttachFileChat from './Files/AttachFileChat';
 import FileFormChat from './Files/FileFormChat';
 import { cn, removeFocusRings } from '~/utils';
@@ -88,12 +89,13 @@ const ChatForm = memo(function ChatForm({
   const [showStopButton, setShowStopButton] = useRecoilState(store.showStopButtonByIndex(index));
   const [isVoiceActive, setIsVoiceActive] = useRecoilState(store.voiceAssistantActive);
   const { isCookingChat } = useCookingChat();
+  const { isAuthenticated } = useAuthContext();
+  const voiceConfig = useCookingVoiceConfigQuery(isCookingChat && isAuthenticated);
   const plusPopoverAtom = useMemo(() => store.showPlusPopoverFamily(index), [index]);
   const mentionPopoverAtom = useMemo(() => store.showMentionPopoverFamily(index), [index]);
 
   const { requiresKey } = useRequiresKey();
   const methods = useChatFormContext();
-  const { isAuthenticated } = useAuthContext();
   const {
     generateConversation,
     conversation: addedConvo,
@@ -396,11 +398,11 @@ const ChatForm = memo(function ChatForm({
                   isSubmitting={isSubmitting}
                 />
               )}
-              {isCookingChat && (
+              {isCookingChat && voiceConfig.data?.enabled && (
                 <button
                   type="button"
                   onClick={() => setIsVoiceActive(!isVoiceActive)}
-                  aria-label="Toggle Voice Assistant Mode"
+                  aria-label={localize('com_cooking_voice_button_label')}
                   className={cn(
                     'flex h-8 items-center gap-1.5 self-center rounded-full border border-border-light px-3 py-1 text-xs font-semibold shadow-sm transition-all duration-200 focus:outline-none',
                     isVoiceActive
