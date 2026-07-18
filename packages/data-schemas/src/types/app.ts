@@ -116,11 +116,7 @@ export interface AppConfig {
     /** Azure OpenAI endpoint configuration */
     azureOpenAI?: TAzureConfig;
     /** Agents endpoint configuration */
-    agents?: Partial<TAgentsEndpoint>;
-    /** Agents endpoint configuration */
     [EModelEndpoint.agents]?: Partial<TAgentsEndpoint>;
-    /** Custom endpoints configuration */
-    custom?: TCustomEndpoints;
     /** Custom endpoints configuration */
     [EModelEndpoint.custom]?: TCustomEndpoints;
     /** Global endpoint configuration */

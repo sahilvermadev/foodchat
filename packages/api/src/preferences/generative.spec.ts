@@ -36,8 +36,8 @@ describe('streamGenerativePrompts', () => {
       _id: 'preferences-1',
       user: 'user-1',
       markdown: '## Safety\n- No peanuts',
-      createdAt: new Date('2026-06-01T00:00:00.000Z'),
-      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+      createdAt: '2026-06-01T00:00:00.000Z',
+      updatedAt: '2026-06-01T00:00:00.000Z',
     });
   });
 
@@ -82,7 +82,11 @@ describe('streamGenerativePrompts', () => {
           current_month: 'June',
         },
       },
-      { write: (line) => lines.push(line) },
+      {
+        write: (line) => {
+          lines.push(line);
+        },
+      },
     );
 
     expect(result?.elements['suggestion-1']).toMatchObject({

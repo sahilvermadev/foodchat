@@ -1,5 +1,8 @@
 import { logger, TokenMethods } from '@librechat/data-schemas';
-import { FlowStateManager, MCPConnection, MCPOAuthTokens, MCPOptions } from '../..';
+import { FlowStateManager } from '../..';
+import { MCPConnection } from '../connection';
+import type { MCPOptions } from '../types';
+import type { MCPOAuthTokens } from './types';
 import { MCPManager } from '../MCPManager';
 import { OAuthReconnectionManager } from './OAuthReconnectionManager';
 import { OAuthReconnectionTracker } from './OAuthReconnectionTracker';

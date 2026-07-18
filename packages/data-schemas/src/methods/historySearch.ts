@@ -4,6 +4,7 @@ import type {
   ChatHistorySearchResponse,
   ChatHistorySearchResult,
   ChatHistorySearchSource,
+  EModelEndpoint,
 } from 'librechat-data-provider';
 import type { IConversation, ICookingDraft, IMessage } from '~/types';
 
@@ -199,8 +200,8 @@ export function createHistorySearchMethods(
     conversations.forEach((conversation) => {
       results.set(conversation.conversationId, {
         conversationId: conversation.conversationId,
-        title: conversation.title,
-        endpoint: conversation.endpoint,
+        title: conversation.title ?? null,
+        endpoint: (conversation.endpoint as EModelEndpoint | undefined) ?? null,
         createdAt: conversation.createdAt?.toISOString() ?? new Date(0).toISOString(),
         updatedAt: conversation.updatedAt?.toISOString() ?? new Date(0).toISOString(),
         user: conversation.user,
