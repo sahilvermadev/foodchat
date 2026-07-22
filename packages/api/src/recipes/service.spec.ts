@@ -6,7 +6,10 @@ import type { StructuredRecipe } from 'librechat-data-provider';
 
 import {
   deleteSavedRecipe,
+  getPublicRecipe,
   getRecipe,
+  listOfflineRecipes,
+  listPublicRecipes,
   listRecipes,
   ownsRecipe,
   saveRecipe,
@@ -111,6 +114,23 @@ afterAll(async () => {
 });
 
 describe('saved recipe title integrity', () => {
+  test('returns complete recipes for a durable offline snapshot', async () => {
+    const saved = await saveRecipe('offline-recipe-user', {
+      documentMarkdown: markdown,
+      recipe: recipe('Thai Iced Tea'),
+    });
+
+    const snapshot = await listOfflineRecipes('offline-recipe-user');
+
+    expect(snapshot.syncedAt).toEqual(expect.any(String));
+    expect(snapshot.recipes).toHaveLength(1);
+    expect(snapshot.recipes[0]).toMatchObject({
+      _id: saved._id,
+      documentMarkdown: markdown,
+      recipe: expect.objectContaining({ title: 'Thai Iced Tea' }),
+    });
+  });
+
   test('canonicalizes a malformed supplied title and structured title from markdown', async () => {
     const saved = await saveRecipe('new-recipe-user', {
       title: '{',
@@ -196,6 +216,61 @@ describe('saved recipe title integrity', () => {
     const repaired = await findStoredRecipe(created._id);
     expect(repaired?.title).toBe('Thai Iced Tea');
     expect(repaired?.recipe.title).toBe('Thai Iced Tea');
+  });
+});
+
+describe('public recipe discovery', () => {
+  test('only exposes recipes from other users who explicitly publish their profile', async () => {
+    const User = mongoose.models.User;
+    const [viewer, publicCook, privateCook] = await User.create([
+      {
+        email: 'viewer@example.com',
+        provider: 'local',
+        name: 'Viewer',
+        publicProfile: true,
+      },
+      {
+        email: 'public@example.com',
+        provider: 'local',
+        name: 'Mina',
+        username: 'mina-cooks',
+        publicProfile: true,
+      },
+      {
+        email: 'private@example.com',
+        provider: 'local',
+        name: 'Private cook',
+        publicProfile: false,
+      },
+    ]);
+
+    const viewerRecipe = await saveRecipe(String(viewer._id), {
+      title: 'Viewer soup',
+      documentMarkdown: '# Viewer soup\n\n## Ingredients\n- Water\n\n## Instructions\n1. Cook.',
+      recipe: recipe('Viewer soup'),
+    });
+    const publicRecipe = await saveRecipe(String(publicCook._id), {
+      title: 'Mina tea',
+      documentMarkdown: markdown,
+      recipe: recipe('Mina tea'),
+    });
+    const privateRecipe = await saveRecipe(String(privateCook._id), {
+      title: 'Private tea',
+      documentMarkdown: '# Private tea\n\n## Ingredients\n- Tea\n\n## Instructions\n1. Brew.',
+      recipe: recipe('Private tea'),
+    });
+
+    const result = await listPublicRecipes(String(viewer._id), 8);
+
+    expect(result.recipes.map((item) => item._id)).toEqual([publicRecipe._id]);
+    expect(result.recipes[0]?.author).toMatchObject({ name: 'Mina', username: 'mina-cooks' });
+    expect(result.recipes.map((item) => item._id)).not.toContain(viewerRecipe._id);
+    expect(result.recipes.map((item) => item._id)).not.toContain(privateRecipe._id);
+    await expect(getPublicRecipe(String(viewer._id), publicRecipe._id)).resolves.toMatchObject({
+      _id: publicRecipe._id,
+      author: { name: 'Mina' },
+    });
+    await expect(getPublicRecipe(String(viewer._id), privateRecipe._id)).resolves.toBeNull();
   });
 });
 

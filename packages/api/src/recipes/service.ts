@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 import type {
+  OfflineRecipesResponse,
   RecipeCategorization,
+  PublicRecipe,
+  PublicRecipeAuthor,
+  PublicRecipeSummary,
+  PublicRecipesResponse,
   SavedRecipe,
   SavedRecipeList,
   SavedRecipeSummary,
@@ -10,7 +15,7 @@ import type {
   StructuredRecipe,
   UpdateSavedRecipeRequest,
 } from 'librechat-data-provider';
-import type { ISavedRecipe, ISocialImport } from '@librechat/data-schemas';
+import type { ISavedRecipe, ISocialImport, IUser } from '@librechat/data-schemas';
 import { categorizeRecipe } from './categorize';
 import { illustrateRecipe } from './illustrate';
 import {
@@ -54,6 +59,10 @@ function iso(date?: Date): string {
 
 function model() {
   return mongoose.model<ISavedRecipe>('SavedRecipe');
+}
+
+function userModel() {
+  return mongoose.model<IUser>('User');
 }
 
 function socialImportModel() {
@@ -524,6 +533,12 @@ function illustrationMediaUrl(recipe: ISavedRecipe, thumbnail = false): string {
   return `/api/recipes/${encodeURIComponent(idOf(recipe))}/illustration?v=${version}${variant}`;
 }
 
+function publicIllustrationMediaUrl(recipe: ISavedRecipe, thumbnail = false): string {
+  const version = recipe.updatedAt?.getTime() ?? 0;
+  const variant = thumbnail ? '&variant=thumbnail' : '';
+  return `/api/recipes/explore/${encodeURIComponent(idOf(recipe))}/illustration?v=${version}${variant}`;
+}
+
 function hasIllustration(recipe: ISavedRecipe): boolean {
   return Boolean(recipe.illustrationData?.length || recipe.illustrationUrl);
 }
@@ -667,6 +682,48 @@ function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
     createdAt: iso(recipe.createdAt),
     updatedAt: iso(recipe.updatedAt),
   };
+}
+
+function serializePublicRecipeSummary(
+  recipe: ISavedRecipe,
+  author: PublicRecipeAuthor,
+): PublicRecipeSummary {
+  const summary = serializeSavedRecipeSummary(recipe);
+  return {
+    _id: summary._id,
+    title: summary.title,
+    documentType: summary.documentType,
+    ...(summary.shortDescription ? { shortDescription: summary.shortDescription } : {}),
+    ...(summary.illustrationUrl
+      ? { illustrationUrl: publicIllustrationMediaUrl(recipe, true) }
+      : {}),
+    illustrationStatus: summary.illustrationStatus,
+    ...(summary.categorization ? { categorization: summary.categorization } : {}),
+    ...(summary.servings ? { servings: summary.servings } : {}),
+    updatedAt: summary.updatedAt,
+    author,
+  };
+}
+
+function publicAuthor(
+  user: Pick<IUser, '_id' | 'name' | 'username' | 'avatar'>,
+): PublicRecipeAuthor {
+  const username = user.username?.trim();
+  const name = user.name?.trim() || (username ? `@${username}` : 'Rekky cook');
+  return {
+    id: String(user._id),
+    name,
+    ...(username ? { username } : {}),
+    ...(user.avatar ? { avatar: user.avatar } : {}),
+  };
+}
+
+async function findPublicAuthor(viewer: string, owner: string): Promise<PublicRecipeAuthor | null> {
+  if (viewer === owner) return null;
+  const user = await userModel()
+    .findOne({ _id: owner, publicProfile: true })
+    .select('_id name username avatar');
+  return user ? publicAuthor(user) : null;
 }
 
 function escapeRegex(value: string): string {
@@ -1056,6 +1113,79 @@ export async function getRecipeIllustration(
     : importedExternalIllustration.illustration;
 }
 
+export async function listPublicRecipes(
+  viewer: string,
+  requestedLimit = 8,
+): Promise<PublicRecipesResponse> {
+  const limit = Math.min(Math.max(Number(requestedLimit) || 8, 1), 20);
+  const users = await userModel()
+    .find({ _id: { $ne: viewer }, publicProfile: true })
+    .select('_id name username avatar')
+    .limit(100);
+  const authors = new Map(users.map((user) => [String(user._id), publicAuthor(user)]));
+  if (!authors.size) return { recipes: [] };
+
+  const recipes = await model()
+    .find({ user: { $in: [...authors.keys()] }, documentType: 'recipe' })
+    .select(
+      [
+        'user',
+        'title',
+        'documentType',
+        'shortDescription',
+        'illustrationUrl',
+        'illustrationStatus',
+        'categorization',
+        'categorizationStatus',
+        'categorizationVersion',
+        'recipe.title',
+        'recipe.servings',
+        'documentMarkdown',
+        'saveList',
+        'createdAt',
+        'updatedAt',
+      ].join(' '),
+    )
+    .sort({ updatedAt: -1 })
+    .limit(limit);
+
+  return {
+    recipes: recipes.flatMap((recipe) => {
+      const author = authors.get(recipe.user);
+      return author ? [serializePublicRecipeSummary(recipe, author)] : [];
+    }),
+  };
+}
+
+export async function getPublicRecipe(
+  viewer: string,
+  recipeId: string,
+): Promise<PublicRecipe | null> {
+  const recipe = await model()
+    .findById(recipeId)
+    .select('-illustrationUrl -illustrationData -illustrationThumbnail');
+  if (!recipe) return null;
+  const author = await findPublicAuthor(viewer, recipe.user);
+  if (!author) return null;
+  const summary = serializePublicRecipeSummary(recipe, author);
+  const serialized = serializeSavedRecipe(recipe);
+  return {
+    ...summary,
+    documentMarkdown: serialized.documentMarkdown,
+    ...(serialized.recipe ? { recipe: serialized.recipe } : {}),
+  };
+}
+
+export async function getPublicRecipeIllustration(
+  viewer: string,
+  recipeId: string,
+  thumbnail = false,
+): Promise<IllustrationMedia | null> {
+  const recipe = await model().findById(recipeId).select('user');
+  if (!recipe || !(await findPublicAuthor(viewer, recipe.user))) return null;
+  return getRecipeIllustration(recipe.user, recipeId, thumbnail);
+}
+
 export async function listRecipes(
   user: string,
   query: SavedRecipesQuery,
@@ -1100,6 +1230,35 @@ export async function listRecipes(
   return {
     recipes: page,
     total,
+    ...(next?.updatedAt ? { nextCursor: next.updatedAt.toISOString() } : {}),
+  };
+}
+
+export async function listOfflineRecipes(
+  user: string,
+  query: Pick<SavedRecipesQuery, 'cursor' | 'limit'> = {},
+): Promise<OfflineRecipesResponse> {
+  await repairLegacyWrapperTitles(user);
+  await repairLegacySaveLists(user);
+  await failStalePending(user);
+  const limit = Math.min(Math.max(Number(query.limit) || maxLimit, 1), 100);
+  const filter: RecipeListFilter = { user };
+  if (query.cursor) {
+    const cursor = new Date(query.cursor);
+    if (!Number.isNaN(cursor.getTime())) filter.updatedAt = { $lt: cursor };
+  }
+  const recipes = await model()
+    .find(filter)
+    .select('-illustrationData')
+    .sort({ updatedAt: -1 })
+    .limit(limit + 1);
+  scheduleMissingIllustrations(recipes);
+  scheduleMissingCategorizations(recipes);
+  const page = recipes.slice(0, limit);
+  const next = recipes.length > limit ? recipes[limit - 1] : undefined;
+  return {
+    recipes: page.map((recipe) => serializeSavedRecipe(recipe)),
+    syncedAt: iso(new Date()),
     ...(next?.updatedAt ? { nextCursor: next.updatedAt.toISOString() } : {}),
   };
 }

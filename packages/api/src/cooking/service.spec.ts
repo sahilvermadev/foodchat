@@ -6,6 +6,7 @@ import {
   CookingValidationError,
   deleteCookingDocument,
   getCookingSession,
+  listCookingSessions,
   listCookingDocuments,
   selectCookingDocument,
   updateCookingDraft,
@@ -76,6 +77,21 @@ afterAll(async () => {
 });
 
 describe('cooking service', () => {
+  test('lists only the requesting user active cooking sessions newest first', async () => {
+    const older = await createStartedSession(userA);
+    await mongoose.models.CookingSession.updateOne(
+      { _id: older.session._id },
+      { $set: { updatedAt: new Date('2026-01-01') } },
+    );
+    const newer = await createStartedSession(userA);
+    await createStartedSession(userB);
+
+    const result = await listCookingSessions(userA, { status: 'active', limit: 1 });
+
+    expect(result.sessions).toHaveLength(1);
+    expect(result.sessions[0]?._id).toBe(newer.session._id);
+  });
+
   test('generate document persists durable selected recipe content', async () => {
     const draft = await generateCookingDraft(userA, '  chickpea curry  ');
 

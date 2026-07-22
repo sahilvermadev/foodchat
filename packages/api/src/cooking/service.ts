@@ -4,6 +4,7 @@ import type {
   CookingDocumentType,
   CookingDraft,
   CookingSession,
+  CookingSessionsResponse,
   CookingSessionEvent,
   StructuredRecipe,
 } from 'librechat-data-provider';
@@ -377,6 +378,20 @@ export async function getCookingSession(
   const { Session } = models();
   const session = await Session.findOne({ _id: sessionId, user });
   return session ? serializeSession(session) : null;
+}
+
+export async function listCookingSessions(
+  user: string,
+  options: { status?: 'active' | 'completed'; limit?: number } = {},
+): Promise<CookingSessionsResponse> {
+  const { Session } = models();
+  const limit = Math.min(Math.max(options.limit ?? 10, 1), 20);
+  const query: { user: string; status?: 'active' | 'completed' } = { user };
+  if (options.status) {
+    query.status = options.status;
+  }
+  const sessions = await Session.find(query).sort({ updatedAt: -1 }).limit(limit);
+  return { sessions: sessions.map(serializeSession) };
 }
 
 export async function appendCookingSessionEvent(params: {

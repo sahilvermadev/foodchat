@@ -23,6 +23,7 @@ const {
   generateCookingDraft,
   updateCookingDraft,
   startCookingSession,
+  listCookingSessions,
   getCookingSession,
   appendCookingSessionEvent,
   completeCookingSession,
@@ -1411,6 +1412,26 @@ router.post('/sessions', async (req, res) => {
     res.status(201).json(session);
   } catch (error) {
     handleError(res, error);
+  }
+});
+
+router.get('/sessions', async (req, res) => {
+  try {
+    const status = req.query.status;
+    if (status != null && status !== 'active' && status !== 'completed') {
+      throw new CookingValidationError('Cooking session status is malformed.');
+    }
+    const requestedLimit = Number(req.query.limit ?? 10);
+    if (!Number.isInteger(requestedLimit) || requestedLimit < 1) {
+      throw new CookingValidationError('Cooking session limit is malformed.');
+    }
+    const sessions = await listCookingSessions(userId(req), {
+      status,
+      limit: requestedLimit,
+    });
+    return res.json(sessions);
+  } catch (error) {
+    return handleError(res, error);
   }
 });
 

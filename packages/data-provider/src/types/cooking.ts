@@ -154,6 +154,102 @@ export type CookingSession = {
   updatedAt: string;
 };
 
+export type CookingSessionsResponse = {
+  sessions: CookingSession[];
+};
+
+export type CookingChatMessageMetadata = {
+  cookingPromptSuggestions?: string[];
+  cookingWebSources?: CookingWebSource[];
+  cookingActiveIntent?: string;
+  cookingActiveAction?: string;
+  cookingCategory?: CookingChatCategory;
+};
+
+export type CookingWebSource = {
+  title?: string;
+  url: string;
+  sourceType: 'search' | 'page' | 'recipe' | 'video' | 'product' | 'safety';
+  accessedAt: string;
+};
+
+export type CookingChatMessage = {
+  messageId: string;
+  conversationId: string | null;
+  parentMessageId: string | null;
+  text: string;
+  isCreatedByUser: boolean;
+  error?: boolean;
+  metadata?: CookingChatMessageMetadata;
+  createdAt?: string;
+  files?: import('./files').TFile[];
+};
+
+export type CookingChatConversation = {
+  conversationId: string;
+  title?: string | null;
+  endpoint?: string | null;
+  model?: string | null;
+  cookingCategory?: CookingChatCategory;
+};
+
+export type CookingChatRequest = {
+  text: string;
+  conversationId?: string;
+  messageId: string;
+  responseMessageId: string;
+  parentMessageId: string;
+  messages: CookingChatMessage[];
+  files?: import('./files').TFile[];
+};
+
+export type CookingChatStreamEvent =
+  | { message: CookingChatMessage; created: true; cooking: true }
+  | {
+      message: true;
+      text: string;
+      messageId: string;
+      parentMessageId: string;
+      conversationId: string;
+    }
+  | {
+      type: 'step';
+      step: CookingChatProgress;
+      messageId: string;
+      parentMessageId: string;
+      conversationId: string;
+    }
+  | {
+      final: true;
+      conversation: CookingChatConversation;
+      title?: string;
+      requestMessage: CookingChatMessage;
+      responseMessage: CookingChatMessage;
+      cookingDraftUpdated?: boolean;
+      cookingDocumentsUpdated?: boolean;
+    };
+
+export type CookingChatState = {
+  messages: CookingChatMessage[];
+  conversation?: CookingChatConversation;
+  isStreaming: boolean;
+  activeStep?: CookingChatProgress;
+  documentsUpdated: boolean;
+};
+
+export type CookingChatProgressValue =
+  | string
+  | number
+  | boolean
+  | null
+  | CookingChatProgressValue[]
+  | { [key: string]: CookingChatProgressValue };
+
+export type CookingChatProgress = {
+  type: string;
+  payload: { [key: string]: CookingChatProgressValue };
+};
+
 export type CookingNavigationEvent = {
   type: 'navigation';
   action: 'previous' | 'next' | 'jump' | 'repeat';
@@ -285,6 +381,38 @@ export type SavedRecipesResponse = {
   recipes: SavedRecipeSummary[];
   total: number;
   nextCursor?: string;
+};
+
+export type OfflineRecipesResponse = {
+  recipes: SavedRecipe[];
+  syncedAt: string;
+  nextCursor?: string;
+};
+
+export type PublicRecipeAuthor = {
+  id: string;
+  name: string;
+  username?: string;
+  avatar?: string;
+};
+
+export type PublicRecipeSummary = Pick<
+  SavedRecipeSummary,
+  | '_id'
+  | 'title'
+  | 'documentType'
+  | 'shortDescription'
+  | 'illustrationUrl'
+  | 'illustrationStatus'
+  | 'categorization'
+  | 'servings'
+  | 'updatedAt'
+> & { author: PublicRecipeAuthor };
+
+export type PublicRecipe = PublicRecipeSummary & Pick<SavedRecipe, 'documentMarkdown' | 'recipe'>;
+
+export type PublicRecipesResponse = {
+  recipes: PublicRecipeSummary[];
 };
 
 export type SocialImportProvider = 'youtube' | 'instagram' | 'tiktok' | 'web' | 'unknown';

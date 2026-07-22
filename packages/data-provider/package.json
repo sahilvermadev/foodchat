@@ -16,6 +16,11 @@
       "import": "./dist/react-query/index.es.js",
       "require": "./dist/react-query/index.js",
       "types": "./dist/types/react-query/index.d.ts"
+    },
+    "./mobile": {
+      "import": "./dist/mobile/index.es.js",
+      "require": "./dist/mobile/index.js",
+      "types": "./dist/types/mobile.d.ts"
     }
   },
   "files": [

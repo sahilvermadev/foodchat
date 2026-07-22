@@ -99,10 +99,16 @@ export default [
       },
       'import/resolver': {
         typescript: {
-          project: ['./client/tsconfig.json'],
+          project: [
+            path.join(__dirname, 'client/tsconfig.json'),
+            path.join(__dirname, 'apps/mobile/tsconfig.json'),
+          ],
         },
         node: {
-          project: ['./client/tsconfig.json'],
+          project: [
+            path.join(__dirname, 'client/tsconfig.json'),
+            path.join(__dirname, 'apps/mobile/tsconfig.json'),
+          ],
         },
       },
     },
@@ -230,7 +236,10 @@ export default [
       ecmaVersion: 5,
       sourceType: 'script',
       parserOptions: {
-        project: './client/tsconfig.json',
+        project: [
+          path.join(__dirname, 'client/tsconfig.json'),
+          path.join(__dirname, 'apps/mobile/tsconfig.json'),
+        ],
       },
     },
     rules: {
@@ -389,6 +398,17 @@ export default [
             'Avoid Model.collection.* — raw driver calls bypass all Mongoose middleware including tenant isolation. Use Mongoose model methods or tenantSafeBulkWrite() instead.',
         },
       ],
+    },
+  },
+  {
+    // Expo SDK 56 uses TypeScript 6 locally. Keep its syntax-only ESLint pass
+    // independent from the web workspace's TypeScript 5 project service;
+    // `npm run typecheck --workspace=@rekky/mobile` provides strict type checks.
+    files: ['./apps/mobile/**/*.ts', './apps/mobile/**/*.tsx'],
+    languageOptions: {
+      parserOptions: {
+        project: false,
+      },
     },
   },
 ];

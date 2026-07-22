@@ -8,6 +8,7 @@ const {
   deleteUserController,
   getUserController,
   dismissTourController,
+  updatePublicProfileController,
 } = require('~/server/controllers/UserController');
 const {
   verifyEmailLimiter,
@@ -26,6 +27,7 @@ router.get('/terms', requireJwtAuth, getTermsStatusController);
 router.post('/terms/accept', requireJwtAuth, acceptTermsController);
 router.post('/plugins', requireJwtAuth, updateUserPluginsController);
 router.post('/tour-complete', requireJwtAuth, dismissTourController);
+router.patch('/profile', requireJwtAuth, updatePublicProfileController);
 router.delete('/delete', requireJwtAuth, canDeleteAccount, configMiddleware, deleteUserController);
 router.post('/verify', verifyEmailController);
 router.post('/verify/resend', verifyEmailLimiter, resendVerificationController);

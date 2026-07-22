@@ -84,6 +84,7 @@ jest.mock('@librechat/api', () => {
     generateCookingDraft: jest.fn(),
     updateCookingDraft: jest.fn(),
     startCookingSession: jest.fn(),
+    listCookingSessions: jest.fn(),
     getCookingSession: jest.fn(),
     appendCookingSessionEvent: jest.fn(),
     completeCookingSession: jest.fn(),
@@ -196,6 +197,7 @@ describe('cooking routes', () => {
     });
     encodeAndFormat.mockResolvedValue({ files: [], image_urls: [] });
     cookingApi.startCookingSession.mockResolvedValue({ _id: 'session-1' });
+    cookingApi.listCookingSessions.mockResolvedValue({ sessions: [{ _id: 'session-1' }] });
     cookingApi.getCookingSession.mockResolvedValue({ _id: 'session-1' });
     cookingApi.appendCookingSessionEvent.mockResolvedValue({ _id: 'session-1' });
     cookingApi.completeCookingSession.mockResolvedValue({ _id: 'session-1' });
@@ -378,6 +380,13 @@ describe('cooking routes', () => {
       .post('/api/cooking/sessions')
       .send({ draftId: 'draft-1' })
       .expect(201, { _id: 'session-1' });
+    await request(app)
+      .get('/api/cooking/sessions?status=active&limit=1')
+      .expect(200, { sessions: [{ _id: 'session-1' }] });
+    expect(cookingApi.listCookingSessions).toHaveBeenCalledWith('auth-user', {
+      status: 'active',
+      limit: 1,
+    });
     await request(app).get('/api/cooking/sessions/session-1').expect(200, { _id: 'session-1' });
     await request(app)
       .post('/api/cooking/sessions/session-1/events')

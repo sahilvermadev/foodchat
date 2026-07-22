@@ -242,6 +242,20 @@ const dismissTourController = async (req, res) => {
   }
 };
 
+const updatePublicProfileController = async (req, res) => {
+  if (typeof req.body?.publicProfile !== 'boolean') {
+    return res.status(400).json({ message: 'Public profile setting must be a boolean.' });
+  }
+  try {
+    const user = await db.updateUser(req.user.id, { publicProfile: req.body.publicProfile });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    return res.status(200).json({ publicProfile: Boolean(user.publicProfile) });
+  } catch (error) {
+    logger.error('Error updating public profile:', error);
+    return res.status(500).json({ message: 'Error updating public profile' });
+  }
+};
+
 module.exports = {
   getUserController,
   getTermsStatusController,
@@ -251,4 +265,5 @@ module.exports = {
   updateUserPluginsController,
   resendVerificationController,
   dismissTourController,
+  updatePublicProfileController,
 };

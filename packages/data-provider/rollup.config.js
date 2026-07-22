@@ -71,4 +71,23 @@ export default [
     preserveSymlinks: true,
     plugins,
   },
+  {
+    input: 'src/mobile.ts',
+    output: [
+      {
+        file: 'dist/mobile/index.js',
+        format: 'cjs',
+        exports: 'named',
+        sourcemap: true,
+      },
+      {
+        file: 'dist/mobile/index.es.js',
+        format: 'esm',
+        exports: 'named',
+        sourcemap: true,
+      },
+    ],
+    preserveSymlinks: true,
+    plugins,
+  },
 ];

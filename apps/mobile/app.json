@@ -1,0 +1,82 @@
+{
+  "expo": {
+    "name": "Rekky",
+    "slug": "rekky-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/rekky-icon.png",
+    "scheme": "rekky",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/images/rekky-icon.png",
+      "bundleIdentifier": "ai.rekky.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F4EFE7",
+        "foregroundImage": "./assets/images/rekky-icon.png"
+      },
+      "predictiveBackGestureEnabled": true,
+      "package": "ai.rekky.mobile",
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#17130F",
+          "image": "./assets/images/rekky-splash.png",
+          "imageWidth": 128
+        }
+      ],
+      "expo-secure-store",
+      "expo-localization",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Rekky to read a recipe or ingredient photo you choose."
+        }
+      ],
+      [
+        "expo-sharing",
+        {
+          "android": {
+            "enabled": true,
+            "multipleShareMimeTypes": [
+              "text/plain",
+              "text/*"
+            ],
+            "singleShareMimeTypes": [
+              "text/plain",
+              "text/*"
+            ]
+          },
+          "ios": {
+            "enabled": true,
+            "activationRule": {
+              "supportsText": true,
+              "supportsWebPageWithMaxCount": 1,
+              "supportsWebUrlWithMaxCount": 1
+            }
+          }
+        }
+      ],
+      [
+        "react-native-audio-api",
+        {
+          "iosMicrophonePermission": "Allow Rekky to listen while you ask for hands-free cooking help.",
+          "androidPermissions": ["android.permission.RECORD_AUDIO"]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "apiUrl": "https://rekky.ai"
+    }
+  }
+}

@@ -24,10 +24,14 @@ jest.mock('@librechat/api', () => {
   return {
     CookingValidationError,
     deleteSavedRecipe: jest.fn(),
+    getPublicRecipe: jest.fn(),
+    getPublicRecipeIllustration: jest.fn(),
     getRecipe: jest.fn(),
     getRecipeByDraft: jest.fn(),
     getRecipeIllustration: jest.fn(),
+    listOfflineRecipes: jest.fn(),
     listRecipes: jest.fn(),
+    listPublicRecipes: jest.fn(),
     saveRecipe: jest.fn(),
     updateSavedRecipe: jest.fn(),
   };
@@ -67,6 +71,16 @@ describe('recipes routes', () => {
     jest.clearAllMocks();
     recipesApi.saveRecipe.mockResolvedValue({ _id: 'recipe-1' });
     recipesApi.listRecipes.mockResolvedValue({ recipes: [], total: 0 });
+    recipesApi.listOfflineRecipes.mockResolvedValue({
+      recipes: [],
+      syncedAt: '2026-07-21T00:00:00.000Z',
+    });
+    recipesApi.listPublicRecipes.mockResolvedValue({ recipes: [] });
+    recipesApi.getPublicRecipe.mockResolvedValue({ _id: 'public-recipe-1' });
+    recipesApi.getPublicRecipeIllustration.mockResolvedValue({
+      buffer: Buffer.from('public-image'),
+      contentType: 'image/webp',
+    });
     recipesApi.getRecipe.mockResolvedValue({ _id: 'recipe-1' });
     recipesApi.getRecipeByDraft.mockResolvedValue({ _id: 'recipe-1' });
     recipesApi.getRecipeIllustration.mockResolvedValue({
@@ -94,6 +108,10 @@ describe('recipes routes', () => {
       recipes: [],
       total: 0,
     });
+    await request(app).get('/api/recipes/offline').expect(200, {
+      recipes: [],
+      syncedAt: '2026-07-21T00:00:00.000Z',
+    });
     await request(app).get('/api/recipes/recipe-1').expect(200, { _id: 'recipe-1' });
     await request(app).get('/api/recipes/by-draft/draft-1').expect(200, { _id: 'recipe-1' });
     await request(app)
@@ -111,12 +129,32 @@ describe('recipes routes', () => {
       'auth-user',
       expect.objectContaining({ q: 'soup', cuisine: 'indian' }),
     );
+    expect(recipesApi.listOfflineRecipes).toHaveBeenCalledWith('auth-user', expect.any(Object));
     expect(recipesApi.getRecipe).toHaveBeenCalledWith('auth-user', 'recipe-1');
     expect(recipesApi.getRecipeByDraft).toHaveBeenCalledWith('auth-user', 'draft-1');
     expect(recipesApi.updateSavedRecipe).toHaveBeenCalledWith('auth-user', 'recipe-1', {
       documentMarkdown: '# Soup v2',
     });
     expect(recipesApi.deleteSavedRecipe).toHaveBeenCalledWith('auth-user', 'recipe-1');
+  });
+
+  test('serves community recipes through privacy-aware service calls', async () => {
+    await request(app).get('/api/recipes/explore?limit=6').expect(200, { recipes: [] });
+    await request(app)
+      .get('/api/recipes/explore/public-recipe-1')
+      .expect(200, { _id: 'public-recipe-1' });
+    await request(app)
+      .get('/api/recipes/explore/public-recipe-1/illustration?variant=thumbnail')
+      .expect('Content-Type', 'image/webp')
+      .expect(200);
+
+    expect(recipesApi.listPublicRecipes).toHaveBeenCalledWith('auth-user', '6');
+    expect(recipesApi.getPublicRecipe).toHaveBeenCalledWith('auth-user', 'public-recipe-1');
+    expect(recipesApi.getPublicRecipeIllustration).toHaveBeenCalledWith(
+      'auth-user',
+      'public-recipe-1',
+      true,
+    );
   });
 
   test('accepts saved recipe list choices', async () => {

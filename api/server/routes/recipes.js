@@ -2,10 +2,14 @@ const express = require('express');
 const {
   CookingValidationError,
   deleteSavedRecipe,
+  getPublicRecipe,
+  getPublicRecipeIllustration,
   getRecipe,
   getRecipeByDraft,
   getRecipeIllustration,
+  listOfflineRecipes,
   listRecipes,
+  listPublicRecipes,
   saveRecipe,
   updateSavedRecipe,
 } = require('@librechat/api');
@@ -127,6 +131,46 @@ router.get('/', async (req, res) => {
     assertSaveList(req.query.saveList);
     const recipes = await listRecipes(userId(req), req.query);
     res.json(recipes);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.get('/explore', async (req, res) => {
+  try {
+    const recipes = await listPublicRecipes(userId(req), req.query.limit);
+    res.json(recipes);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.get('/explore/:id/illustration', async (req, res) => {
+  try {
+    const illustration = await getPublicRecipeIllustration(
+      userId(req),
+      req.params.id,
+      req.query.variant === 'thumbnail',
+    );
+    return sendIllustration(res, illustration);
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+router.get('/explore/:id', async (req, res) => {
+  try {
+    const recipe = await getPublicRecipe(userId(req), req.params.id);
+    if (!recipe) return res.sendStatus(404);
+    res.json(recipe);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.get('/offline', async (req, res) => {
+  try {
+    res.json(await listOfflineRecipes(userId(req), req.query));
   } catch (error) {
     handleError(res, error);
   }

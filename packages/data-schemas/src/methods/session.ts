@@ -35,6 +35,12 @@ export function createSessionMethods(mongoose: typeof import('mongoose')) {
       const currentSession = new Session({
         user: userId,
         expiration: options.expiration || new Date(Date.now() + expiresIn),
+        clientType: options.clientType ?? 'web',
+        installationId: options.installationId,
+        deviceName: options.deviceName,
+        platform: options.platform,
+        appVersion: options.appVersion,
+        lastUsedAt: options.clientType === 'mobile' ? new Date() : undefined,
       });
       const refreshToken = await generateRefreshToken(currentSession);
 
@@ -240,6 +246,84 @@ export function createSessionMethods(mongoose: typeof import('mongoose')) {
     }
   }
 
+  async function rotateSessionRefreshToken(
+    params: t.RotateSessionRefreshTokenParams,
+  ): Promise<string> {
+    if (!mongoose.Types.ObjectId.isValid(params.sessionId)) {
+      throw new SessionError('Invalid session ID format', 'INVALID_SESSION_ID');
+    }
+
+    const Session = mongoose.models.Session;
+    const session = await Session.findOne({
+      _id: params.sessionId,
+      user: params.userId,
+      clientType: 'mobile',
+      expiration: { $gt: new Date() },
+    });
+
+    if (!session) {
+      throw new SessionError('Mobile session not found', 'SESSION_NOT_FOUND');
+    }
+
+    const presentedHash = await hashToken(params.presentedToken);
+    if (presentedHash !== session.refreshTokenHash) {
+      await Session.deleteOne({ _id: session._id, user: params.userId });
+      throw new SessionError('Refresh token was already used', 'REFRESH_TOKEN_REUSED');
+    }
+
+    const expiresIn = Math.max(1, Math.floor((session.expiration.getTime() - Date.now()) / 1000));
+    const refreshToken = await signPayload({
+      payload: {
+        id: session.user,
+        sessionId: session._id,
+        rotationId: new mongoose.Types.ObjectId().toString(),
+      },
+      secret: process.env.JWT_REFRESH_SECRET!,
+      expirationTime: expiresIn,
+    });
+    const refreshTokenHash = await hashToken(refreshToken);
+    const rotated = await Session.findOneAndUpdate(
+      { _id: session._id, user: params.userId, refreshTokenHash: presentedHash },
+      { $set: { refreshTokenHash, lastUsedAt: new Date() } },
+      { new: true },
+    );
+
+    if (!rotated) {
+      await Session.deleteOne({ _id: session._id, user: params.userId });
+      throw new SessionError('Refresh token was already used', 'REFRESH_TOKEN_REUSED');
+    }
+
+    return refreshToken;
+  }
+
+  async function deleteMobileSession(params: t.MobileSessionSearch): Promise<boolean> {
+    const query: { user: string; clientType: string; _id?: string; installationId?: string } = {
+      user: params.userId,
+      clientType: 'mobile',
+    };
+    if (params.sessionId) {
+      if (!mongoose.Types.ObjectId.isValid(params.sessionId)) {
+        throw new SessionError('Invalid session ID format', 'INVALID_SESSION_ID');
+      }
+      query._id = params.sessionId;
+    }
+    if (params.installationId) {
+      query.installationId = params.installationId;
+    }
+    const result = await mongoose.models.Session.deleteOne(query);
+    return result.deletedCount === 1;
+  }
+
+  async function listMobileSessions(userId: string): Promise<t.ISession[]> {
+    return mongoose.models.Session.find({
+      user: userId,
+      clientType: 'mobile',
+      expiration: { $gt: new Date() },
+    })
+      .sort({ lastUsedAt: -1 })
+      .lean<t.ISession[]>();
+  }
+
   /**
    * Counts active sessions for a user
    */
@@ -268,6 +352,9 @@ export function createSessionMethods(mongoose: typeof import('mongoose')) {
     updateExpiration,
     countActiveSessions,
     generateRefreshToken,
+    rotateSessionRefreshToken,
+    deleteMobileSession,
+    listMobileSessions,
     deleteAllUserSessions,
   };
 }

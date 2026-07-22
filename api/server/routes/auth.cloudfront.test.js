@@ -36,6 +36,15 @@ jest.mock('~/server/controllers/auth/LoginController', () => ({
   loginController: jest.fn((req, res) => res.status(200).end()),
 }));
 
+jest.mock('~/server/controllers/auth/MobileController', () => ({
+  mobileLoginController: jest.fn((req, res) => res.status(200).end()),
+  mobileTwoFactorController: jest.fn((req, res) => res.status(200).end()),
+  mobileRefreshController: jest.fn((req, res) => res.status(200).end()),
+  mobileLogoutController: jest.fn((req, res) => res.status(200).end()),
+  mobileSessionsController: jest.fn((req, res) => res.status(200).end()),
+  revokeMobileSessionController: jest.fn((req, res) => res.status(204).end()),
+}));
+
 jest.mock('~/models', () => ({
   findBalanceByUser: jest.fn(),
   upsertBalanceFields: jest.fn(),

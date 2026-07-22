@@ -17,6 +17,14 @@ const {
 const { verify2FAWithTempToken } = require('~/server/controllers/auth/TwoFactorAuthController');
 const { logoutController } = require('~/server/controllers/auth/LogoutController');
 const { loginController } = require('~/server/controllers/auth/LoginController');
+const {
+  mobileLoginController,
+  mobileTwoFactorController,
+  mobileRefreshController,
+  mobileLogoutController,
+  mobileSessionsController,
+  revokeMobileSessionController,
+} = require('~/server/controllers/auth/MobileController');
 const { findBalanceByUser, upsertBalanceFields } = require('~/models');
 const { getAppConfig } = require('~/server/services/Config');
 const middleware = require('~/server/middleware');
@@ -39,6 +47,25 @@ const getCloudFrontAuthCookieRefreshResult = (req, res) => {
 
 const ldapAuth = !!process.env.LDAP_URL && !!process.env.LDAP_USER_SEARCH_BASE;
 //Local
+router.post(
+  '/mobile/login',
+  middleware.logHeaders,
+  middleware.loginLimiter,
+  middleware.checkBan,
+  ldapAuth ? middleware.requireLdapAuth : middleware.requireLocalAuth,
+  setBalanceConfig,
+  mobileLoginController,
+);
+router.post(
+  '/mobile/2fa/verify',
+  middleware.loginLimiter,
+  middleware.checkBan,
+  mobileTwoFactorController,
+);
+router.post('/mobile/refresh', middleware.loginLimiter, mobileRefreshController);
+router.post('/mobile/logout', middleware.requireJwtAuth, mobileLogoutController);
+router.get('/mobile/sessions', middleware.requireJwtAuth, mobileSessionsController);
+router.delete('/mobile/sessions/:id', middleware.requireJwtAuth, revokeMobileSessionController);
 router.post('/logout', middleware.requireJwtAuth, logoutController);
 router.post(
   '/login',
