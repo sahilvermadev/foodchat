@@ -7,11 +7,15 @@ import {
 
 import type { AudioBufferQueueSourceNode } from 'react-native-audio-api';
 import type { RealtimeResponse } from './codec';
+import type { VoiceClientError } from './errors';
 
 import { audioLevel, extractResponseTranscript, float32ToPcm16Base64 } from './codec';
+import { socketCloseError, voiceError } from './errors';
 
 const SAMPLE_RATE = 16000;
 const CHUNK_FRAMES = 640;
+const CONNECTION_TIMEOUT_MS = 120_000;
+const PLAYBACK_ECHO_TAIL_MS = 300;
 
 export type VoiceStatus =
   | 'connecting'
@@ -24,14 +28,7 @@ export type VoiceStatus =
 
 interface SessionGrant {
   connectUrl: string;
-}
-
-interface SessionResponse {
-  connect_url?: string;
-  poll_interval_s?: number;
-  position?: number;
-  queue_id?: string;
-  state?: 'queued';
+  token: string;
 }
 
 interface RealtimeEvent {
@@ -54,17 +51,15 @@ export interface VoiceClientCallbacks {
 
 interface VoiceClientOptions {
   callbacks: VoiceClientCallbacks;
+  createSession(): Promise<SessionGrant>;
   instructions: string;
-  sessionUrl: string;
   voice?: string;
 }
-
-const codedError = (message: string) => new Error(message);
 
 export class RecipeVoiceClient {
   private readonly callbacks: VoiceClientCallbacks;
   private readonly instructions: string;
-  private readonly sessionUrl: string;
+  private readonly createSession: () => Promise<SessionGrant>;
   private readonly voice: string;
   private audioContext?: AudioContext;
   private playback?: AudioBufferQueueSourceNode;
@@ -73,22 +68,30 @@ export class RecipeVoiceClient {
   private closed = false;
   private configured = false;
   private muted = false;
+  private outputAudioDone = false;
+  private pendingAudioDecodes = 0;
+  private playbackActive = false;
+  private playbackBufferIds = new Set<string>();
   private playbackGeneration = 0;
   private playbackChain: Promise<void> = Promise.resolve();
+  private playbackTailTimer?: ReturnType<typeof setTimeout>;
+  private suppressedMicChunks = 0;
+  private readonly logId = Date.now().toString(36).slice(-6);
   private assistantText = new Map<string, string>();
 
-  constructor({ callbacks, instructions, sessionUrl, voice = 'Aiden' }: VoiceClientOptions) {
+  constructor({ callbacks, createSession, instructions, voice = 'Aiden' }: VoiceClientOptions) {
     this.callbacks = callbacks;
+    this.createSession = createSession;
     this.instructions = instructions;
-    this.sessionUrl = sessionUrl;
     this.voice = voice;
   }
 
   async connect(): Promise<void> {
+    this.log('connect_start');
     this.callbacks.onStatus('connecting');
     const permission = await AudioManager.requestRecordingPermissions();
     if (permission !== 'Granted')
-      throw codedError('Microphone permission is required for voice mode.');
+      throw voiceError('permission', 'Microphone permission is required for voice mode.');
 
     AudioManager.setAudioSessionOptions({
       iosCategory: 'playAndRecord',
@@ -97,17 +100,17 @@ export class RecipeVoiceClient {
     });
     await AudioManager.setAudioSessionActivity(true);
 
-    const grant = await this.obtainSession();
+    const grant = await this.createSession();
     if (this.closed) return;
+    this.log('session_grant_received');
     await this.setupAudio();
-    await this.openSocket(grant.connectUrl);
+    await this.openSocket(grant.connectUrl, grant.token);
   }
 
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (muted) {
-      this.playbackGeneration += 1;
-      this.playback?.clearBuffers();
+      this.cancelPlayback('muted');
     }
   }
 
@@ -115,6 +118,8 @@ export class RecipeVoiceClient {
     if (this.closed) return;
     this.closed = true;
     this.configured = false;
+    if (this.playbackTailTimer) clearTimeout(this.playbackTailTimer);
+    this.log('close', { suppressedMicChunks: this.suppressedMicChunks });
     try {
       await this.recorder?.stop();
     } catch {
@@ -137,42 +142,19 @@ export class RecipeVoiceClient {
     this.audioContext = undefined;
   }
 
-  private async obtainSession(): Promise<SessionGrant> {
-    const response = await fetch(this.sessionUrl, {
-      body: '{}',
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
-    if (!response.ok) throw codedError('Rekky voice is busy. Please try again shortly.');
-    const session = (await response.json()) as SessionResponse;
-    if (session.state !== 'queued' && session.connect_url)
-      return { connectUrl: session.connect_url };
-    if (!session.queue_id) throw codedError('Rekky could not open a voice session.');
-
-    const origin = this.sessionUrl.replace(/\/session\/?$/, '');
-    const delay = Math.max(1, session.poll_interval_s ?? 2) * 1000;
-    let position = session.position;
-    while (!this.closed) {
-      this.callbacks.onStatus('queued', position);
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
-      const queued = await fetch(`${origin}/api/queue/${encodeURIComponent(session.queue_id)}`);
-      if (queued.status === 404) throw codedError('Your voice session expired. Please try again.');
-      if (!queued.ok) continue;
-      const result = (await queued.json()) as SessionResponse;
-      if (result.state === 'queued') {
-        position = result.position;
-        continue;
-      }
-      if (result.connect_url) return { connectUrl: result.connect_url };
-    }
-    throw codedError('Voice mode was closed.');
-  }
-
   private async setupAudio(): Promise<void> {
     const context = new AudioContext({ sampleRate: SAMPLE_RATE });
     const playback = context.createBufferQueueSource();
+    playback.onBufferEnded = (event) => {
+      this.playbackBufferIds.delete(event.bufferId);
+      this.log('playback_buffer_ended', {
+        isLastBufferInQueue: event.isLastBufferInQueue,
+        queuedBuffers: this.playbackBufferIds.size,
+      });
+      this.finishPlaybackAfterEchoTail();
+    };
     playback.connect(context.destination);
-    playback.start();
+    playback.start(0, 0);
     await context.resume();
 
     const recorder = new AudioRecorder();
@@ -180,44 +162,91 @@ export class RecipeVoiceClient {
       { bufferLength: CHUNK_FRAMES, channelCount: 1, sampleRate: SAMPLE_RATE },
       ({ buffer }) => {
         const samples = buffer.getChannelData(0);
-        this.callbacks.onInputLevel(audioLevel(samples));
         if (this.closed || this.muted || !this.configured) return;
+        if (this.playbackActive) {
+          this.suppressedMicChunks += 1;
+          if (this.suppressedMicChunks % 25 === 1) {
+            this.log('mic_suppressed_during_playback', {
+              chunks: this.suppressedMicChunks,
+            });
+          }
+          return;
+        }
+        this.callbacks.onInputLevel(audioLevel(samples));
         this.send({ type: 'input_audio_buffer.append', audio: float32ToPcm16Base64(samples) });
       },
     );
-    recorder.onError((event) => this.fail(new Error(event.message)));
+    recorder.onError((event) => {
+      this.log('recorder_error', { message: event.message });
+      this.fail(new Error(event.message));
+    });
     await recorder.start();
     this.audioContext = context;
     this.playback = playback;
     this.recorder = recorder;
   }
 
-  private openSocket(url: string): Promise<void> {
+  private openSocket(url: string, token: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(url);
-      this.socket = socket;
-      socket.onopen = () => resolve();
-      socket.onerror = () => {
-        const error = codedError('The live voice connection was interrupted.');
-        if (!this.configured) reject(error);
-        else this.fail(error);
+      let ready = false;
+      let settled = false;
+      const settle = (error?: VoiceClientError) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        if (error) reject(error);
+        else resolve();
       };
-      socket.onmessage = (event) => this.handleMessage(String(event.data));
+      const timeout = setTimeout(() => {
+        this.log('connection_timeout', { timeoutMs: CONNECTION_TIMEOUT_MS });
+        socket.close(4008, 'Voice service startup timed out');
+        settle(voiceError('unavailable', 'Voice service startup timed out.'));
+      }, CONNECTION_TIMEOUT_MS);
+      this.socket = socket;
+      socket.onopen = () => {
+        this.log('socket_open');
+        socket.send(JSON.stringify({ token, type: 'rekky.authenticate' }));
+      };
+      socket.onerror = () => {
+        this.log('socket_error', { configured: this.configured, ready });
+      };
+      socket.onmessage = (message) => {
+        const event = this.parseMessage(String(message.data));
+        if (!event) return;
+        if (!ready && event.type === 'error') {
+          settle(voiceError('unavailable', event.error?.message ?? 'Voice service unavailable.'));
+          return;
+        }
+        this.handleEvent(event);
+        if (event.type !== 'session.created') return;
+        ready = true;
+        settle();
+      };
       socket.onclose = (event) => {
-        if (!this.closed && event.code !== 1000) this.fail(codedError('Voice mode disconnected.'));
+        this.log('socket_close', { code: event.code, reason: event.reason });
+        if (this.closed || event.code === 1000) {
+          if (!ready) settle(voiceError('interrupted', 'Voice mode closed.'));
+          return;
+        }
+        const error = socketCloseError(event.code, event.reason);
+        if (!ready) settle(error);
+        else this.fail(error);
       };
     });
   }
 
-  private handleMessage(raw: string): void {
-    let event: RealtimeEvent;
+  private parseMessage(raw: string): RealtimeEvent | undefined {
     try {
-      event = JSON.parse(raw) as RealtimeEvent;
+      return JSON.parse(raw) as RealtimeEvent;
     } catch {
-      return;
+      return undefined;
     }
+  }
 
+  private handleEvent(event: RealtimeEvent): void {
     if (event.type === 'session.created') {
+      this.log('session_created');
       this.send({
         type: 'session.update',
         session: {
@@ -231,18 +260,35 @@ export class RecipeVoiceClient {
       return;
     }
     if (event.type === 'input_audio_buffer.speech_started') {
-      this.playbackGeneration += 1;
-      this.playback?.clearBuffers();
+      this.log('speech_started', { playbackActive: this.playbackActive });
+      this.cancelPlayback('speech_started');
       this.callbacks.onStatus('user-speaking');
       return;
     }
     if (event.type === 'input_audio_buffer.speech_stopped') {
+      this.log('speech_stopped');
       this.callbacks.onStatus('thinking');
       return;
     }
     if (event.type === 'response.audio.delta' || event.type === 'response.output_audio.delta') {
-      if (event.delta) this.enqueueAudio(event.delta);
+      if (event.delta) {
+        if (!this.playbackActive) {
+          this.playbackActive = true;
+          this.outputAudioDone = false;
+          this.log('playback_started');
+        }
+        this.enqueueAudio(event.delta);
+      }
       this.callbacks.onStatus('speaking');
+      return;
+    }
+    if (event.type === 'response.audio.done' || event.type === 'response.output_audio.done') {
+      this.outputAudioDone = true;
+      this.log('output_audio_done', {
+        pendingAudioDecodes: this.pendingAudioDecodes,
+        queuedBuffers: this.playbackBufferIds.size,
+      });
+      this.finishPlaybackAfterEchoTail();
       return;
     }
     if (event.type === 'conversation.item.input_audio_transcription.completed') {
@@ -264,24 +310,68 @@ export class RecipeVoiceClient {
       const transcript =
         extractResponseTranscript(event.response) || this.assistantText.get(responseId) || '';
       this.assistantText.delete(responseId);
+      this.log('response_done', {
+        playbackActive: this.playbackActive,
+        status: event.response?.status,
+        transcriptChars: transcript.length,
+      });
+      if (event.response?.status === 'cancelled') this.cancelPlayback('response_cancelled');
       this.callbacks.onResponseFinished(responseId, transcript.trim());
-      this.callbacks.onStatus('listening');
+      if (!this.playbackActive) this.callbacks.onStatus('listening');
       return;
     }
-    if (event.type === 'error') this.fail(codedError(event.error?.message ?? 'Voice mode failed.'));
+    if (event.type === 'error') {
+      this.log('server_error', { message: event.error?.message });
+      this.fail(voiceError('interrupted', event.error?.message ?? 'Voice mode failed.'));
+    }
   }
 
   private enqueueAudio(base64: string): void {
     const generation = this.playbackGeneration;
+    this.pendingAudioDecodes += 1;
     this.playbackChain = this.playbackChain
       .then(async () => {
         if (this.closed || !this.playback) return;
         const buffer = await decodePCMInBase64(base64, SAMPLE_RATE, 1, true);
         if (!this.closed && generation === this.playbackGeneration) {
-          this.playback?.enqueueBuffer(buffer);
+          const bufferId = this.playback.enqueueBuffer(buffer);
+          this.playbackBufferIds.add(bufferId);
         }
       })
-      .catch((error: Error) => this.fail(error));
+      .catch((error: Error) => this.fail(error))
+      .finally(() => {
+        this.pendingAudioDecodes -= 1;
+        this.finishPlaybackAfterEchoTail();
+      });
+  }
+
+  private finishPlaybackAfterEchoTail(): void {
+    if (
+      !this.playbackActive ||
+      !this.outputAudioDone ||
+      this.pendingAudioDecodes > 0 ||
+      this.playbackBufferIds.size > 0
+    ) {
+      return;
+    }
+    if (this.playbackTailTimer) clearTimeout(this.playbackTailTimer);
+    const generation = this.playbackGeneration;
+    this.playbackTailTimer = setTimeout(() => {
+      if (this.closed || generation !== this.playbackGeneration) return;
+      this.playbackActive = false;
+      this.log('playback_finished', { echoTailMs: PLAYBACK_ECHO_TAIL_MS });
+      this.callbacks.onStatus('listening');
+    }, PLAYBACK_ECHO_TAIL_MS);
+  }
+
+  private cancelPlayback(reason: string): void {
+    if (this.playbackTailTimer) clearTimeout(this.playbackTailTimer);
+    this.playbackGeneration += 1;
+    this.playback?.clearBuffers();
+    this.playbackBufferIds.clear();
+    this.outputAudioDone = false;
+    this.playbackActive = false;
+    this.log('playback_cancelled', { reason });
   }
 
   private send(event: object): void {
@@ -290,7 +380,12 @@ export class RecipeVoiceClient {
 
   private fail(error: Error): void {
     if (this.closed) return;
+    this.log('client_error', { message: error.message });
     this.callbacks.onStatus('error');
     this.callbacks.onError(error);
+  }
+
+  private log(event: string, details: Record<string, unknown> = {}): void {
+    console.info(`[Voice:${this.logId}] ${event}`, details);
   }
 }

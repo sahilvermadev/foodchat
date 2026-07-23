@@ -99,6 +99,24 @@ jest.mock('@librechat/api', () => {
     releaseGuestConcurrency: jest.fn().mockResolvedValue(undefined),
     limiterCache: jest.fn().mockReturnValue(undefined),
     removePorts: (req) => req['ip'],
+    getVoiceSessionConfiguration: jest.fn(() => ({
+      enabled: Boolean(
+        process.env.REKKY_VOICE_URL &&
+          process.env.REKKY_VOICE_TOKEN_SECRET &&
+          process.env.REKKY_VOICE_TOKEN_SECRET.length >= 32,
+      ),
+      ...(process.env.REKKY_VOICE_URL &&
+      process.env.REKKY_VOICE_TOKEN_SECRET &&
+      process.env.REKKY_VOICE_TOKEN_SECRET.length >= 32
+        ? { sessionUrl: '/api/cooking/voice/session' }
+        : {}),
+      shareRecipeContext: process.env.REKKY_VOICE_SHARE_RECIPE_CONTEXT === 'true',
+    })),
+    createVoiceSessionGrant: jest.fn(() => ({
+      connect_url: 'wss://voice.example/v1/realtime',
+      expires_at: '2026-07-22T10:01:00.000Z',
+      token: 'signed-token',
+    })),
   };
 });
 
@@ -679,17 +697,51 @@ describe('cooking routes', () => {
   });
 
   test('voice is disabled until a session endpoint is configured', async () => {
-    const originalUrl = process.env.REKKY_VOICE_SESSION_URL;
-    delete process.env.REKKY_VOICE_SESSION_URL;
+    const originalUrl = process.env.REKKY_VOICE_URL;
+    const originalSecret = process.env.REKKY_VOICE_TOKEN_SECRET;
+    delete process.env.REKKY_VOICE_URL;
+    delete process.env.REKKY_VOICE_TOKEN_SECRET;
     try {
       const response = await request(app).get('/api/cooking/voice/config').expect(200);
       expect(response.body).toEqual({ enabled: false, shareRecipeContext: false });
     } finally {
       if (originalUrl == null) {
-        delete process.env.REKKY_VOICE_SESSION_URL;
+        delete process.env.REKKY_VOICE_URL;
       } else {
-        process.env.REKKY_VOICE_SESSION_URL = originalUrl;
+        process.env.REKKY_VOICE_URL = originalUrl;
       }
+      if (originalSecret == null) {
+        delete process.env.REKKY_VOICE_TOKEN_SECRET;
+      } else {
+        process.env.REKKY_VOICE_TOKEN_SECRET = originalSecret;
+      }
+    }
+  });
+
+  test('creates an authenticated short-lived voice session grant', async () => {
+    const originalUrl = process.env.REKKY_VOICE_URL;
+    const originalSecret = process.env.REKKY_VOICE_TOKEN_SECRET;
+    process.env.REKKY_VOICE_URL = 'https://voice.example';
+    process.env.REKKY_VOICE_TOKEN_SECRET = 'test-secret-that-is-at-least-32-characters';
+    try {
+      const response = await request(app).post('/api/cooking/voice/session').send({}).expect(200);
+      expect(response.body).toEqual({
+        connect_url: 'wss://voice.example/v1/realtime',
+        expires_at: '2026-07-22T10:01:00.000Z',
+        token: 'signed-token',
+      });
+      expect(cookingApi.createVoiceSessionGrant).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endpoint: 'https://voice.example',
+          secret: 'test-secret-that-is-at-least-32-characters',
+          userId: 'auth-user',
+        }),
+      );
+    } finally {
+      if (originalUrl == null) delete process.env.REKKY_VOICE_URL;
+      else process.env.REKKY_VOICE_URL = originalUrl;
+      if (originalSecret == null) delete process.env.REKKY_VOICE_TOKEN_SECRET;
+      else process.env.REKKY_VOICE_TOKEN_SECRET = originalSecret;
     }
   });
 

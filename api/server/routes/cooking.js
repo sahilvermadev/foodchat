@@ -38,6 +38,8 @@ const {
   releaseGuestConcurrency,
   limiterCache,
   removePorts,
+  getVoiceSessionConfiguration,
+  createVoiceSessionGrant,
 } = require('@librechat/api');
 const { Constants, VisionModes } = require('librechat-data-provider');
 const { encodeAndFormat } = require('~/server/services/Files/images/encode');
@@ -790,13 +792,29 @@ router.post('/guest/chat', guestBurstLimiter, configMiddleware, async (req, res)
 router.use(requireJwtAuth, checkBan, configMiddleware);
 
 router.get('/voice/config', (_req, res) => {
-  const sessionUrl = process.env.REKKY_VOICE_SESSION_URL?.trim();
+  const configuration = getVoiceSessionConfiguration();
   res.setHeader('Cache-Control', 'private, max-age=300');
-  return res.json({
-    enabled: Boolean(sessionUrl),
-    ...(sessionUrl ? { sessionUrl } : {}),
-    shareRecipeContext: process.env.REKKY_VOICE_SHARE_RECIPE_CONTEXT === 'true',
-  });
+  return res.json(configuration);
+});
+
+router.post('/voice/session', authenticatedCookingChatLimiter, (req, res) => {
+  const configuration = getVoiceSessionConfiguration();
+  if (!configuration.enabled) {
+    return res.status(503).json({ error: 'Voice mode is not configured.' });
+  }
+  try {
+    const grant = createVoiceSessionGrant({
+      endpoint: process.env.REKKY_VOICE_URL,
+      secret: process.env.REKKY_VOICE_TOKEN_SECRET,
+      ttlSeconds: Number(process.env.REKKY_VOICE_SESSION_TTL_SECONDS) || 180,
+      userId: userId(req),
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(grant);
+  } catch (error) {
+    logger.error('[cooking/voice/session] Failed to create voice grant', error);
+    return res.status(503).json({ error: 'Voice mode is temporarily unavailable.' });
+  }
 });
 
 router.post('/voice/turns', authenticatedCookingChatLimiter, async (req, res) => {

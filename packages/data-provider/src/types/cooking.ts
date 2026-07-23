@@ -331,6 +331,12 @@ export type CookingVoiceConfig = {
   shareRecipeContext: boolean;
 };
 
+export type CookingVoiceSessionGrant = {
+  connect_url: string;
+  expires_at: string;
+  token: string;
+};
+
 export type PersistCookingVoiceTurnRequest = {
   conversationId: string;
   turnId: string;

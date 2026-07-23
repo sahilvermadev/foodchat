@@ -13,7 +13,11 @@ import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { PropsWithChildren } from 'react';
-import type { CookingVoiceConfig, PersistCookingVoiceTurnRequest } from 'librechat-data-provider';
+import type {
+  CookingVoiceConfig,
+  CookingVoiceSessionGrant,
+  PersistCookingVoiceTurnRequest,
+} from 'librechat-data-provider';
 import type { VoiceStatus } from './client';
 
 import { fonts, radius, shadow, space } from '@/constants/theme';
@@ -23,6 +27,7 @@ import { createThemeStyles } from '@/features/theme/styles';
 import { useTranslation } from '@/lib/i18n';
 import { isSilentResponse } from './codec';
 import { RecipeVoiceClient } from './client';
+import { VoiceClientError } from './errors';
 
 const DEFAULT_INSTRUCTIONS =
   'You are Rekky, a real-time cooking assistant. Help the user with the recipe in front of them. Keep spoken answers short, warm, specific, and direct. Give one useful action at a time unless the user asks for detail. Handle substitutions, technique, timing, food safety, and step-by-step guidance. You are listening in a noisy kitchen. If speech is gibberish, background chatter, or unrelated to food and cooking, respond with exactly <silent/>.';
@@ -103,7 +108,10 @@ export function RecipeVoiceProvider({ children }: PropsWithChildren) {
       try {
         const config = await apiFetch<CookingVoiceConfig>('/api/cooking/voice/config');
         if (!active) return;
-        if (!config.enabled || !config.sessionUrl) throw new Error(t('voice.unavailable'));
+        if (!config.enabled || !config.sessionUrl) {
+          throw new VoiceClientError('unavailable', 'Voice mode is not configured.');
+        }
+        const sessionUrl = config.sessionUrl;
         const instructions = config.shareRecipeContext
           ? `${DEFAULT_INSTRUCTIONS}\n\nThe recipe currently open is:\n${session.recipeMarkdown}`
           : DEFAULT_INSTRUCTIONS;
@@ -111,11 +119,13 @@ export function RecipeVoiceProvider({ children }: PropsWithChildren) {
           callbacks: {
             onError: (caught) => {
               if (!active) return;
-              setError(
-                caught.message.includes('Microphone permission')
-                  ? t('voice.permissionError')
-                  : t('voice.error'),
-              );
+              let message = t('voice.error');
+              if (caught instanceof VoiceClientError && caught.code === 'permission') {
+                message = t('voice.permissionError');
+              } else if (caught instanceof VoiceClientError && caught.code === 'unavailable') {
+                message = t('voice.unavailable');
+              }
+              setError(message);
               setStatus('error');
             },
             onInputLevel: (next) => {
@@ -149,18 +159,32 @@ export function RecipeVoiceProvider({ children }: PropsWithChildren) {
               if (!isSilentResponse(text)) setTranscript(text);
             },
           },
+          createSession: async () => {
+            const grant = await apiFetch<CookingVoiceSessionGrant>(sessionUrl, {
+              body: {},
+              method: 'POST',
+            });
+            return {
+              connectUrl: grant.connect_url,
+              token: grant.token,
+            };
+          },
           instructions,
-          sessionUrl: config.sessionUrl,
         });
         clientRef.current = client;
         await client.connect();
       } catch (caught) {
         if (!active) return;
         let message = t('voice.error');
-        if (caught instanceof Error && caught.message.includes('Microphone permission')) {
+        if (caught instanceof VoiceClientError && caught.code === 'permission') {
           message = t('voice.permissionError');
         }
-        if (caught instanceof ApiError) message = t('voice.unavailable');
+        if (
+          caught instanceof ApiError ||
+          (caught instanceof VoiceClientError && caught.code === 'unavailable')
+        ) {
+          message = t('voice.unavailable');
+        }
         setError(message);
         setStatus('error');
       }
