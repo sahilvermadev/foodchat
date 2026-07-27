@@ -8,6 +8,7 @@ import {
   deleteSavedRecipe,
   getPublicRecipe,
   getRecipe,
+  getRecipeFacets,
   listOfflineRecipes,
   listPublicRecipes,
   listRecipes,
@@ -18,6 +19,7 @@ import {
 } from './service';
 import { categorizeRecipe } from './categorize';
 import { illustrateRecipe } from './illustrate';
+import { fetchRemoteImage } from '../illustrations/media';
 
 type StoredRecipe = {
   title: string;
@@ -89,6 +91,30 @@ function recipe(title: string): StructuredRecipe {
 
 const markdown = '# Thai Iced Tea\n\n## Ingredients\n\n- Tea\n\n## Instructions\n\n1. Brew tea.';
 
+const groupedMarkdown = `# Scallion Meatballs With Soy-Ginger Glaze
+
+## Recipe Data
+| Field | Value |
+| --- | --- |
+| Servings | 4 |
+| Prep time | 15 minutes |
+| Cook time | 20 minutes |
+
+## Ingredients
+### For the Soy-Ginger Glaze
+| Ingredient | Metric | Imperial | State/Form | Notes |
+| --- | --- | --- | --- | --- |
+| Soy sauce | 30 ml | 2 tbsp | liquid | |
+### For the Meatballs
+| Ingredient | Metric | Imperial | State/Form | Notes |
+| --- | --- | --- | --- | --- |
+| Ground chicken | 450 g | 1 lb | chilled | |
+
+## Instructions
+1. Mix the chicken.
+2. Bake the meatballs for 20 minutes.
+`;
+
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   createModels(mongoose);
@@ -102,7 +128,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await new Promise<void>((resolve) => setImmediate(resolve));
+  await new Promise<void>((resolve) => setTimeout(resolve, 50));
   await Promise.all(
     Object.values(mongoose.connection.collections).map((collection) => collection.deleteMany({})),
   );
@@ -114,6 +140,66 @@ afterAll(async () => {
 });
 
 describe('saved recipe title integrity', () => {
+  test('canonicalizes a new Markdown-only recipe before saving', async () => {
+    const saved = await saveRecipe('markdown-import-user', {
+      documentMarkdown: groupedMarkdown,
+    });
+
+    expect(saved.recipe).toMatchObject({
+      servings: 4,
+      timing: { prepMinutes: 15, cookMinutes: 20, totalMinutes: 35 },
+      ingredients: [
+        { group: 'Soy-Ginger Glaze', item: 'Soy sauce' },
+        { group: 'Meatballs', item: 'Ground chicken' },
+      ],
+    });
+  });
+
+  test('rejects incomplete recipe documents instead of persisting placeholders', async () => {
+    await expect(
+      saveRecipe('incomplete-import-user', {
+        documentMarkdown: '# Incomplete\n\n## Ingredients\n\n- Salt',
+      }),
+    ).rejects.toThrow('structured ingredients and instructions');
+  });
+
+  test('repairs a legacy placeholder from grouped Markdown without another LLM call', async () => {
+    const placeholder = recipe('Scallion Meatballs With Soy-Ginger Glaze');
+    placeholder.timing = { prepMinutes: 0, cookMinutes: 0, totalMinutes: 0 };
+    placeholder.ingredients = [
+      { id: 'ingredient-1', item: 'item', originalText: '1 item', quantityType: 'estimated' },
+    ];
+    placeholder.steps = [
+      {
+        id: 'step-1',
+        ingredientIds: ['ingredient-1'],
+        order: 1,
+        text: 'Prepare the recipe.',
+        timers: [],
+        tips: [],
+        warnings: [],
+      },
+    ];
+    const stored = await mongoose.models.SavedRecipe.create({
+      user: 'legacy-structure-user',
+      title: placeholder.title,
+      documentType: 'recipe',
+      documentMarkdown: groupedMarkdown,
+      recipe: placeholder,
+      categorizationStatus: 'complete',
+      categorizationVersion: 1,
+      illustrationStatus: 'complete',
+    });
+
+    const repaired = await getRecipe('legacy-structure-user', String(stored._id));
+
+    expect(repaired?.recipe?.ingredients).toEqual([
+      expect.objectContaining({ group: 'Soy-Ginger Glaze', item: 'Soy sauce' }),
+      expect.objectContaining({ group: 'Meatballs', item: 'Ground chicken' }),
+    ]);
+    expect(repaired?.categorizationVersion).toBe(2);
+  });
+
   test('returns complete recipes for a durable offline snapshot', async () => {
     const saved = await saveRecipe('offline-recipe-user', {
       documentMarkdown: markdown,
@@ -159,6 +245,10 @@ describe('saved recipe title integrity', () => {
 
   test('marks a matching social import as saved when saving from its draft', async () => {
     const thumbnailUrl = 'https://example.com/thumb.jpg';
+    jest.mocked(fetchRemoteImage).mockResolvedValue({
+      buffer: Buffer.from('source-image'),
+      contentType: 'image/jpeg',
+    });
     await mongoose.models.SocialImport.create({
       user: 'social-save-user',
       sourceUrl: 'https://example.com/recipe',
@@ -180,6 +270,10 @@ describe('saved recipe title integrity', () => {
 
     expect(saved.illustrationUrl).toMatch(/^\/api\/recipes\/[^/]+\/illustration\?v=/);
     expect(saved.illustrationStatus).toBe('complete');
+    expect(fetchRemoteImage).toHaveBeenCalledWith(thumbnailUrl, {
+      maxBytes: 5 * 1024 * 1024,
+      timeoutMs: 5000,
+    });
 
     const socialImport = await mongoose.models.SocialImport.findOne({
       user: 'social-save-user',
@@ -195,6 +289,36 @@ describe('saved recipe title integrity', () => {
     const library = await listRecipes('social-save-user', {});
     expect(library.recipes[0]?.illustrationUrl).toMatch(
       /^\/api\/recipes\/[^/]+\/illustration\?v=.*&variant=thumbnail$/,
+    );
+    expect(illustrateRecipe).not.toHaveBeenCalled();
+  });
+
+  test('reuses a persisted social thumbnail without another remote request', async () => {
+    await mongoose.models.SocialImport.create({
+      user: 'persisted-social-image-user',
+      sourceUrl: 'https://recipes.example/cake',
+      canonicalUrl: 'https://recipes.example/cake',
+      provider: 'web',
+      thumbnailUrl: 'https://cdn.recipes.example/cake.jpg',
+      thumbnailData: Buffer.from('persisted-source-image'),
+      thumbnailContentType: 'image/jpeg',
+      thumbnailThumbnail: Buffer.from('persisted-thumbnail'),
+      embedHtmlAllowed: false,
+      status: 'draft_ready',
+      provenance: 'source_exact',
+      draftId: 'persisted-social-image-draft',
+    });
+
+    const saved = await saveRecipe('persisted-social-image-user', {
+      documentMarkdown: markdown,
+      recipe: recipe('Thai Iced Tea'),
+      sourceDraftId: 'persisted-social-image-draft',
+    });
+    const persisted = await mongoose.models.SavedRecipe.findById(saved._id);
+
+    expect(fetchRemoteImage).not.toHaveBeenCalled();
+    expect(Buffer.from(persisted?.illustrationData ?? []).toString()).toBe(
+      'persisted-source-image',
     );
     expect(illustrateRecipe).not.toHaveBeenCalled();
   });
@@ -362,6 +486,90 @@ describe('saved recipe lists', () => {
   });
 });
 
+describe('cookbook organization', () => {
+  test('updates organization metadata without regenerating recipe assets', async () => {
+    const stored = await mongoose.models.SavedRecipe.create({
+      user: 'organize-user',
+      title: 'Thai Iced Tea',
+      documentMarkdown: markdown,
+      recipe: recipe('Thai Iced Tea'),
+      categorizationStatus: 'complete',
+      categorizationVersion: 4,
+      illustrationStatus: 'complete',
+      illustrationData: Buffer.from('illustration'),
+    });
+
+    const updated = await updateSavedRecipe('organize-user', String(stored._id), {
+      collections: ['Drinks', 'Weekend'],
+      favorite: true,
+      personalNotes: 'Use less sugar next time.',
+      pinned: true,
+      saveList: 'cooked_already',
+    });
+
+    expect(updated).toMatchObject({
+      collections: ['Drinks', 'Weekend'],
+      favorite: true,
+      personalNotes: 'Use less sugar next time.',
+      pinned: true,
+      saveList: 'cooked_already',
+      categorizationVersion: 4,
+      illustrationStatus: 'complete',
+    });
+    expect(updated?.lastCookedAt).toEqual(expect.any(String));
+    expect(categorizeRecipe).not.toHaveBeenCalled();
+    expect(illustrateRecipe).not.toHaveBeenCalled();
+  });
+
+  test('returns normalized facets with whole-library counts and supports multi-select filters', async () => {
+    await mongoose.models.SavedRecipe.create([
+      {
+        user: 'facets-user',
+        title: 'Dal',
+        documentMarkdown: '# Dal',
+        collections: ['Weeknight'],
+        categorization: {
+          cuisine: ['Indian', 'Artisan'],
+          mealType: ['Dinner'],
+          diet: ['Vegan (Optional)'],
+          difficulty: 'beginner',
+          mainIngredients: ['Lentils'],
+          source: 'llm',
+          updatedAt: new Date(),
+        },
+        categorizationStatus: 'complete',
+      },
+      {
+        user: 'facets-user',
+        title: 'Pasta',
+        documentMarkdown: '# Pasta',
+        collections: ['Weeknight'],
+        categorization: {
+          cuisine: ['Italian'],
+          mealType: ['Dinner'],
+          difficulty: 'intermediate',
+          mainIngredients: ['Tomato'],
+          source: 'llm',
+          updatedAt: new Date(),
+        },
+        categorizationStatus: 'complete',
+      },
+    ]);
+
+    const facets = await getRecipeFacets('facets-user');
+    const filtered = await listRecipes('facets-user', { cuisine: 'indian,italian' });
+
+    expect(facets.total).toBe(2);
+    expect(facets.collection).toContainEqual({ value: 'weeknight', count: 2 });
+    expect(facets.cuisine).toEqual([
+      { value: 'indian', count: 1 },
+      { value: 'italian', count: 1 },
+    ]);
+    expect(facets.diet).toContainEqual({ value: 'vegan', count: 1 });
+    expect(filtered.total).toBe(2);
+  });
+});
+
 describe('saved recipe pagination', () => {
   test('returns a stable total while progressing through cursor pages', async () => {
     const user = 'pagination-user';
@@ -459,6 +667,61 @@ describe('saved recipe deletion', () => {
 });
 
 describe('saved recipe illustrations', () => {
+  test('repairs generated artwork on legacy imported recipes from the persisted source image', async () => {
+    await mongoose.models.SocialImport.create({
+      user: 'legacy-import-image-user',
+      sourceUrl: 'https://example.com/recipe',
+      canonicalUrl: 'https://example.com/recipe',
+      provider: 'web',
+      thumbnailUrl: 'https://example.com/source.jpg',
+      thumbnailData: Buffer.from('source-image'),
+      thumbnailContentType: 'image/jpeg',
+      thumbnailThumbnail: Buffer.from('source-thumbnail'),
+      draftId: 'legacy-image-draft',
+      embedHtmlAllowed: false,
+      status: 'saved_recipe',
+      provenance: 'source_exact',
+    });
+    const stored = await mongoose.models.SavedRecipe.create({
+      user: 'legacy-import-image-user',
+      title: 'Thai Iced Tea',
+      documentMarkdown: markdown,
+      sourceDraftId: 'legacy-image-draft',
+      illustrationStatus: 'complete',
+      illustrationModel: 'legacy-ai-model',
+      illustrationData: Buffer.from('generated-image'),
+      categorizationStatus: 'complete',
+    });
+
+    expect(
+      await mongoose.models.SavedRecipe.countDocuments({
+        user: 'legacy-import-image-user',
+        sourceDraftId: { $exists: true, $ne: '' },
+        illustrationModel: { $exists: true, $ne: '' },
+      }),
+    ).toBe(1);
+    const sourceImport = await mongoose.models.SocialImport.findOne({
+      draftId: 'legacy-image-draft',
+    }).select('thumbnailData');
+    expect(sourceImport?.thumbnailData?.length).toBeGreaterThan(0);
+
+    await listRecipes('legacy-import-image-user', {});
+
+    const repaired = await mongoose.models.SavedRecipe.findById(stored._id)
+      .select('illustrationData illustrationModel illustrationUrl sourceUrl')
+      .lean<{
+        illustrationData?: Buffer;
+        illustrationModel?: string;
+        illustrationUrl?: string;
+        sourceUrl?: string;
+      }>();
+    expect(repaired?.illustrationModel).toBeUndefined();
+    expect(repaired?.sourceUrl).toBe('https://example.com/recipe');
+    expect(repaired?.illustrationUrl).toBeUndefined();
+    const repairedWithImage = await mongoose.models.SavedRecipe.findById(stored._id);
+    expect(Buffer.from(repairedWithImage?.illustrationData ?? '').toString()).toBe('source-image');
+  });
+
   test('claims pending illustration work before a second list read can generate it again', async () => {
     let rejectIllustration: (() => void) | undefined;
     jest.mocked(illustrateRecipe).mockImplementationOnce(
@@ -650,5 +913,47 @@ describe('servings parsing and serialization overrides', () => {
     const list = await listRecipes(user, {});
     expect(list.recipes).toHaveLength(1);
     expect(list.recipes[0].servings).toBe(4);
+  });
+
+  test('preserves a descriptive yield on recipe details', async () => {
+    const user = 'yield-detail-user';
+    const documentMarkdown =
+      '# Scallion Meatballs\n\n- **Yield:** 24 meatballs\n\n## Ingredients\n- 1 lb turkey\n\n## Instructions\n1. Shape and cook the meatballs.';
+    const saved = await saveRecipe(user, {
+      title: 'Scallion Meatballs',
+      documentMarkdown,
+      recipe: {
+        title: 'Scallion Meatballs',
+        description: '',
+        servings: 24,
+        timing: { prepMinutes: 20, cookMinutes: 40, totalMinutes: 60 },
+        ingredients: [
+          {
+            id: 'turkey',
+            originalText: '1 lb turkey',
+            item: 'turkey',
+            quantity: 1,
+            quantityType: 'measured',
+            unit: 'lb',
+          },
+        ],
+        steps: [
+          {
+            id: 'shape',
+            order: 1,
+            text: 'Shape and cook the meatballs.',
+            ingredientIds: ['turkey'],
+            timers: [],
+            warnings: [],
+            tips: [],
+          },
+        ],
+        notes: [],
+        tags: [],
+      },
+    });
+
+    expect(saved.yield).toBe('24 meatballs');
+    await expect(getRecipe(user, saved._id)).resolves.toMatchObject({ yield: '24 meatballs' });
   });
 });

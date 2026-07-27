@@ -43,3 +43,4 @@ export * from './cooking';
 /* Preferences */
 export * from './preferences';
 export * from './ingredient';
+export * from './shopping';

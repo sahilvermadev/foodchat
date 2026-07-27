@@ -1,5 +1,6 @@
 import { logger } from '@librechat/data-schemas';
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { structuredRecipeFromMarkdown } from 'librechat-data-provider';
 
 import { MCPManager } from '~/mcp/MCPManager';
 
@@ -365,9 +366,9 @@ Rekky json-render widgets:
 Recipe canvas markdown requirements:
 - Write a structured recipe document that feels like competent guidance, not documentation.
 - Start with a one-paragraph orientation after the title: what the dish is, the intended texture and flavor profile, effort level, timing reality, and the main thing that makes the recipe work.
-- Include these sections in this order when useful: Equipment, Recipe Data, Quality Checks, Key Notes Before Starting, Ingredients, Instructions, Recovery Notes, Serving Notes, Variations, Notes.
+- Include these sections in this order when useful: Equipment, Recipe Data, Quality Checks, Key Notes Before Starting, Ingredients, Instructions, Recovery Notes, Serving Notes, Variations, Notes. Recipe Data is required for every recipe canvas.
 - In Equipment, default to common, low-assumption tools and include practical alternatives for specialized appliances. Do not assume the user owns a tool unless they said so in this conversation or it is a durable saved kitchen preference.
-- Recipe Data should include servings/yield, prep time, cook time, total time, and difficulty when reasonably inferable.
+- Recipe Data must use ordinary Markdown rows or a table and include servings/yield, prep time, cook time, total time, and difficulty. Use zero only when a phase genuinely does not apply; total time must be non-zero. Preserve sourced timing. When a source omits timing, provide a clearly disclosed practical estimate instead of presenting it as a sourced fact.
 - Quality Checks should name the critical success signals for the dish: texture, aroma, color, sound, temperature, reduction level, or doneness.
 - Ingredients must be grouped by function inside the table. Use rows such as "For the marinade", "For the sauce", "For finishing", or equivalent phase labels before the ingredients in that group.
 - Ingredients should be a markdown table with Ingredient | Metric | Imperial | State/Form | Notes. Never omit or generalize critical seasonings like salt and acid. Always list salt and acids with specific measurements or clear context (e.g. "1.5 tsp kosher salt", "1 tbsp lemon juice") and specify the type of salt suitable for their region.
@@ -453,7 +454,7 @@ const tools: CookingToolDefinition[] = [
     function: {
       name: 'create_cooking_document',
       description:
-        'Create and select a new durable cooking document. Use it for a distinct recipe, guide, prep plan, imported recipe, or explicitly preserved variant, including when another document already exists. Do not use it for a small change to the selected document. The markdown must be one complete usable document with exactly one top-level title, an Ingredients section, and an Instructions or Method section.',
+        'Create and select a new durable cooking document. Use it for a distinct recipe, guide, prep plan, imported recipe, or explicitly preserved variant, including when another document already exists. Do not use it for a small change to the selected document. Recipe markdown must be one complete usable document with exactly one top-level title, Recipe Data with non-zero timing, an Ingredients section, and an Instructions or Method section.',
       parameters: {
         type: 'object',
         properties: {
@@ -1263,6 +1264,14 @@ function assertRecipeMarkdown(markdown: unknown): string {
   return trimmed;
 }
 
+function assertRecipeTiming(markdown: string): void {
+  const recipe = structuredRecipeFromMarkdown(markdown);
+  if (recipe?.timing.totalMinutes && recipe.timing.totalMinutes > 0) return;
+  throw new CookingValidationError(
+    'Recipe Data must include realistic prep, cook, and non-zero total times in ordinary Markdown. Use zero only for a phase that genuinely does not apply.',
+  );
+}
+
 function normalizeForDiff(markdown: string): string {
   return markdown.trim().replace(/\s+/g, ' ');
 }
@@ -1522,6 +1531,7 @@ async function executeTool(
     const requestedTitle = cleanRequiredText(args.title, 'Recipe canvas title is required.');
     const documentType = cleanDocumentType(args.document_type);
     const markdown = assertRecipeMarkdown(args.markdown);
+    if (documentType === 'recipe') assertRecipeTiming(markdown);
     const title = markdownTitle(markdown) ?? validCanvasTitle(requestedTitle);
     if (!title) {
       throw new Error('Recipe canvas title is malformed.');

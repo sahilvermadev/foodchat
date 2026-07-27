@@ -3,12 +3,10 @@ import type {
   ConversationCookingDocuments,
   CookingDocumentType,
   CookingDraft,
-  CookingSession,
-  CookingSessionsResponse,
-  CookingSessionEvent,
   StructuredRecipe,
 } from 'librechat-data-provider';
-import type { ICookingDraft, ICookingSession } from '@librechat/data-schemas';
+import { canonicalRecipeFromContent } from 'librechat-data-provider';
+import type { ICookingDraft } from '@librechat/data-schemas';
 import { CookingValidationError, normalizeRecipe, personalizeRecipe } from './validation';
 import { getExistingPreferences } from '../preferences/service';
 
@@ -27,12 +25,14 @@ function serializeStructuredRecipe(recipe: StructuredRecipe): StructuredRecipe {
 function models() {
   return {
     Draft: mongoose.model<ICookingDraft>('CookingDraft'),
-    Session: mongoose.model<ICookingSession>('CookingSession'),
-    Event: mongoose.model('CookingSessionEvent'),
   };
 }
 
 function serializeDraft(draft: ICookingDraft): CookingDraft {
+  const storedRecipe = serializeStructuredRecipe(draft.recipe);
+  const canonicalRecipe = draft.documentMarkdown
+    ? canonicalRecipeFromContent({ markdown: draft.documentMarkdown, recipe: storedRecipe })
+    : null;
   return {
     _id: idOf(draft),
     user: draft.user,
@@ -42,35 +42,10 @@ function serializeDraft(draft: ICookingDraft): CookingDraft {
     documentType: draft.documentType ?? 'recipe',
     selected: draft.selected ?? false,
     ...(draft.documentMarkdown ? { documentMarkdown: draft.documentMarkdown } : {}),
-    recipe: serializeStructuredRecipe(draft.recipe),
+    recipe: canonicalRecipe ? serializeStructuredRecipe(canonicalRecipe) : storedRecipe,
     ...(draft.expiresAt ? { expiresAt: iso(draft.expiresAt) } : {}),
     createdAt: iso(draft.createdAt),
     updatedAt: iso(draft.updatedAt),
-  };
-}
-
-function serializeSession(session: ICookingSession): CookingSession {
-  return {
-    _id: idOf(session),
-    user: session.user,
-    status: session.status,
-    currentStepIndex: session.currentStepIndex,
-    ...(session.draftId ? { draftId: session.draftId } : {}),
-    recipeSnapshot: serializeStructuredRecipe(session.recipeSnapshot),
-    summary: {
-      notes: [...session.summary.notes],
-      substitutions: session.summary.substitutions.map((substitution) => ({
-        ...(substitution.ingredientId ? { ingredientId: substitution.ingredientId } : {}),
-        text: substitution.text,
-      })),
-      problems: [...session.summary.problems],
-      ...(session.summary.rating ? { rating: session.summary.rating } : {}),
-      ...(session.summary.reviewNote ? { reviewNote: session.summary.reviewNote } : {}),
-    },
-    startedAt: iso(session.startedAt),
-    ...(session.completedAt ? { completedAt: iso(session.completedAt) } : {}),
-    createdAt: iso(session.createdAt),
-    updatedAt: iso(session.updatedAt),
   };
 }
 
@@ -173,13 +148,15 @@ export async function generateCookingDraft(
   const cleanPrompt = assertPrompt(prompt);
   const cleanDocumentMarkdown = documentMarkdown?.trim();
   const preferences = await getExistingPreferences(user);
-  const normalizedBase = recipe
-    ? normalizeRecipe(recipe)
-    : normalizeRecipe(blankRecipe(markdownTitle(cleanDocumentMarkdown) ?? cleanPrompt));
+  const selectedDocumentType = assertDocumentType(documentType);
+  const fallbackRecipe = recipe ?? blankRecipe(markdownTitle(cleanDocumentMarkdown) ?? cleanPrompt);
+  const parsedRecipe = cleanDocumentMarkdown
+    ? canonicalRecipeFromContent({ markdown: cleanDocumentMarkdown, recipe: fallbackRecipe })
+    : null;
+  const normalizedBase = normalizeRecipe(parsedRecipe ?? fallbackRecipe);
   const personalized = personalizeRecipe(normalizedBase, preferences?.markdown);
   const finalRecipe = personalized.recipe;
   const adjustments = personalized.adjustments;
-  const selectedDocumentType = assertDocumentType(documentType);
   const payload = {
     user,
     ...(conversationId ? { conversationId } : {}),
@@ -316,9 +293,13 @@ export async function updateCookingDraft(
   const cleanDocumentMarkdown = documentMarkdown?.trim();
   const documentTitle = markdownTitle(cleanDocumentMarkdown);
   let adjustments: string[] = [];
-  if (recipe) {
+  const parsedRecipe = cleanDocumentMarkdown
+    ? canonicalRecipeFromContent({ markdown: cleanDocumentMarkdown, recipe })
+    : null;
+  if (recipe || parsedRecipe) {
     const preferences = await getExistingPreferences(user);
-    const baseRecipe = documentTitle ? { ...recipe, title: documentTitle } : recipe;
+    const sourceRecipe = parsedRecipe ?? recipe!;
+    const baseRecipe = documentTitle ? { ...sourceRecipe, title: documentTitle } : sourceRecipe;
     const normalizedBase = normalizeRecipe(baseRecipe);
     const personalized = personalizeRecipe(normalizedBase, preferences?.markdown);
     set.recipe = personalized.recipe;
@@ -326,7 +307,7 @@ export async function updateCookingDraft(
   }
   if (typeof documentMarkdown === 'string') {
     set.documentMarkdown = documentMarkdown.trim();
-    if (!recipe && documentTitle) {
+    if (!set.recipe && !recipe && documentTitle) {
       set['recipe.title'] = documentTitle;
     }
   }
@@ -348,157 +329,5 @@ export async function updateCookingDraft(
 }
 
 export const updateCookingDocument = updateCookingDraft;
-
-export async function startCookingSession(params: {
-  user: string;
-  draftId: string;
-}): Promise<CookingSession | null> {
-  const { Draft, Session } = models();
-  const draft = await Draft.findOne({ _id: params.draftId, user: params.user, status: 'active' });
-  if (!draft) {
-    return null;
-  }
-
-  const session = await Session.create({
-    user: params.user,
-    status: 'active',
-    currentStepIndex: 0,
-    draftId: idOf(draft),
-    recipeSnapshot: draft.recipe,
-    summary: { notes: [], substitutions: [], problems: [] },
-    startedAt: new Date(),
-  });
-  return serializeSession(session);
-}
-
-export async function getCookingSession(
-  user: string,
-  sessionId: string,
-): Promise<CookingSession | null> {
-  const { Session } = models();
-  const session = await Session.findOne({ _id: sessionId, user });
-  return session ? serializeSession(session) : null;
-}
-
-export async function listCookingSessions(
-  user: string,
-  options: { status?: 'active' | 'completed'; limit?: number } = {},
-): Promise<CookingSessionsResponse> {
-  const { Session } = models();
-  const limit = Math.min(Math.max(options.limit ?? 10, 1), 20);
-  const query: { user: string; status?: 'active' | 'completed' } = { user };
-  if (options.status) {
-    query.status = options.status;
-  }
-  const sessions = await Session.find(query).sort({ updatedAt: -1 }).limit(limit);
-  return { sessions: sessions.map(serializeSession) };
-}
-
-export async function appendCookingSessionEvent(params: {
-  user: string;
-  sessionId: string;
-  event: CookingSessionEvent;
-}): Promise<CookingSession | null> {
-  const { Session, Event } = models();
-  const event = params.event;
-  const set: Record<string, unknown> = {};
-  const push: Record<string, unknown> = {};
-  const inc: Record<string, number> = {};
-
-  if (event.type === 'navigation') {
-    if (event.action === 'next') {
-      inc.currentStepIndex = 1;
-    } else if (event.action === 'previous') {
-      inc.currentStepIndex = -1;
-    } else if (event.action === 'jump') {
-      set.currentStepIndex = Math.max(0, event.stepIndex ?? 0);
-    }
-  } else if (event.type === 'note') {
-    push['summary.notes'] = event.text;
-  } else if (event.type === 'substitution') {
-    push['summary.substitutions'] = {
-      ...(event.ingredientId ? { ingredientId: event.ingredientId } : {}),
-      text: event.text,
-    };
-  } else if (event.type === 'problem') {
-    push['summary.problems'] = event.text;
-  } else if (event.type === 'review') {
-    set['summary.rating'] = event.rating;
-    set['summary.reviewNote'] = event.note;
-  }
-
-  const update = {
-    ...(Object.keys(set).length ? { $set: set } : {}),
-    ...(Object.keys(push).length ? { $push: push } : {}),
-    ...(Object.keys(inc).length ? { $inc: inc } : {}),
-  };
-  const session = Object.keys(update).length
-    ? await Session.findOneAndUpdate({ _id: params.sessionId, user: params.user }, update, {
-        new: true,
-      })
-    : await Session.findOne({ _id: params.sessionId, user: params.user });
-  if (!session) {
-    return null;
-  }
-
-  await Event.create({
-    user: params.user,
-    sessionId: params.sessionId,
-    stepIndex: 'stepIndex' in event ? event.stepIndex : undefined,
-    event,
-  });
-
-  const lastStepIndex = Math.max(0, session.recipeSnapshot.steps.length - 1);
-  if (session.currentStepIndex < 0 || session.currentStepIndex > lastStepIndex) {
-    const clamped = await Session.findOneAndUpdate(
-      {
-        _id: params.sessionId,
-        user: params.user,
-        currentStepIndex: session.currentStepIndex,
-      },
-      {
-        $set: {
-          currentStepIndex: Math.min(lastStepIndex, Math.max(0, session.currentStepIndex)),
-        },
-      },
-      { new: true },
-    );
-    if (clamped) {
-      return serializeSession(clamped);
-    }
-    const latest = await Session.findOne({ _id: params.sessionId, user: params.user });
-    return latest ? serializeSession(latest) : null;
-  }
-  return serializeSession(session);
-}
-
-export async function completeCookingSession(params: {
-  user: string;
-  sessionId: string;
-  rating: number;
-  note: string;
-}): Promise<CookingSession | null> {
-  const rating = Math.max(1, Math.min(5, Number(params.rating)));
-  const session = await appendCookingSessionEvent({
-    user: params.user,
-    sessionId: params.sessionId,
-    event: { type: 'review', rating, note: params.note.trim() },
-  });
-  if (!session) {
-    return null;
-  }
-  const { Session } = models();
-  const completed = await Session.findOneAndUpdate(
-    { _id: params.sessionId, user: params.user },
-    {
-      $set: {
-        status: 'completed',
-        completedAt: new Date(),
-      },
-    },
-    { new: true },
-  );
-  return completed ? serializeSession(completed) : null;
-}
 
 export { CookingValidationError };

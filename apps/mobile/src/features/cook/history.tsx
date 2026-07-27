@@ -1,12 +1,25 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, SectionList, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  SectionList,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { RecentConversation } from '@/features/today/queries';
 import { fonts, radius, space } from '@/constants/theme';
 import { useAuth } from '@/features/auth/provider';
-import { useRecentConversations } from '@/features/today/queries';
+import {
+  useDeleteConversation,
+  useRecentConversations,
+  useRenameConversation,
+} from '@/features/today/queries';
 import { useTheme } from '@/features/theme/provider';
 import { createThemeStyles } from '@/features/theme/styles';
 import { useTranslation } from '@/lib/i18n';
@@ -50,19 +63,70 @@ const groupConversations = (
 
 function ConversationRow({
   conversation,
+  editing,
+  editTitle,
+  onCancelEdit,
+  onChangeEdit,
+  onDelete,
   selected,
   onPress,
+  onLongPress,
+  onSaveEdit,
 }: {
   conversation: RecentConversation;
+  editing: boolean;
+  editTitle: string;
+  onCancelEdit: () => void;
+  onChangeEdit: (title: string) => void;
+  onDelete: () => void;
   selected: boolean;
   onPress: () => void;
+  onLongPress: () => void;
+  onSaveEdit: () => void;
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useStyles();
+  if (editing) {
+    return (
+      <View style={[styles.conversation, styles.conversationEditing]}>
+        <TextInput
+          accessibilityLabel={t('cook.renameChat')}
+          onChangeText={onChangeEdit}
+          onSubmitEditing={onSaveEdit}
+          selectTextOnFocus
+          style={styles.editInput}
+          value={editTitle}
+        />
+        <Pressable accessibilityLabel={t('common.cancel')} onPress={onCancelEdit}>
+          <SymbolView
+            name={{ android: 'close', ios: 'xmark' }}
+            size={18}
+            tintColor={colors.inkMuted}
+          />
+        </Pressable>
+        <Pressable accessibilityLabel={t('cook.deleteChat')} onPress={onDelete}>
+          <SymbolView
+            name={{ android: 'delete', ios: 'trash' }}
+            size={18}
+            tintColor={colors.danger}
+          />
+        </Pressable>
+        <Pressable accessibilityLabel={t('recipe.saveChanges')} onPress={onSaveEdit}>
+          <SymbolView
+            name={{ android: 'check', ios: 'checkmark' }}
+            size={19}
+            tintColor={colors.ember}
+          />
+        </Pressable>
+      </View>
+    );
+  }
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityHint={t('cook.manageChatHint')}
+      onLongPress={onLongPress}
       onPress={onPress}
       style={({ pressed }) => [
         styles.conversation,
@@ -103,7 +167,11 @@ export function HistoryDrawer({
   const styles = useStyles();
   const auth = useAuth();
   const conversationsQuery = useRecentConversations(30);
+  const renameConversation = useRenameConversation();
+  const deleteConversation = useDeleteConversation();
   const [search, setSearch] = useState('');
+  const [editingId, setEditingId] = useState('');
+  const [editTitle, setEditTitle] = useState('');
   const filteredConversations = useMemo(() => {
     const conversations = conversationsQuery.data?.conversations ?? [];
     const query = search.trim().toLocaleLowerCase();
@@ -122,6 +190,39 @@ export function HistoryDrawer({
     if (id === 'week') return t('cook.historyWeek');
     if (id === 'older') return t('cook.historyOlder');
     return t('cook.historyResults');
+  };
+
+  const manageConversation = (conversation: RecentConversation) => {
+    setEditingId(conversation.conversationId);
+    setEditTitle(conversation.title || t('cook.untitledChat'));
+  };
+
+  const saveConversationTitle = () => {
+    if (!editingId || !editTitle.trim()) return;
+    renameConversation.mutate({ conversationId: editingId, title: editTitle.trim() });
+    setEditingId('');
+    setEditTitle('');
+  };
+
+  const confirmDeleteConversation = (conversation: RecentConversation) => {
+    Alert.alert(
+      t('cook.deleteChat'),
+      t('cook.deleteChatBody', {
+        title: conversation.title || t('cook.untitledChat'),
+      }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('cook.deleteChat'),
+          style: 'destructive',
+          onPress: () => {
+            deleteConversation.mutate(conversation.conversationId);
+            setEditingId('');
+            setEditTitle('');
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -189,11 +290,21 @@ export function HistoryDrawer({
         renderItem={({ item }) => (
           <ConversationRow
             conversation={item}
+            editing={editingId === item.conversationId}
+            editTitle={editTitle}
+            onCancelEdit={() => {
+              setEditingId('');
+              setEditTitle('');
+            }}
+            onChangeEdit={setEditTitle}
+            onDelete={() => confirmDeleteConversation(item)}
+            onLongPress={() => manageConversation(item)}
             onPress={() => {
               onClose();
               onSelect(item.conversationId);
             }}
             selected={item.conversationId === activeConversationId}
+            onSaveEdit={saveConversationTitle}
           />
         )}
         renderSectionHeader={({ section }) => (
@@ -212,10 +323,13 @@ export function HistoryDrawer({
         </Text>
         <Pressable
           accessibilityRole="button"
-          onPress={() => void auth.logout()}
+          onPress={() => {
+            onClose();
+            router.push('/settings');
+          }}
           style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}
         >
-          <Text style={styles.signOutText}>{t('auth.signOut')}</Text>
+          <Text style={styles.signOutText}>{t('settings.title')}</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -302,6 +416,14 @@ const useStyles = createThemeStyles((palette) => ({
     paddingHorizontal: space.md,
   },
   conversationSelected: { backgroundColor: palette.herbSoft },
+  conversationEditing: { backgroundColor: palette.canvasRaised },
+  editInput: {
+    color: palette.ink,
+    flex: 1,
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    minHeight: 38,
+  },
   conversationCopy: { flex: 1, gap: 2 },
   conversationTitle: {
     color: palette.ink,

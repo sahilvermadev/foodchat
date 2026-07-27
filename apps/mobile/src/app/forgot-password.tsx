@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { authService } from '@/features/auth/service';
 import { AuthButton, AuthError, AuthField, AuthLink, AuthShell } from '@/features/auth/ui';
 import { useTranslation } from '@/lib/i18n';
+import { userErrorMessage } from '@/lib/errors';
 
 export default function ForgotPasswordScreen() {
   const { t } = useTranslation();
@@ -20,7 +21,7 @@ export default function ForgotPasswordScreen() {
       await authService.requestPasswordReset(email.trim());
       setSent(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t('auth.invalidEmail'));
+      setError(userErrorMessage(reason, t('auth.resetFailed')));
     } finally {
       setLoading(false);
     }

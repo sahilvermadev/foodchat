@@ -1,6 +1,8 @@
 import { useDeferredValue, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  FlatList,
   Modal,
   Pressable,
   ScrollView,
@@ -8,7 +10,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,18 +20,25 @@ import type {
   FilterGroup,
   SaveListFilter,
 } from '@/features/recipes/library';
-import type { RecipeSummary } from '@/features/recipes/types';
+import type { RecipeSort, RecipeSummary } from '@/features/recipes/types';
 import { OfflineStatus } from '@/components/offline-status';
+import { ActionSheet } from '@/components/actionsheet';
 import { Chip, RecipeTile, SearchField, type RecipePreview } from '@/components/ui';
 import {
   buildFilterGroups,
   buildLibraryFilters,
   displayFilter,
+  recipeSorts,
   saveListFilters,
 } from '@/features/recipes/library';
 import { fonts, radius, space } from '@/constants/theme';
 import { useConnectivity } from '@/features/connectivity/provider';
-import { useRecipes } from '@/features/recipes/queries';
+import {
+  useDeleteRecipe,
+  useRecipeFacets,
+  useRecipes,
+  useUpdateRecipe,
+} from '@/features/recipes/queries';
 import { useTheme } from '@/features/theme/provider';
 import { createThemeStyles } from '@/features/theme/styles';
 import { translate, useTranslation } from '@/lib/i18n';
@@ -38,11 +46,14 @@ import { translate, useTranslation } from '@/lib/i18n';
 const recipeMeta = (recipe: RecipeSummary) => {
   const rawCategory = recipe.categorization?.cuisine?.[0] ?? recipe.categorization?.diet?.[0];
   const category = rawCategory ? displayFilter(rawCategory) : undefined;
-  if (recipe.servings && category) {
-    return translate('library.servingsCategory', { count: recipe.servings, category });
-  }
-  if (recipe.servings) return translate('library.servings', { count: recipe.servings });
-  return category ?? recipe.shortDescription ?? '';
+  const yieldText =
+    recipe.yield && !/^\d+\s*(?:servings?|serves?)$/i.test(recipe.yield) ? recipe.yield : undefined;
+  const amount =
+    yieldText ?? (recipe.servings ? translate('library.servings', { count: recipe.servings }) : '');
+  const timing = recipe.totalMinutes
+    ? translate('library.minutes', { count: recipe.totalMinutes })
+    : '';
+  return [amount, timing, category].filter(Boolean).join(' · ') || recipe.shortDescription || '';
 };
 
 const preview = (recipe: RecipeSummary): RecipePreview => ({
@@ -50,6 +61,14 @@ const preview = (recipe: RecipeSummary): RecipePreview => ({
   title: recipe.title,
   meta: recipeMeta(recipe),
   imageUrl: recipe.illustrationUrl,
+  badges: [
+    ...(recipe.pinned ? [translate('library.pinned')] : []),
+    ...(recipe.favorite ? [translate('library.favorite')] : []),
+    translate(recipe.saveList === 'cooked_already' ? 'library.cooked' : 'library.wantToCookBadge'),
+  ],
+  status: translate(
+    recipe.saveList === 'cooked_already' ? 'library.cooked' : 'library.wantToCookBadge',
+  ),
 });
 
 function FilterSheet({
@@ -72,10 +91,28 @@ function FilterSheet({
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const styles = useStyles();
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState<AdvancedFilterKey | null>(groups[0]?.key ?? null);
+  const visibleGroups = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return groups;
+    return groups
+      .map((group) => ({
+        ...group,
+        values: group.values.filter((option) =>
+          displayFilter(option.value).toLowerCase().includes(term),
+        ),
+      }))
+      .filter((group) => group.values.length);
+  }, [groups, search]);
   const toggle = (key: AdvancedFilterKey, value: string) => {
+    const selected = filters[key] ?? [];
+    const values = selected.includes(value)
+      ? selected.filter((item) => item !== value)
+      : [...selected, value];
     const next = { ...filters };
-    if (next[key] === value) delete next[key];
-    else next[key] = value;
+    if (values.length) next[key] = values;
+    else delete next[key];
     onChange(next);
   };
 
@@ -91,10 +128,7 @@ function FilterSheet({
           edges={[]}
           style={[
             styles.filterSheet,
-            {
-              maxHeight: height - insets.top - space.xl,
-              paddingBottom: insets.bottom + space.md,
-            },
+            { maxHeight: height - insets.top - space.xl, paddingBottom: insets.bottom + space.md },
           ]}
         >
           <View style={styles.filterHandle} />
@@ -115,23 +149,59 @@ function FilterSheet({
               />
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={styles.filterGroups}>
-            {groups.length ? (
-              groups.map((group) => (
-                <View key={group.key} style={styles.filterGroup}>
-                  <Text style={styles.filterGroupTitle}>{t(group.labelKey)}</Text>
-                  <View style={styles.filterOptions}>
-                    {group.values.map((value) => (
-                      <Chip
-                        key={`${group.key}:${value}`}
-                        label={displayFilter(value)}
-                        onPress={() => toggle(group.key, value)}
-                        selected={filters[group.key] === value}
-                      />
-                    ))}
+          <View style={styles.filterSearch}>
+            <SearchField
+              clearLabel={t('library.clearFilterSearch')}
+              onChangeText={setSearch}
+              placeholder={t('library.searchFilters')}
+              value={search}
+            />
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.filterGroups}
+            keyboardShouldPersistTaps="handled"
+          >
+            {visibleGroups.length ? (
+              visibleGroups.map((group) => {
+                const selectedCount = filters[group.key]?.length ?? 0;
+                const isExpanded = Boolean(search) || expanded === group.key;
+                return (
+                  <View key={group.key} style={styles.filterGroup}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setExpanded(isExpanded && !search ? null : group.key)}
+                      style={styles.filterGroupHeader}
+                    >
+                      <Text style={styles.filterGroupTitle}>{t(group.labelKey)}</Text>
+                      <View style={styles.filterGroupMeta}>
+                        {selectedCount ? (
+                          <Text style={styles.selectedCount}>{selectedCount}</Text>
+                        ) : null}
+                        <SymbolView
+                          name={{
+                            android: isExpanded ? 'expand_less' : 'expand_more',
+                            ios: isExpanded ? 'chevron.up' : 'chevron.down',
+                          }}
+                          size={16}
+                          tintColor={colors.inkMuted}
+                        />
+                      </View>
+                    </Pressable>
+                    {isExpanded ? (
+                      <View style={styles.filterOptions}>
+                        {group.values.map((option) => (
+                          <Chip
+                            key={`${group.key}:${option.value}`}
+                            label={`${displayFilter(option.value)}  ${option.count}`}
+                            onPress={() => toggle(group.key, option.value)}
+                            selected={filters[group.key]?.includes(option.value)}
+                          />
+                        ))}
+                      </View>
+                    ) : null}
                   </View>
-                </View>
-              ))
+                );
+              })
             ) : (
               <Text style={styles.noFilters}>{t('library.noFilters')}</Text>
             )}
@@ -148,7 +218,7 @@ function FilterSheet({
               </Text>
             </Pressable>
             <Pressable onPress={onClose} style={styles.doneButton}>
-              <Text style={styles.doneButtonText}>{t('library.done')}</Text>
+              <Text style={styles.doneButtonText}>{t('library.showResults')}</Text>
             </Pressable>
           </View>
         </SafeAreaView>
@@ -165,29 +235,69 @@ export default function LibraryScreen() {
   const [search, setSearch] = useState('');
   const [saveList, setSaveList] = useState<SaveListFilter>('all');
   const [filters, setFilters] = useState<AdvancedFilters>({});
+  const [sort, setSort] = useState<RecipeSort>('recently_updated');
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [view, setView] = useState<'grid' | 'list'>('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [selectedRecipe, setSelectedRecipe] = useState<RecipeSummary | null>(null);
   const deferredSearch = useDeferredValue(search);
-  const query = useRecipes(buildLibraryFilters(deferredSearch, saveList, filters));
-  const filterOptionsQuery = useRecipes(
-    deferredSearch.trim() ? { q: deferredSearch.trim() } : {},
-    100,
+  const query = useRecipes(
+    buildLibraryFilters(deferredSearch, saveList, filters, sort, favoriteOnly, pinnedOnly),
   );
+  const facetsQuery = useRecipeFacets({
+    ...(deferredSearch.trim() ? { q: deferredSearch.trim() } : {}),
+    ...(saveList !== 'all' ? { saveList } : {}),
+  });
+  const updateRecipe = useUpdateRecipe();
+  const deleteRecipe = useDeleteRecipe();
   const recipes = useMemo(
     () => query.data?.pages.flatMap((page) => page.recipes) ?? [],
     [query.data],
   );
-  const filterOptionRecipes = useMemo(
-    () => filterOptionsQuery.data?.pages[0]?.recipes ?? recipes,
-    [filterOptionsQuery.data, recipes],
+  const total = query.data?.pages[0]?.total ?? facetsQuery.data?.total ?? 0;
+  const filterGroups = useMemo(() => buildFilterGroups(facetsQuery.data), [facetsQuery.data]);
+  const activeFilters = Object.entries(filters).flatMap(([key, values]) =>
+    (values ?? []).map((value) => [key as AdvancedFilterKey, value] as const),
   );
-  const filterGroups = useMemo(() => buildFilterGroups(filterOptionRecipes), [filterOptionRecipes]);
-  const activeFilters = Object.entries(filters) as Array<[AdvancedFilterKey, string]>;
-  const hasActiveQuery = saveList !== 'all' || activeFilters.length > 0 || Boolean(search.trim());
+  const hasActiveQuery =
+    saveList !== 'all' ||
+    activeFilters.length > 0 ||
+    favoriteOnly ||
+    pinnedOnly ||
+    Boolean(search.trim());
+  const sortLabel =
+    recipeSorts.find((item) => item.id === sort)?.key ?? 'library.sortRecentlyUpdated';
 
   const clearAll = () => {
     setSaveList('all');
     setFilters({});
+    setFavoriteOnly(false);
+    setPinnedOnly(false);
     setSearch('');
+  };
+  const patchSelected = (patch: {
+    favorite?: boolean;
+    pinned?: boolean;
+    saveList?: RecipeSummary['saveList'];
+  }) => {
+    if (!selectedRecipe) return;
+    updateRecipe.mutate({ id: selectedRecipe._id, patch });
+    setSelectedRecipe(null);
+  };
+  const confirmDelete = () => {
+    if (!selectedRecipe) return;
+    const recipe = selectedRecipe;
+    setSelectedRecipe(null);
+    Alert.alert(t('library.deleteTitle'), t('library.deleteBody', { title: recipe.title }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('library.delete'),
+        style: 'destructive',
+        onPress: () => deleteRecipe.mutate(recipe._id),
+      },
+    ]);
   };
 
   let emptyContent = isOnline ? (
@@ -197,6 +307,9 @@ export default function LibraryScreen() {
       </View>
       <Text style={styles.stateTitle}>{t('library.emptyTitle')}</Text>
       <Text style={styles.stateBody}>{t('library.emptySubtitle')}</Text>
+      <Pressable onPress={() => router.push('/imports')} style={styles.primaryButton}>
+        <Text style={styles.primaryButtonText}>{t('library.addRecipe')}</Text>
+      </Pressable>
     </View>
   ) : (
     <View style={styles.state}>
@@ -204,41 +317,67 @@ export default function LibraryScreen() {
       <Text style={styles.stateBody}>{t('offline.noCookbookBody')}</Text>
     </View>
   );
-  if (hasActiveQuery) {
+  if (hasActiveQuery)
     emptyContent = (
       <View style={styles.state}>
         <Text style={styles.stateTitle}>{t('library.noMatchesTitle')}</Text>
         <Text style={styles.stateBody}>{t('library.noMatchesSubtitle')}</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={clearAll}
-          style={({ pressed }) => [styles.clearButton, pressed && styles.pressed]}
-        >
+        <Pressable accessibilityRole="button" onPress={clearAll} style={styles.clearButton}>
           <Text style={styles.clearButtonText}>{t('library.clearFilters')}</Text>
         </Pressable>
       </View>
     );
-  }
-  if (query.isLoading) {
+  if (query.isLoading)
     emptyContent = (
       <View style={styles.state}>
         <ActivityIndicator color={colors.ember} size="large" />
       </View>
     );
-  } else if (query.isError) {
+  else if (query.isError)
     emptyContent = (
       <View style={styles.state}>
         <Text style={styles.stateTitle}>{t('library.error')}</Text>
-        <Pressable accessibilityRole="button" onPress={() => void query.refetch()}>
+        <Pressable onPress={() => void query.refetch()}>
           <Text style={styles.retry}>{t('library.retry')}</Text>
         </Pressable>
       </View>
     );
+
+  let footerContent = null;
+  if (query.isFetchingNextPage) {
+    footerContent = (
+      <View style={styles.footer}>
+        <ActivityIndicator color={colors.ember} />
+        <Text style={styles.stateBody}>{t('library.loadingMore')}</Text>
+      </View>
+    );
+  } else if (recipes.length && !query.hasNextPage) {
+    footerContent = <Text style={styles.endText}>{t('library.endOfCookbook')}</Text>;
   }
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
       <OfflineStatus />
+      <View>
+        <View style={styles.titleRow}>
+          <View>
+            <Text style={styles.title}>{t('library.title')}</Text>
+            <Text style={styles.count}>{t('library.recipeCount', { count: total })}</Text>
+          </View>
+          <Pressable
+            accessibilityLabel={t('settings.open')}
+            accessibilityRole="button"
+            onPress={() => router.push('/settings')}
+            style={styles.headerAction}
+          >
+            <SymbolView
+              name={{ android: 'settings', ios: 'gearshape' }}
+              size={19}
+              tintColor={colors.ink}
+            />
+          </Pressable>
+        </View>
+      </View>
       <View style={styles.searchRow}>
         <View style={styles.searchWrap}>
           <SearchField
@@ -251,7 +390,7 @@ export default function LibraryScreen() {
         <Pressable
           accessibilityLabel={t('library.filters')}
           onPress={() => setFiltersOpen(true)}
-          style={({ pressed }) => [styles.filterButton, pressed && styles.pressed]}
+          style={styles.squareButton}
         >
           <SymbolView
             name={{ android: 'filter_list', ios: 'line.3.horizontal.decrease' }}
@@ -263,6 +402,32 @@ export default function LibraryScreen() {
               <Text style={styles.filterCountText}>{activeFilters.length}</Text>
             </View>
           ) : null}
+        </Pressable>
+      </View>
+      <View style={styles.toolbar}>
+        <Pressable onPress={() => setSortOpen(true)} style={styles.sortButton}>
+          <SymbolView
+            name={{ android: 'sort', ios: 'arrow.up.arrow.down' }}
+            size={16}
+            tintColor={colors.inkMuted}
+          />
+          <Text numberOfLines={1} style={styles.sortText}>
+            {t(sortLabel)}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityLabel={t(view === 'grid' ? 'library.listView' : 'library.gridView')}
+          onPress={() => setView(view === 'grid' ? 'list' : 'grid')}
+          style={styles.viewButton}
+        >
+          <SymbolView
+            name={{
+              android: view === 'grid' ? 'view_list' : 'grid_view',
+              ios: view === 'grid' ? 'list.bullet' : 'square.grid.2x2',
+            }}
+            size={18}
+            tintColor={colors.ink}
+          />
         </Pressable>
       </View>
       <ScrollView
@@ -279,6 +444,37 @@ export default function LibraryScreen() {
             selected={saveList === item.id}
           />
         ))}
+        <Chip
+          label={t('library.favorites')}
+          onPress={() => setFavoriteOnly(!favoriteOnly)}
+          selected={favoriteOnly}
+        />
+        <Chip
+          label={t('library.pinned')}
+          onPress={() => setPinnedOnly(!pinnedOnly)}
+          selected={pinnedOnly}
+        />
+        {filterGroups
+          .find((group) => group.key === 'collection')
+          ?.values.slice(0, 4)
+          .map((collection) => {
+            const selected = Boolean(filters.collection?.includes(collection.value));
+            return (
+              <Chip
+                key={`collection:${collection.value}`}
+                label={collection.value}
+                onPress={() =>
+                  setFilters((current) => ({
+                    ...current,
+                    collection: selected
+                      ? (current.collection ?? []).filter((value) => value !== collection.value)
+                      : [...(current.collection ?? []), collection.value],
+                  }))
+                }
+                selected={selected}
+              />
+            );
+          })}
       </ScrollView>
       {activeFilters.length ? (
         <ScrollView
@@ -290,11 +486,15 @@ export default function LibraryScreen() {
           {activeFilters.map(([key, value]) => (
             <Pressable
               key={`${key}:${value}`}
-              onPress={() => {
-                const next = { ...filters };
-                delete next[key];
-                setFilters(next);
-              }}
+              onPress={() =>
+                setFilters((current) => {
+                  const next = { ...current };
+                  const values = (next[key] ?? []).filter((item) => item !== value);
+                  if (values.length) next[key] = values;
+                  else delete next[key];
+                  return next;
+                })
+              }
               style={styles.activeFilter}
             >
               <Text style={styles.activeFilterText}>{displayFilter(value)}</Text>
@@ -305,43 +505,47 @@ export default function LibraryScreen() {
               />
             </Pressable>
           ))}
-          <Pressable onPress={() => setFilters({})} style={styles.clearActiveFilters}>
-            <Text style={styles.clearActiveFiltersText}>{t('library.clearFilters')}</Text>
-          </Pressable>
         </ScrollView>
       ) : null}
-      <FlashList
+      <FlatList
+        key={view}
         contentContainerStyle={styles.listContent}
         data={recipes}
+        extraData={view}
+        initialNumToRender={10}
         ItemSeparatorComponent={() => <View style={styles.rowGap} />}
         keyExtractor={(item) => item._id}
         ListEmptyComponent={emptyContent}
-        ListFooterComponent={
-          query.isFetchingNextPage ? (
-            <View style={styles.footer}>
-              <ActivityIndicator color={colors.ember} />
-              <Text style={styles.stateBody}>{t('library.loadingMore')}</Text>
-            </View>
-          ) : null
-        }
-        numColumns={2}
+        ListFooterComponent={footerContent}
+        maxToRenderPerBatch={10}
+        numColumns={view === 'grid' ? 2 : 1}
         onEndReached={() => {
           if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
         }}
         onEndReachedThreshold={0.45}
         onRefresh={() => void query.refetch()}
         refreshing={query.isRefetching && !query.isFetchingNextPage}
+        removeClippedSubviews={false}
         renderItem={({ item, index }) => (
-          <View style={[styles.tileWrap, index % 2 === 0 ? styles.tileLeft : styles.tileRight]}>
+          <View
+            style={[
+              styles.tileWrap,
+              view === 'grid' && (index % 2 === 0 ? styles.tileLeft : styles.tileRight),
+            ]}
+          >
             <RecipeTile
               compact
+              onLongPress={() => setSelectedRecipe(item)}
               onPress={() => router.push({ pathname: '/recipe', params: { id: item._id } })}
               recipe={preview(item)}
+              variant={view}
             />
           </View>
         )}
         showsVerticalScrollIndicator={false}
         style={styles.list}
+        updateCellsBatchingPeriod={40}
+        windowSize={7}
       />
       <FilterSheet
         filters={filters}
@@ -351,6 +555,71 @@ export default function LibraryScreen() {
         onClose={() => setFiltersOpen(false)}
         visible={filtersOpen}
       />
+      <ActionSheet
+        actions={recipeSorts.map((item) => ({
+          icon: {
+            android: item.id === sort ? 'check' : 'sort',
+            ios: item.id === sort ? 'checkmark' : 'arrow.up.arrow.down',
+          },
+          label: t(item.key),
+          onPress: () => {
+            setSort(item.id);
+            setSortOpen(false);
+          },
+          tone: item.id === sort ? 'accent' : 'neutral',
+        }))}
+        closeLabel={t('common.close')}
+        onClose={() => setSortOpen(false)}
+        title={t('library.sortBy')}
+        visible={sortOpen}
+      />
+      <ActionSheet
+        actions={
+          selectedRecipe
+            ? [
+                {
+                  icon: { android: 'star', ios: 'star' },
+                  label: t(
+                    selectedRecipe.favorite ? 'library.removeFavorite' : 'library.addFavorite',
+                  ),
+                  onPress: () => patchSelected({ favorite: !selectedRecipe.favorite }),
+                  tone: 'accent',
+                },
+                {
+                  icon: { android: 'push_pin', ios: 'pin' },
+                  label: t(selectedRecipe.pinned ? 'library.unpin' : 'library.pin'),
+                  onPress: () => patchSelected({ pinned: !selectedRecipe.pinned }),
+                },
+                {
+                  icon: { android: 'done', ios: 'checkmark.circle' },
+                  label: t(
+                    selectedRecipe.saveList === 'cooked_already'
+                      ? 'library.markWantToCook'
+                      : 'library.markCooked',
+                  ),
+                  onPress: () =>
+                    patchSelected({
+                      saveList:
+                        selectedRecipe.saveList === 'cooked_already'
+                          ? 'want_to_cook'
+                          : 'cooked_already',
+                    }),
+                },
+                {
+                  icon: { android: 'delete', ios: 'trash' },
+                  label: t('library.delete'),
+                  onPress: confirmDelete,
+                  tone: 'danger',
+                },
+              ]
+            : []
+        }
+        closeLabel={t('common.close')}
+        description={t('library.manageHint')}
+        onClose={() => setSelectedRecipe(null)}
+        title={selectedRecipe?.title ?? ''}
+        visible={Boolean(selectedRecipe)}
+      />
     </SafeAreaView>
   );
 }
@@ -359,13 +628,26 @@ const useStyles = createThemeStyles((palette) => ({
   screen: {
     backgroundColor: palette.canvas,
     flex: 1,
-    gap: space.lg,
+    gap: space.md,
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
   },
+  title: { color: palette.ink, fontFamily: fonts.recipeHeading, fontSize: 31, lineHeight: 36 },
+  titleRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  headerAction: {
+    alignItems: 'center',
+    backgroundColor: palette.canvasRaised,
+    borderColor: palette.line,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  count: { color: palette.inkMuted, fontFamily: fonts.sans, fontSize: 12, marginTop: 2 },
   searchRow: { alignItems: 'center', flexDirection: 'row', gap: space.sm },
   searchWrap: { flex: 1 },
-  filterButton: {
+  squareButton: {
     alignItems: 'center',
     backgroundColor: palette.canvasRaised,
     borderColor: palette.line,
@@ -384,16 +666,22 @@ const useStyles = createThemeStyles((palette) => ({
     borderWidth: 2,
     height: 20,
     justifyContent: 'center',
+    minWidth: 20,
     position: 'absolute',
     right: -4,
     top: -4,
-    minWidth: 20,
   },
-  filterCountText: {
-    color: palette.white,
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    fontWeight: '900',
+  filterCountText: { color: palette.white, fontFamily: fonts.mono, fontSize: 9, fontWeight: '900' },
+  toolbar: { alignItems: 'center', flexDirection: 'row', gap: space.sm },
+  sortButton: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: 7, minHeight: 34 },
+  sortText: { color: palette.inkMuted, flex: 1, fontFamily: fonts.sansMedium, fontSize: 12 },
+  viewButton: {
+    alignItems: 'center',
+    backgroundColor: palette.canvasRaised,
+    borderRadius: radius.md,
+    height: 34,
+    justifyContent: 'center',
+    width: 38,
   },
   filterRail: { flexGrow: 0, height: 42 },
   filters: { alignItems: 'center', gap: space.sm, paddingRight: space.lg },
@@ -411,8 +699,6 @@ const useStyles = createThemeStyles((palette) => ({
     paddingVertical: 8,
   },
   activeFilterText: { color: palette.ink, fontFamily: fonts.sansMedium, fontSize: 12 },
-  clearActiveFilters: { paddingHorizontal: space.sm, paddingVertical: 8 },
-  clearActiveFiltersText: { color: palette.ember, fontFamily: fonts.sansSemibold, fontSize: 12 },
   list: { flex: 1 },
   listContent: { paddingBottom: 110 },
   rowGap: { height: space.lg },
@@ -468,14 +754,27 @@ const useStyles = createThemeStyles((palette) => ({
     paddingVertical: 11,
   },
   clearButtonText: { color: palette.ink, fontFamily: fonts.sans, fontSize: 14, fontWeight: '800' },
+  primaryButton: {
+    backgroundColor: palette.ember,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.xl,
+    paddingVertical: 12,
+  },
+  primaryButtonText: { color: palette.white, fontFamily: fonts.sansSemibold, fontSize: 14 },
   retry: { color: palette.ember, fontFamily: fonts.sans, fontSize: 14, fontWeight: '800' },
-  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
   footer: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: space.sm,
     justifyContent: 'center',
     padding: space.xl,
+  },
+  endText: {
+    color: palette.inkMuted,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    padding: space.xl,
+    textAlign: 'center',
   },
   filterModal: { flex: 1, justifyContent: 'flex-end' },
   filterDismiss: {
@@ -519,8 +818,20 @@ const useStyles = createThemeStyles((palette) => ({
     justifyContent: 'center',
     width: 38,
   },
-  filterGroups: { gap: space.xl, padding: space.lg, paddingBottom: space.xl },
-  filterGroup: { gap: space.md },
+  filterSearch: { paddingHorizontal: space.lg, paddingTop: space.md },
+  filterGroups: { gap: space.sm, padding: space.lg, paddingBottom: space.xl },
+  filterGroup: {
+    borderBottomColor: palette.line,
+    borderBottomWidth: 1,
+    gap: space.md,
+    paddingBottom: space.md,
+  },
+  filterGroupHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 38,
+  },
   filterGroupTitle: {
     color: palette.inkMuted,
     fontFamily: fonts.mono,
@@ -529,6 +840,8 @@ const useStyles = createThemeStyles((palette) => ({
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
+  filterGroupMeta: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  selectedCount: { color: palette.ember, fontFamily: fonts.sansSemibold, fontSize: 11 },
   filterOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   noFilters: { color: palette.inkMuted, fontFamily: fonts.sans, fontSize: 14 },
   filterFooter: {

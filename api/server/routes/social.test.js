@@ -30,6 +30,7 @@ jest.mock('@librechat/api', () => {
     deleteSocialPlaylistSubscription: jest.fn(),
     deleteSocialImport: jest.fn(),
     getExistingPreferences: jest.fn(),
+    getSocialImportThumbnail: jest.fn(),
     listSocialImportJobs: jest.fn(),
     listSocialImports: jest.fn(),
     listSocialPlaylistSubscriptions: jest.fn(),
@@ -41,7 +42,7 @@ jest.mock('@librechat/api', () => {
   };
 });
 
-const { fetchRemoteImage } = require('@librechat/api');
+const { fetchRemoteImage, getSocialImportThumbnail } = require('@librechat/api');
 const socialRoutes = require('./social');
 
 function app() {
@@ -70,5 +71,20 @@ describe('social image proxy', () => {
     expect(response.headers['content-type']).toContain('image/png');
     expect(response.headers['cache-control']).toBe('public, max-age=3600');
     expect(fetchRemoteImage).toHaveBeenCalledWith('https://example.com/image.png');
+  });
+
+  test('serves persisted import media only to its authenticated owner', async () => {
+    getSocialImportThumbnail.mockResolvedValue({
+      buffer: Buffer.from('persisted-image'),
+      contentType: 'image/webp',
+    });
+
+    await request(app()).get('/api/social-imports/import-1/thumbnail').expect(401);
+    mockAuthenticated = true;
+    const response = await request(app()).get('/api/social-imports/import-1/thumbnail').expect(200);
+
+    expect(response.headers['content-type']).toContain('image/webp');
+    expect(response.headers['cache-control']).toBe('private, max-age=3600');
+    expect(getSocialImportThumbnail).toHaveBeenCalledWith('user-1', 'import-1');
   });
 });

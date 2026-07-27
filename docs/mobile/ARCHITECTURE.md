@@ -3,7 +3,7 @@
 ## Product intent
 
 Rekky Mobile is a native companion to the web application, not a web view. It exposes the same
-account, conversations, recipes, imports, preferences, guided cooking sessions, and voice assistant
+account, conversations, recipes, imports, preferences, and voice assistant
 through an interface designed for one-handed use in a kitchen.
 
 The mobile experience should feel like an editorial cookbook crossed with a calm ambient assistant:
@@ -34,12 +34,12 @@ Android.
 
 The primary tabs are:
 
-1. **Today** — contextual entry point, active cooking session, recent recipes, and quick prompts.
+1. **Today** — contextual entry point, recent recipes, and quick prompts.
 2. **Cook** — multimodal Rekky conversation with text, camera, attachments, and voice.
 3. **Library** — saved recipes, guides, collections, filters, and offline availability.
 4. **Imports** — social and web recipe inbox, processing state, playlists, and review.
 
-Secondary destinations use native stacks and sheets: recipe detail, guided cooking, import review,
+Secondary destinations use native stacks and sheets: recipe detail, import review,
 conversation history, preferences, profile, and settings.
 
 ## Package boundaries

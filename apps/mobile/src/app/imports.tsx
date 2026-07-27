@@ -6,10 +6,8 @@ import { SymbolView } from 'expo-symbols';
 import type { SocialImport, SocialPlaylistSubscription } from 'librechat-data-provider';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Linking,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   SectionList,
@@ -24,10 +22,12 @@ import type { ImportFilters, ImportSort, ImportView } from '@/features/imports/l
 import type { ActionSheetAction } from '@/components/actionsheet';
 import type { ThemePalette } from '@/constants/theme';
 import type { TranslationKey } from '@/lib/i18n';
+import { KeyboardView } from '@/components/keyboard';
 import { ActionSheet } from '@/components/actionsheet';
 import { OfflineStatus } from '@/components/offline-status';
 import { fonts, radius, shadow, space } from '@/constants/theme';
 import { useConnectivity } from '@/features/connectivity/provider';
+import { AuthenticatedImage } from '@/features/recipes/authenticated-image';
 import {
   activeImportFilterCount,
   creatorsFromImports,
@@ -50,6 +50,7 @@ import { extractSharedUrl } from '@/features/imports/share';
 import { useTheme } from '@/features/theme/provider';
 import { createThemeStyles } from '@/features/theme/styles';
 import { apiUrl } from '@/lib/api/client';
+import { userErrorMessage } from '@/lib/errors';
 import { useTranslation } from '@/lib/i18n';
 
 type ImportSection = { data: SocialImport[]; id: string; title?: TranslationKey };
@@ -72,6 +73,15 @@ const statusKeys = {
   processing: 'imports.statusProcessing',
   saved: 'imports.statusSaved',
   saved_recipe: 'imports.statusSavedRecipe',
+} as const;
+
+const primaryActionKeys = {
+  draft_ready: 'imports.createRecipe',
+  failed: 'imports.retryProcessing',
+  inspiration: 'imports.createRecipe',
+  needs_review: 'imports.reviewSource',
+  saved: 'imports.createRecipe',
+  saved_recipe: 'imports.openRecipe',
 } as const;
 
 const viewKeys = {
@@ -123,6 +133,11 @@ const thumbnailSource = (item: SocialImport) => {
   }
   return `${apiUrl}/api/social-imports/image-proxy?url=${encodeURIComponent(item.thumbnailUrl)}`;
 };
+
+const persistedThumbnailPath = (item: SocialImport) =>
+  item.thumbnailAssetAvailable
+    ? `/api/social-imports/${encodeURIComponent(item._id)}/thumbnail`
+    : undefined;
 
 const startOfDay = (value: Date) => {
   const date = new Date(value);
@@ -178,10 +193,7 @@ function Sheet({
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.modalRoot}>
         <Pressable accessibilityLabel={closeLabel} onPress={onClose} style={styles.modalDismiss} />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.sheetKeyboard}
-        >
+        <KeyboardView style={styles.sheetKeyboard}>
           <SafeAreaView
             edges={[]}
             style={[
@@ -202,7 +214,7 @@ function Sheet({
             </Pressable>
             {children}
           </SafeAreaView>
-        </KeyboardAvoidingView>
+        </KeyboardView>
       </View>
     </Modal>
   );
@@ -253,37 +265,56 @@ function ImportCard({
   item,
   onAction,
   onOpen,
+  onPrimary,
 }: {
   busy: boolean;
   colors: ThemePalette;
   item: SocialImport;
   onAction: () => void;
   onOpen: () => void;
+  onPrimary?: () => void;
 }) {
   const { t } = useTranslation();
   const styles = useStyles();
   const source = importSource(item, t(providerKeys[item.provider]));
+  const persistedThumbnail = persistedThumbnailPath(item);
+  const remoteThumbnail = persistedThumbnail ? undefined : thumbnailSource(item);
+  let thumbnail = (
+    <View style={styles.cardFallback}>
+      <SymbolView
+        name={{ android: 'video_library', ios: 'play.rectangle' }}
+        size={27}
+        tintColor={colors.inkMuted}
+      />
+    </View>
+  );
+  if (remoteThumbnail) {
+    thumbnail = (
+      <Image
+        cachePolicy="memory-disk"
+        contentFit="cover"
+        source={remoteThumbnail}
+        style={styles.cardImage}
+        transition={180}
+      />
+    );
+  }
+  if (persistedThumbnail) {
+    thumbnail = (
+      <AuthenticatedImage
+        cachePolicy="memory-disk"
+        contentFit="cover"
+        path={persistedThumbnail}
+        style={styles.cardImage}
+        transition={180}
+      />
+    );
+  }
   return (
     <View style={styles.card}>
       <Pressable accessibilityRole="button" onPress={onOpen} style={styles.cardOpen}>
         <View style={styles.cardMedia}>
-          {thumbnailSource(item) ? (
-            <Image
-              cachePolicy="memory-disk"
-              contentFit="cover"
-              source={thumbnailSource(item)}
-              style={styles.cardImage}
-              transition={180}
-            />
-          ) : (
-            <View style={styles.cardFallback}>
-              <SymbolView
-                name={{ android: 'video_library', ios: 'play.rectangle' }}
-                size={27}
-                tintColor={colors.inkMuted}
-              />
-            </View>
-          )}
+          {thumbnail}
           {busy ? (
             <View style={styles.busyOverlay}>
               <ActivityIndicator color={colors.white} />
@@ -323,6 +354,24 @@ function ImportCard({
           </View>
         </View>
       </Pressable>
+      {onPrimary && item.status !== 'processing' ? (
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onPrimary}
+          style={({ pressed }) => [styles.cardPrimary, pressed && styles.pressed]}
+        >
+          <Text style={styles.cardPrimaryText}>{t(primaryActionKeys[item.status])}</Text>
+          <SymbolView
+            name={{
+              android: item.status === 'failed' ? 'refresh' : 'arrow_forward',
+              ios: item.status === 'failed' ? 'arrow.clockwise' : 'arrow.right',
+            }}
+            size={15}
+            tintColor={colors.ember}
+          />
+        </Pressable>
+      ) : null}
       <Pressable
         accessibilityLabel={t('imports.actions')}
         hitSlop={8}
@@ -395,7 +444,7 @@ export default function ImportsScreen() {
             onPress: () => setDialog(undefined),
           },
         ],
-        description: error instanceof Error ? error.message : t('imports.error'),
+        description: userErrorMessage(error, t('imports.errorFriendly')),
         title: t('imports.errorTitle'),
       });
     },
@@ -632,6 +681,21 @@ export default function ImportsScreen() {
   const header = (
     <View style={styles.header}>
       <OfflineStatus />
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>{t('imports.screenTitle')}</Text>
+        <Pressable
+          accessibilityLabel={t('settings.open')}
+          accessibilityRole="button"
+          onPress={() => router.push('/settings')}
+          style={styles.headerAction}
+        >
+          <SymbolView
+            name={{ android: 'settings', ios: 'gearshape' }}
+            size={19}
+            tintColor={colors.ink}
+          />
+        </Pressable>
+      </View>
       <View style={styles.summaryRow}>
         <View style={styles.summaryCopy}>
           <Text style={styles.count}>
@@ -669,6 +733,7 @@ export default function ImportsScreen() {
           <Text style={styles.importButtonText}>{t('imports.actionCompact')}</Text>
         </Pressable>
       </View>
+      <Text style={styles.lifecycle}>{t('imports.lifecycle')}</Text>
       {notice ? (
         <View style={styles.notice}>
           <SymbolView
@@ -839,6 +904,17 @@ export default function ImportsScreen() {
             item={item}
             onAction={() => setSelectedImport(item)}
             onOpen={() => void openImport(item)}
+            onPrimary={() => {
+              if (item.status === 'failed') {
+                void retry(item);
+                return;
+              }
+              if (item.status === 'needs_review') {
+                setSelectedImport(item);
+                return;
+              }
+              void openImport(item);
+            }}
           />
         )}
         renderSectionHeader={({ section }) =>
@@ -1105,6 +1181,18 @@ const useStyles = createThemeStyles((palette) => ({
   screen: { backgroundColor: palette.canvas, flex: 1 },
   content: { paddingBottom: 110, paddingHorizontal: space.lg },
   header: { gap: space.md, paddingBottom: space.lg, paddingTop: space.md },
+  title: { color: palette.ink, fontFamily: fonts.recipeHeading, fontSize: 31, lineHeight: 36 },
+  titleRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  headerAction: {
+    alignItems: 'center',
+    backgroundColor: palette.canvasRaised,
+    borderColor: palette.line,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
   summaryRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1114,6 +1202,7 @@ const useStyles = createThemeStyles((palette) => ({
   },
   summaryCopy: { flex: 1, gap: 5, paddingRight: space.md },
   count: { color: palette.ink, fontFamily: fonts.sansSemibold, fontSize: 14 },
+  lifecycle: { color: palette.inkMuted, fontFamily: fonts.sans, fontSize: 11 },
   importButton: {
     alignItems: 'center',
     backgroundColor: palette.ember,
@@ -1222,6 +1311,17 @@ const useStyles = createThemeStyles((palette) => ({
     position: 'relative',
   },
   cardOpen: { flexDirection: 'row', height: 112 },
+  cardPrimary: {
+    alignItems: 'center',
+    borderTopColor: palette.line,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: space.sm,
+    justifyContent: 'flex-end',
+    minHeight: 40,
+    paddingHorizontal: space.md,
+  },
+  cardPrimaryText: { color: palette.ember, fontFamily: fonts.sansSemibold, fontSize: 11 },
   cardMedia: {
     backgroundColor: palette.line,
     height: 112,

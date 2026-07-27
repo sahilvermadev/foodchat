@@ -3,8 +3,6 @@ import { applyTenantIsolation } from '~/models/plugins/tenantIsolation';
 import {
   cookingDraftSchema,
   savedRecipeSchema,
-  cookingSessionSchema,
-  cookingSessionEventSchema,
   guestLimitSchema,
   socialImportSchema,
   socialImportJobSchema,
@@ -17,22 +15,6 @@ export function createCookingDraftModel(mongoose: typeof import('mongoose')) {
   return (
     mongoose.models.CookingDraft ||
     mongoose.model<t.ICookingDraft>('CookingDraft', cookingDraftSchema)
-  );
-}
-
-export function createCookingSessionModel(mongoose: typeof import('mongoose')) {
-  applyTenantIsolation(cookingSessionSchema);
-  return (
-    mongoose.models.CookingSession ||
-    mongoose.model<t.ICookingSession>('CookingSession', cookingSessionSchema)
-  );
-}
-
-export function createCookingSessionEventModel(mongoose: typeof import('mongoose')) {
-  applyTenantIsolation(cookingSessionEventSchema);
-  return (
-    mongoose.models.CookingSessionEvent ||
-    mongoose.model<t.ICookingSessionEvent>('CookingSessionEvent', cookingSessionEventSchema)
   );
 }
 

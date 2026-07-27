@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import type { TFile, TFileUpload } from 'librechat-data-provider';
 
 import { authenticatedApiResponse } from '@/lib/api/client';
+import { userErrorMessage } from '@/lib/errors';
 
 export type CookAttachment = { file: TFile; uri: string };
 
@@ -56,7 +57,7 @@ export function useCookAttachments() {
       setAttachments((current) => [...current, { file, uri: asset.uri }]);
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'The photo could not be attached.');
+      setError(userErrorMessage(caught, 'The photo could not be attached. Please try again.'));
       return false;
     } finally {
       setUploading(false);

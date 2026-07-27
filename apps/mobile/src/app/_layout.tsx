@@ -78,6 +78,7 @@ function Navigation() {
           <Stack.Screen name="cook" />
           <Stack.Screen name="recipe" />
           <Stack.Screen name="preferences" />
+          <Stack.Screen name="settings" />
         </Stack>
       </>
     );

@@ -35,6 +35,8 @@ export * from './cooking';
 export * from './illustrations/media';
 /* Recipes */
 export * from './recipes';
+/* Shopping */
+export * from './shopping';
 /* Social imports */
 export * from './social';
 /* Preferences */

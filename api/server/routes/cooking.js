@@ -22,11 +22,6 @@ const {
   startSavedRecipeDiscussion,
   generateCookingDraft,
   updateCookingDraft,
-  startCookingSession,
-  listCookingSessions,
-  getCookingSession,
-  appendCookingSessionEvent,
-  completeCookingSession,
   consumeGuestDailyPrompt,
   refundGuestDailyPrompt,
   generateGuestUserId,
@@ -230,73 +225,6 @@ function assertRecipe(value) {
 function assertDocumentType(value) {
   if (value != null && !['recipe', 'guide', 'prep_plan'].includes(value)) {
     throw new CookingValidationError('Cooking document type is malformed.');
-  }
-}
-
-function assertStartSessionBody(body) {
-  const payload = isObject(body) ? body : {};
-  const hasDraftId = typeof payload.draftId === 'string' && payload.draftId.trim().length > 0;
-
-  if (!hasDraftId) {
-    throw new CookingValidationError('A draft is required.');
-  }
-}
-
-function assertStepIndex(value) {
-  if (value != null && (!Number.isInteger(value) || value < 0)) {
-    throw new CookingValidationError('Event is malformed.');
-  }
-}
-
-function assertEvent(value) {
-  if (!isObject(value) || typeof value.type !== 'string') {
-    throw new CookingValidationError('Event is required.');
-  }
-
-  assertStepIndex(value.stepIndex);
-
-  if (value.type === 'navigation') {
-    if (!['previous', 'next', 'jump', 'repeat'].includes(value.action)) {
-      throw new CookingValidationError('Event is malformed.');
-    }
-    return;
-  }
-
-  if (value.type === 'note' || value.type === 'problem') {
-    assertText(value.text, 'Event is malformed.');
-    return;
-  }
-
-  if (value.type === 'substitution') {
-    assertText(value.text, 'Event is malformed.');
-    assertOptionalText(value.ingredientId, 'Event is malformed.');
-    return;
-  }
-
-  if (value.type === 'timer') {
-    assertText(value.timerId, 'Event is malformed.');
-    if (!['started', 'completed'].includes(value.action)) {
-      throw new CookingValidationError('Event is malformed.');
-    }
-    if (value.durationSeconds != null && !Number.isFinite(Number(value.durationSeconds))) {
-      throw new CookingValidationError('Event is malformed.');
-    }
-    return;
-  }
-
-  if (value.type === 'review') {
-    assertCompletionBody(value);
-    return;
-  }
-
-  throw new CookingValidationError('Event is malformed.');
-}
-
-function assertCompletionBody(body) {
-  const payload = isObject(body) ? body : {};
-  const rating = Number(payload.rating);
-  if (!Number.isFinite(rating) || rating < 1 || rating > 5 || typeof payload.note !== 'string') {
-    throw new CookingValidationError('Completion payload is malformed.');
   }
 }
 
@@ -1412,89 +1340,6 @@ router.patch('/drafts/:id', async (req, res) => {
       return res.sendStatus(404);
     }
     res.json(draft);
-  } catch (error) {
-    handleError(res, error);
-  }
-});
-
-router.post('/sessions', async (req, res) => {
-  try {
-    assertStartSessionBody(req.body);
-    const session = await startCookingSession({
-      user: userId(req),
-      draftId: req.body.draftId,
-    });
-    if (!session) {
-      return res.sendStatus(404);
-    }
-    res.status(201).json(session);
-  } catch (error) {
-    handleError(res, error);
-  }
-});
-
-router.get('/sessions', async (req, res) => {
-  try {
-    const status = req.query.status;
-    if (status != null && status !== 'active' && status !== 'completed') {
-      throw new CookingValidationError('Cooking session status is malformed.');
-    }
-    const requestedLimit = Number(req.query.limit ?? 10);
-    if (!Number.isInteger(requestedLimit) || requestedLimit < 1) {
-      throw new CookingValidationError('Cooking session limit is malformed.');
-    }
-    const sessions = await listCookingSessions(userId(req), {
-      status,
-      limit: requestedLimit,
-    });
-    return res.json(sessions);
-  } catch (error) {
-    return handleError(res, error);
-  }
-});
-
-router.get('/sessions/:id', async (req, res) => {
-  try {
-    const session = await getCookingSession(userId(req), req.params.id);
-    if (!session) {
-      return res.sendStatus(404);
-    }
-    res.json(session);
-  } catch (error) {
-    handleError(res, error);
-  }
-});
-
-router.post('/sessions/:id/events', async (req, res) => {
-  try {
-    assertEvent(req.body?.event);
-    const session = await appendCookingSessionEvent({
-      user: userId(req),
-      sessionId: req.params.id,
-      event: req.body.event,
-    });
-    if (!session) {
-      return res.sendStatus(404);
-    }
-    res.json(session);
-  } catch (error) {
-    handleError(res, error);
-  }
-});
-
-router.post('/sessions/:id/complete', async (req, res) => {
-  try {
-    assertCompletionBody(req.body);
-    const session = await completeCookingSession({
-      user: userId(req),
-      sessionId: req.params.id,
-      rating: req.body.rating,
-      note: req.body.note,
-    });
-    if (!session) {
-      return res.sendStatus(404);
-    }
-    res.json(session);
   } catch (error) {
     handleError(res, error);
   }

@@ -8,6 +8,8 @@ export * from './file-config';
 export * from './messages';
 export * from './sse';
 export * from './cooking-stream';
+export * from './recipe-normalization';
+export * from './shopping';
 /* artifacts  */
 export * from './artifacts';
 /* schema helpers  */
@@ -35,6 +37,7 @@ export * from './types/graph';
 export * from './types/cooking';
 export * from './types/preferences';
 export * from './types/mobile';
+export * from './types/shopping';
 /* access permissions */
 export * from './accessPermissions';
 /* query/mutation keys */

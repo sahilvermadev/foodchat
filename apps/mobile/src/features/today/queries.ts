@@ -2,20 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch } from '@/lib/api/client';
 import type { AuthUser } from '@/lib/auth/token-vault';
-import type { StructuredRecipe } from '@/features/recipes/types';
 
 export type RecentConversation = {
   conversationId: string;
   title?: string;
   updatedAt?: string;
-};
-
-export type ActiveCookingSession = {
-  _id: string;
-  status: 'active' | 'completed';
-  currentStepIndex: number;
-  recipeSnapshot: StructuredRecipe;
-  updatedAt: string;
 };
 
 export function useCurrentUser() {
@@ -52,10 +43,26 @@ export function useRecentConversations(limit = 4) {
   });
 }
 
-export function useActiveCookingSession() {
-  return useQuery({
-    queryKey: ['cooking-sessions', 'active'],
-    queryFn: () =>
-      apiFetch<{ sessions: ActiveCookingSession[] }>('/api/cooking/sessions?status=active&limit=1'),
+export function useRenameConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, title }: { conversationId: string; title: string }) =>
+      apiFetch<RecentConversation>('/api/convos/update', {
+        body: { arg: { conversationId, title } },
+        method: 'POST',
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['conversations', 'recent'] }),
+  });
+}
+
+export function useDeleteConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      apiFetch('/api/convos', {
+        body: { arg: { conversationId } },
+        method: 'DELETE',
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['conversations', 'recent'] }),
   });
 }

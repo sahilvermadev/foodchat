@@ -83,11 +83,6 @@ jest.mock('@librechat/api', () => {
     startSavedRecipeDiscussion: jest.fn(),
     generateCookingDraft: jest.fn(),
     updateCookingDraft: jest.fn(),
-    startCookingSession: jest.fn(),
-    listCookingSessions: jest.fn(),
-    getCookingSession: jest.fn(),
-    appendCookingSessionEvent: jest.fn(),
-    completeCookingSession: jest.fn(),
     consumeGuestDailyPrompt: jest.fn().mockResolvedValue(true),
     refundGuestDailyPrompt: jest.fn().mockResolvedValue(undefined),
     generateGuestUserId: jest.fn().mockReturnValue('123456789012345678901234'),
@@ -214,11 +209,6 @@ describe('cooking routes', () => {
       draftChanged: false,
     });
     encodeAndFormat.mockResolvedValue({ files: [], image_urls: [] });
-    cookingApi.startCookingSession.mockResolvedValue({ _id: 'session-1' });
-    cookingApi.listCookingSessions.mockResolvedValue({ sessions: [{ _id: 'session-1' }] });
-    cookingApi.getCookingSession.mockResolvedValue({ _id: 'session-1' });
-    cookingApi.appendCookingSessionEvent.mockResolvedValue({ _id: 'session-1' });
-    cookingApi.completeCookingSession.mockResolvedValue({ _id: 'session-1' });
     cookingApi.consumeGuestDailyPrompt.mockResolvedValue(true);
     cookingApi.reserveGuestTrial.mockResolvedValue(true);
     cookingApi.reserveGuestConcurrency.mockResolvedValue(true);
@@ -394,27 +384,6 @@ describe('cooking routes', () => {
       .patch('/api/cooking/drafts/draft-1')
       .send({ recipe: recipe() })
       .expect(200, { _id: 'draft-1' });
-    await request(app)
-      .post('/api/cooking/sessions')
-      .send({ draftId: 'draft-1' })
-      .expect(201, { _id: 'session-1' });
-    await request(app)
-      .get('/api/cooking/sessions?status=active&limit=1')
-      .expect(200, { sessions: [{ _id: 'session-1' }] });
-    expect(cookingApi.listCookingSessions).toHaveBeenCalledWith('auth-user', {
-      status: 'active',
-      limit: 1,
-    });
-    await request(app).get('/api/cooking/sessions/session-1').expect(200, { _id: 'session-1' });
-    await request(app)
-      .post('/api/cooking/sessions/session-1/events')
-      .send({ event: { type: 'note', stepIndex: 0, text: 'Less salt' } })
-      .expect(200, { _id: 'session-1' });
-    await request(app)
-      .post('/api/cooking/sessions/session-1/complete')
-      .send({ rating: 4, note: 'Good' })
-      .expect(200, { _id: 'session-1' });
-
     expect(draftResponse.status).toBe(201);
   });
 
@@ -529,17 +498,6 @@ describe('cooking routes', () => {
     await request(app)
       .patch('/api/cooking/drafts/draft-1')
       .send({ user: 'body-user', recipe: recipe() });
-    await request(app)
-      .post('/api/cooking/sessions')
-      .send({ user: 'body-user', draftId: 'draft-1' });
-    await request(app).get('/api/cooking/sessions/session-1');
-    await request(app)
-      .post('/api/cooking/sessions/session-1/events')
-      .send({ user: 'body-user', event: { type: 'navigation', action: 'next' } });
-    await request(app)
-      .post('/api/cooking/sessions/session-1/complete')
-      .send({ user: 'body-user', rating: 5, note: 'Great' });
-
     expect(cookingApi.generateCookingDraft).toHaveBeenCalledWith(
       'auth-user',
       'Soup',
@@ -553,22 +511,6 @@ describe('cooking routes', () => {
       recipe(),
       undefined,
     );
-    expect(cookingApi.startCookingSession).toHaveBeenCalledWith({
-      user: 'auth-user',
-      draftId: 'draft-1',
-    });
-    expect(cookingApi.getCookingSession).toHaveBeenCalledWith('auth-user', 'session-1');
-    expect(cookingApi.appendCookingSessionEvent).toHaveBeenCalledWith({
-      user: 'auth-user',
-      sessionId: 'session-1',
-      event: { type: 'navigation', action: 'next' },
-    });
-    expect(cookingApi.completeCookingSession).toHaveBeenCalledWith({
-      user: 'auth-user',
-      sessionId: 'session-1',
-      rating: 5,
-      note: 'Great',
-    });
   });
 
   test('chat loads preferences server-side and queues preference batch curation', async () => {
@@ -1188,34 +1130,6 @@ describe('cooking routes', () => {
       '/drafts/missing',
       { recipe: recipe() },
     ],
-    [
-      'start session',
-      () => cookingApi.startCookingSession.mockResolvedValue(null),
-      'post',
-      '/sessions',
-      { draftId: 'missing' },
-    ],
-    [
-      'get session',
-      () => cookingApi.getCookingSession.mockResolvedValue(null),
-      'get',
-      '/sessions/missing',
-      null,
-    ],
-    [
-      'append event',
-      () => cookingApi.appendCookingSessionEvent.mockResolvedValue(null),
-      'post',
-      '/sessions/missing/events',
-      { event: { type: 'navigation', action: 'next' } },
-    ],
-    [
-      'complete session',
-      () => cookingApi.completeCookingSession.mockResolvedValue(null),
-      'post',
-      '/sessions/missing/complete',
-      { rating: 3, note: '' },
-    ],
   ])('%s maps service null to 404', async (_name, setup, method, path, body) => {
     setup();
     const call = request(app)[method](`/api/cooking${path}`);
@@ -1240,10 +1154,10 @@ describe('cooking routes', () => {
   });
 
   test('maps unexpected service errors to 500', async () => {
-    cookingApi.getCookingSession.mockRejectedValue(new Error('Database unavailable.'));
+    cookingApi.getCookingDraftByConversation.mockRejectedValue(new Error('Database unavailable.'));
 
     const response = await request(app)
-      .get('/api/cooking/sessions/session-1')
+      .get('/api/cooking/drafts/by-conversation/conversation-1')
       .expect(500, { error: 'Database unavailable.' });
 
     expect(response.status).toBe(500);
@@ -1252,10 +1166,6 @@ describe('cooking routes', () => {
   test.each([
     ['missing prompt', '/drafts/generate', { prompt: '' }],
     ['malformed recipe', '/drafts/draft-1', { recipe: { title: 'Soup' } }, 'patch'],
-    ['missing session source', '/sessions', {}],
-    ['missing event', '/sessions/session-1/events', {}],
-    ['malformed event', '/sessions/session-1/events', { event: { type: 'timer' } }],
-    ['invalid completion', '/sessions/session-1/complete', { rating: 6, note: 'Nope' }],
   ])('rejects %s with 400 before service call', async (_name, path, body, method = 'post') => {
     const response = await request(app)[method](`/api/cooking${path}`).send(body).expect(400);
     expect(response.status).toBe(400);

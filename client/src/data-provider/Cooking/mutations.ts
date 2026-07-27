@@ -5,8 +5,6 @@ import type {
   CookingDraft,
   ConversationCookingDocuments,
   CookingDocument,
-  CookingSession,
-  CookingSessionEvent,
   GenerateCookingDraftRequest,
   CreateCookingDocumentRequest,
   SavedRecipe,
@@ -24,8 +22,6 @@ import type {
   UpdateCookingDraftRequest,
   UpdateCookingDocumentRequest,
   UpdateSavedRecipeRequest,
-  StartCookingSessionRequest,
-  CompleteCookingSessionRequest,
   PersistCookingVoiceTurnRequest,
   PersistCookingVoiceTurnResponse,
 } from 'librechat-data-provider';
@@ -156,44 +152,6 @@ export const useDeleteCookingDocumentMutation = (
   return useMutation([MutationKeys.deleteCookingDocument], {
     mutationFn: (documentId: string) => dataService.deleteCookingDocument(documentId),
     onSuccess: (collection) => cacheCookingDocuments(queryClient, conversationId, collection),
-  });
-};
-
-export const useStartCookingSessionMutation = (): UseMutationResult<
-  CookingSession,
-  unknown,
-  StartCookingSessionRequest
-> => {
-  return useMutation([MutationKeys.startCookingSession], {
-    mutationFn: (payload: StartCookingSessionRequest) => dataService.startCookingSession(payload),
-  });
-};
-
-export const useAppendCookingSessionEventMutation = (): UseMutationResult<
-  CookingSession,
-  unknown,
-  { sessionId: string; event: CookingSessionEvent }
-> => {
-  const queryClient = useQueryClient();
-  return useMutation([MutationKeys.appendCookingSessionEvent], {
-    mutationFn: ({ sessionId, event }) => dataService.appendCookingSessionEvent(sessionId, event),
-    onSuccess: (session) => {
-      queryClient.setQueryData([QueryKeys.cookingSession, session._id], session);
-    },
-  });
-};
-
-export const useCompleteCookingSessionMutation = (): UseMutationResult<
-  CookingSession,
-  unknown,
-  { sessionId: string; payload: CompleteCookingSessionRequest }
-> => {
-  const queryClient = useQueryClient();
-  return useMutation([MutationKeys.completeCookingSession], {
-    mutationFn: ({ sessionId, payload }) => dataService.completeCookingSession(sessionId, payload),
-    onSuccess: (session) => {
-      queryClient.setQueryData([QueryKeys.cookingSession, session._id], session);
-    },
   });
 };
 

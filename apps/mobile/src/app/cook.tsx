@@ -5,7 +5,6 @@ import {
   Dimensions,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   PixelRatio,
   Platform,
@@ -21,17 +20,19 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { CookingSession, CookingSessionEvent } from 'librechat-data-provider';
 
 import type { TranslationKey } from '@/lib/i18n';
 import { Chip } from '@/components/ui';
-import { fonts, radius, shadow, space } from '@/constants/theme';
+import { KeyboardView } from '@/components/keyboard';
+import { OfflineStatus } from '@/components/offline-status';
+import { fonts, radius, space } from '@/constants/theme';
 import { useAppShell } from '@/features/navigation/shell';
 import { useTheme } from '@/features/theme/provider';
 import { createThemeStyles } from '@/features/theme/styles';
 import { useTranslation } from '@/lib/i18n';
 import { RecipeCanvas } from '@/features/cook/canvas';
 import { ExploreSurface } from '@/features/cook/explore';
+import { PersonalKitchen } from '@/features/cook/personal';
 import { cookHomeLayout } from '@/features/cook/layout';
 import { useCookAttachments } from '@/features/cook/attachments';
 import { ConversationMessage } from '@/features/cook/message';
@@ -47,176 +48,6 @@ const progressKey = (type: string): TranslationKey => {
   if (type.includes('planner') || type === 'model_routing') return 'cook.progressPlanning';
   return 'cook.progressThinking';
 };
-
-function SessionCard({
-  session,
-  busy,
-  onEvent,
-  onFinish,
-}: {
-  session: CookingSession;
-  busy: boolean;
-  onEvent: (event: CookingSessionEvent) => void;
-  onFinish: () => void;
-}) {
-  const { t } = useTranslation();
-  const { colors } = useTheme();
-  const styles = useStyles();
-  const [entryType, setEntryType] = useState<'note' | 'problem'>();
-  const [entry, setEntry] = useState('');
-  const steps = session.recipeSnapshot.steps;
-  const step = steps[session.currentStepIndex] ?? steps.at(-1);
-  const completed = session.status === 'completed';
-  const submitEntry = () => {
-    if (!entry.trim() || !entryType) return;
-    onEvent({ type: entryType, text: entry.trim(), stepIndex: session.currentStepIndex });
-    setEntry('');
-    setEntryType(undefined);
-  };
-
-  return (
-    <View style={styles.sessionCard}>
-      <View style={styles.sessionTopRow}>
-        <Text style={styles.sessionKicker}>
-          {completed
-            ? t('cook.sessionCompleted')
-            : t('cook.stepProgress', {
-                current: session.currentStepIndex + 1,
-                total: steps.length,
-              })}
-        </Text>
-        <Text style={styles.sessionRecipe}>{session.recipeSnapshot.title}</Text>
-      </View>
-      {step ? <Text style={styles.sessionStep}>{step.text}</Text> : null}
-      {!completed ? (
-        <>
-          <View style={styles.sessionControls}>
-            <Pressable
-              disabled={busy || session.currentStepIndex === 0}
-              onPress={() => onEvent({ type: 'navigation', action: 'previous' })}
-              style={[styles.stepButton, session.currentStepIndex === 0 && styles.disabled]}
-            >
-              <Text style={styles.stepButtonText}>{t('cook.previous')}</Text>
-            </Pressable>
-            <Pressable
-              disabled={busy}
-              onPress={() => onEvent({ type: 'navigation', action: 'repeat' })}
-              style={styles.stepButton}
-            >
-              <Text style={styles.stepButtonText}>{t('cook.repeat')}</Text>
-            </Pressable>
-            {session.currentStepIndex < steps.length - 1 ? (
-              <Pressable
-                disabled={busy}
-                onPress={() => onEvent({ type: 'navigation', action: 'next' })}
-                style={styles.nextButton}
-              >
-                <Text style={styles.nextButtonText}>{t('cook.next')}</Text>
-              </Pressable>
-            ) : (
-              <Pressable disabled={busy} onPress={onFinish} style={styles.nextButton}>
-                <Text style={styles.nextButtonText}>{t('cook.finish')}</Text>
-              </Pressable>
-            )}
-          </View>
-          <View style={styles.sessionUtilities}>
-            <Chip label={t('cook.addNote')} onPress={() => setEntryType('note')} />
-            <Chip label={t('cook.reportProblem')} onPress={() => setEntryType('problem')} />
-          </View>
-          {entryType ? (
-            <View style={styles.entryRow}>
-              <TextInput
-                onChangeText={setEntry}
-                onSubmitEditing={submitEntry}
-                placeholder={
-                  entryType === 'note' ? t('cook.notePlaceholder') : t('cook.problemPlaceholder')
-                }
-                placeholderTextColor={colors.inkMuted}
-                style={styles.entryInput}
-                value={entry}
-              />
-              <Pressable onPress={submitEntry} style={styles.entrySend}>
-                <Text style={styles.entrySendText}>{t('cook.save')}</Text>
-              </Pressable>
-            </View>
-          ) : null}
-        </>
-      ) : null}
-    </View>
-  );
-}
-
-function ReviewModal({
-  visible,
-  busy,
-  onClose,
-  onComplete,
-}: {
-  visible: boolean;
-  busy: boolean;
-  onClose: () => void;
-  onComplete: (rating: number, note: string) => Promise<boolean>;
-}) {
-  const { t } = useTranslation();
-  const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
-  const styles = useStyles();
-  const [rating, setRating] = useState(5);
-  const [note, setNote] = useState('');
-  const submit = async () => {
-    if (await onComplete(rating, note)) onClose();
-  };
-  return (
-    <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.modalBackdrop}
-      >
-        <View
-          style={[
-            styles.reviewSheet,
-            {
-              maxHeight: height - insets.top - space.xl,
-              paddingBottom: insets.bottom + space.xl,
-            },
-          ]}
-        >
-          <View style={styles.reviewHandle} />
-          <Text style={styles.reviewTitle}>{t('cook.reviewTitle')}</Text>
-          <Text style={styles.reviewSubtitle}>{t('cook.reviewSubtitle')}</Text>
-          <View style={styles.stars}>
-            {[1, 2, 3, 4, 5].map((value) => (
-              <Pressable key={value} onPress={() => setRating(value)}>
-                <Text style={[styles.star, value <= rating && styles.starSelected]}>
-                  {t('cook.star')}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <TextInput
-            multiline
-            onChangeText={setNote}
-            placeholder={t('cook.reviewPlaceholder')}
-            placeholderTextColor={colors.inkMuted}
-            style={styles.reviewInput}
-            value={note}
-          />
-          <Pressable disabled={busy} onPress={() => void submit()} style={styles.completeButton}>
-            {busy ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <Text style={styles.completeButtonText}>{t('cook.complete')}</Text>
-            )}
-          </Pressable>
-          <Pressable onPress={onClose}>
-            <Text style={styles.cancelText}>{t('cook.cancel')}</Text>
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
 
 function SettingsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTranslation();
@@ -358,16 +189,15 @@ function SettingsSheet({ visible, onClose }: { visible: boolean; onClose: () => 
 export default function CookScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useStyles();
   const { openHistory } = useAppShell();
   const pathname = usePathname();
   const params = useLocalSearchParams<{
     conversationId?: string | string[];
-    sessionId?: string | string[];
     prompt?: string | string[];
   }>();
   const initialConversationId = param(params.conversationId);
-  const initialSessionId = param(params.sessionId);
   const initialPrompt = param(params.prompt);
   const listRef = useRef<FlatList<CookMessage>>(null);
   const composerInputRef = useRef<TextInput>(null);
@@ -379,7 +209,6 @@ export default function CookScreen() {
   const [input, setInput] = useState(initialPrompt ?? '');
   const [composerActive, setComposerActive] = useState(false);
   const [homeViewportHeight, setHomeViewportHeight] = useState(0);
-  const [reviewOpen, setReviewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [workspace, setWorkspace] = useState<'chat' | 'recipe'>('chat');
   const homeLayout = cookHomeLayout({
@@ -399,7 +228,6 @@ export default function CookScreen() {
   );
   const cook = useCookState({
     initialConversationId,
-    initialSessionId,
     onConversation,
   });
   const attachments = useCookAttachments();
@@ -407,18 +235,21 @@ export default function CookScreen() {
 
   useEffect(() => {
     const document = cook.selectedDocument;
-    if (!document || cook.session) return;
+    if (!document) return;
     const version = `${document._id}:${document.updatedAt}`;
     if (visibleDocumentVersion.current === version) return;
     visibleDocumentVersion.current = version;
+    composerInputRef.current?.blur();
+    Keyboard.dismiss();
+    setComposerActive(false);
     setWorkspace('recipe');
-  }, [cook.selectedDocument, cook.session]);
+  }, [cook.selectedDocument]);
 
   useEffect(() => {
     if (!initialPrompt) return;
-    if (!initialConversationId && !initialSessionId) resetCook();
+    if (!initialConversationId) resetCook();
     setInput(initialPrompt);
-  }, [initialConversationId, initialPrompt, initialSessionId, resetCook]);
+  }, [initialConversationId, initialPrompt, resetCook]);
 
   useEffect(() => {
     const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
@@ -490,25 +321,23 @@ export default function CookScreen() {
     router.replace('/home');
   };
 
-  let headerContent = null;
-  if (cook.session) {
-    headerContent = (
-      <SessionCard
-        busy={cook.sessionBusy}
-        onEvent={(event) => void cook.addSessionEvent(event)}
-        onFinish={() => setReviewOpen(true)}
-        session={cook.session}
-      />
-    );
-  } else if (cook.sessionLoading) {
-    headerContent = <ActivityIndicator color={colors.ember} />;
-  }
-  const header = headerContent ? <View style={styles.threadHeader}>{headerContent}</View> : null;
-  const isHomeViewport = !cook.session && !cook.messages.length && !cook.selectedDocument;
+  const openRecipeWorkspace = () => {
+    composerInputRef.current?.blur();
+    Keyboard.dismiss();
+    setComposerActive(false);
+    setWorkspace('recipe');
+  };
+
+  const isHomeViewport = !cook.messages.length && !cook.selectedDocument;
   const showHome = !cook.messagesLoading && isHomeViewport;
   const homeComposerActive = showHome && composerActive;
   const composer = (
-    <View style={showHome ? styles.homeComposerGroup : styles.threadComposerGroup}>
+    <View
+      style={[
+        showHome ? styles.homeComposerGroup : styles.threadComposerGroup,
+        !showHome && { paddingBottom: Math.max(insets.bottom, space.md) },
+      ]}
+    >
       {attachments.attachments.length ? (
         <View style={styles.attachmentTray}>
           {attachments.attachments.map((attachment) => (
@@ -613,11 +442,7 @@ export default function CookScreen() {
   );
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : undefined}
-      style={styles.screen}
-    >
+    <KeyboardView keyboardVerticalOffset={8} style={styles.screen}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.topBar}>
           <Pressable
@@ -652,7 +477,7 @@ export default function CookScreen() {
           <Pressable
             accessibilityLabel={t('settings.open')}
             accessibilityRole="button"
-            onPress={() => setSettingsOpen(true)}
+            onPress={() => router.push('/settings')}
             style={({ pressed }) => [styles.topBarButton, pressed && styles.pressed]}
           >
             <SymbolView
@@ -662,13 +487,14 @@ export default function CookScreen() {
             />
           </Pressable>
         </View>
+        <OfflineStatus />
 
-        {cook.selectedDocument && !cook.session ? (
+        {cook.selectedDocument ? (
           <View accessibilityRole="tablist" style={styles.workspaceTabs}>
             <Pressable
               accessibilityRole="tab"
               accessibilityState={{ selected: workspace === 'recipe' }}
-              onPress={() => setWorkspace('recipe')}
+              onPress={openRecipeWorkspace}
               style={[styles.workspaceTab, workspace === 'recipe' && styles.workspaceTabSelected]}
             >
               <Text
@@ -698,14 +524,13 @@ export default function CookScreen() {
           </View>
         ) : null}
 
-        {workspace === 'recipe' && cook.selectedDocument && !cook.session ? (
+        {workspace === 'recipe' && cook.selectedDocument ? (
           <RecipeCanvas
-            busy={cook.documentBusy || cook.sessionBusy}
+            busy={cook.documentBusy}
             document={cook.selectedDocument}
             documents={cook.documents}
             onDelete={(documentId) => void cook.deleteDocument(documentId)}
             onSelect={(documentId) => void cook.selectDocument(documentId)}
-            onStart={() => void cook.startSession()}
           />
         ) : (
           <FlatList
@@ -735,6 +560,12 @@ export default function CookScreen() {
                     >
                       {composer}
                     </View>
+                    <PersonalKitchen
+                      onConversation={openConversation}
+                      onRecipe={(recipeId) =>
+                        router.push({ pathname: '/recipe', params: { id: recipeId } })
+                      }
+                    />
                     <View
                       pointerEvents={homeComposerActive ? 'none' : 'auto'}
                       style={homeComposerActive && styles.homeExploreHidden}
@@ -748,7 +579,6 @@ export default function CookScreen() {
                 )}
               </>
             }
-            ListHeaderComponent={header}
             contentContainerStyle={[
               styles.conversation,
               homeComposerActive && styles.conversationFocused,
@@ -773,7 +603,7 @@ export default function CookScreen() {
             }}
             ref={listRef}
             renderItem={({ item }) => <ConversationMessage message={item} />}
-            scrollEnabled={!isHomeViewport || homeLayout.allowVerticalScroll}
+            scrollEnabled
             scrollEventThrottle={16}
             showsVerticalScrollIndicator={!isHomeViewport || homeLayout.allowVerticalScroll}
           />
@@ -792,7 +622,7 @@ export default function CookScreen() {
             <Text style={styles.errorText}>{cook.error}</Text>
           </View>
         ) : null}
-        {cook.suggestions.length ? (
+        {workspace === 'chat' && cook.suggestions.length ? (
           <FlatList
             contentContainerStyle={styles.suggestions}
             data={cook.suggestions}
@@ -804,16 +634,10 @@ export default function CookScreen() {
           />
         ) : null}
 
-        {!showHome ? composer : null}
+        {!showHome && workspace === 'chat' ? composer : null}
       </SafeAreaView>
-      <ReviewModal
-        busy={cook.sessionBusy}
-        onClose={() => setReviewOpen(false)}
-        onComplete={cook.completeSession}
-        visible={reviewOpen}
-      />
       <SettingsSheet onClose={() => setSettingsOpen(false)} visible={settingsOpen} />
-    </KeyboardAvoidingView>
+    </KeyboardView>
   );
 }
 
@@ -875,7 +699,6 @@ const useStyles = createThemeStyles((palette) => ({
   workspaceTabTextSelected: { color: palette.white, fontFamily: fonts.sansSemibold },
   conversation: { flexGrow: 1, gap: space.lg, paddingBottom: space.lg, paddingTop: space.md },
   conversationFocused: { paddingBottom: 0 },
-  threadHeader: { gap: space.md },
   loader: { marginTop: space.hero },
   emptyConversation: {
     flexGrow: 1,
@@ -899,52 +722,6 @@ const useStyles = createThemeStyles((palette) => ({
   homeIntroCompact: { paddingTop: 0 },
   homeIntroFocused: { paddingTop: 0 },
   homeExploreHidden: { opacity: 0, position: 'absolute' },
-  sessionCard: {
-    backgroundColor: palette.black,
-    borderRadius: radius.lg,
-    gap: space.md,
-    padding: space.lg,
-    ...shadow,
-  },
-  sessionTopRow: { gap: 3 },
-  sessionKicker: { color: palette.saffron, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
-  sessionRecipe: { color: '#CFC6BC', fontFamily: fonts.sans, fontSize: 12 },
-  sessionStep: { color: palette.white, fontFamily: fonts.serif, fontSize: 20, lineHeight: 28 },
-  sessionControls: { flexDirection: 'row', gap: space.sm },
-  stepButton: {
-    borderColor: '#5B5148',
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-  },
-  stepButtonText: { color: palette.white, fontSize: 12, fontWeight: '700' },
-  nextButton: {
-    backgroundColor: palette.ember,
-    borderRadius: radius.pill,
-    marginLeft: 'auto',
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  nextButtonText: { color: palette.white, fontSize: 12, fontWeight: '900' },
-  disabled: { opacity: 0.35 },
-  sessionUtilities: { flexDirection: 'row', gap: space.sm },
-  entryRow: { flexDirection: 'row', gap: space.sm },
-  entryInput: {
-    backgroundColor: '#2B2622',
-    borderRadius: radius.md,
-    color: palette.white,
-    flex: 1,
-    fontSize: 14,
-    paddingHorizontal: space.md,
-  },
-  entrySend: {
-    backgroundColor: palette.saffron,
-    borderRadius: radius.md,
-    justifyContent: 'center',
-    padding: space.md,
-  },
-  entrySendText: { color: palette.ink, fontSize: 12, fontWeight: '900' },
   thinkingRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1038,41 +815,6 @@ const useStyles = createThemeStyles((palette) => ({
   sendButtonDisabled: { opacity: 0.35 },
   pressed: { opacity: 0.7, transform: [{ scale: 0.98 }] },
   modalBackdrop: { backgroundColor: 'rgba(9,8,6,0.45)', flex: 1, justifyContent: 'flex-end' },
-  reviewSheet: {
-    alignItems: 'center',
-    backgroundColor: palette.canvasRaised,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    gap: space.lg,
-    padding: space.xl,
-    paddingBottom: space.hero,
-  },
-  reviewHandle: { backgroundColor: palette.line, borderRadius: 3, height: 5, width: 44 },
-  reviewTitle: { color: palette.ink, fontFamily: fonts.serif, fontSize: 27, fontWeight: '800' },
-  reviewSubtitle: { color: palette.inkMuted, fontSize: 14, textAlign: 'center' },
-  stars: { flexDirection: 'row', gap: space.sm },
-  star: { color: palette.line, fontSize: 36 },
-  starSelected: { color: palette.saffron },
-  reviewInput: {
-    borderColor: palette.line,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    color: palette.ink,
-    minHeight: 88,
-    padding: space.md,
-    textAlignVertical: 'top',
-    width: '100%',
-  },
-  completeButton: {
-    alignItems: 'center',
-    backgroundColor: palette.ember,
-    borderRadius: radius.pill,
-    minHeight: 48,
-    justifyContent: 'center',
-    width: '100%',
-  },
-  completeButtonText: { color: palette.white, fontSize: 15, fontWeight: '900' },
-  cancelText: { color: palette.inkMuted, fontSize: 14, fontWeight: '700' },
   settingsSheet: {
     backgroundColor: palette.canvasRaised,
     borderColor: palette.line,

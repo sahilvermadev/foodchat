@@ -15,20 +15,17 @@ import type {
   CookingDraft,
   ConversationCookingDocuments,
   CookingDocument,
-  CookingSession,
-  CookingSessionEvent,
   GenerateCookingDraftRequest,
   CreateCookingDocumentRequest,
   UpdateCookingDraftRequest,
   UpdateCookingDocumentRequest,
-  StartCookingSessionRequest,
-  CompleteCookingSessionRequest,
   CookingVoiceConfig,
   PersistCookingVoiceTurnRequest,
   PersistCookingVoiceTurnResponse,
   SavedRecipe,
   SavedRecipesQuery,
   SavedRecipesResponse,
+  SavedRecipeFacetsResponse,
   SaveRecipeRequest,
   SocialImport,
   SocialImportDraftResponse,
@@ -141,28 +138,6 @@ export function deleteCookingDocument(documentId: string): Promise<ConversationC
   return request.delete(endpoints.cookingDocument(documentId));
 }
 
-export function startCookingSession(payload: StartCookingSessionRequest): Promise<CookingSession> {
-  return request.post(endpoints.cookingSessions(), payload);
-}
-
-export function getCookingSession(sessionId: string): Promise<CookingSession> {
-  return request.get(endpoints.cookingSession(sessionId));
-}
-
-export function appendCookingSessionEvent(
-  sessionId: string,
-  event: CookingSessionEvent,
-): Promise<CookingSession> {
-  return request.post(endpoints.cookingSessionEvents(sessionId), { event });
-}
-
-export function completeCookingSession(
-  sessionId: string,
-  payload: CompleteCookingSessionRequest,
-): Promise<CookingSession> {
-  return request.post(endpoints.cookingSessionComplete(sessionId), payload);
-}
-
 export function getCookingVoiceConfig(): Promise<CookingVoiceConfig> {
   return request.get(endpoints.cookingVoiceConfig());
 }
@@ -189,6 +164,12 @@ export function saveRecipe(payload: SaveRecipeRequest): Promise<SavedRecipe> {
 
 export function getRecipes(params: SavedRecipesQuery = {}): Promise<SavedRecipesResponse> {
   return request.get(endpoints.recipes(savedRecipesQueryString(params)));
+}
+
+export function getRecipeFacets(
+  params: Pick<SavedRecipesQuery, 'q' | 'saveList'> = {},
+): Promise<SavedRecipeFacetsResponse> {
+  return request.get(endpoints.recipeFacets(savedRecipesQueryString(params)));
 }
 
 export function getRecipe(recipeId: string): Promise<SavedRecipe> {

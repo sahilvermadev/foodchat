@@ -128,6 +128,20 @@ export function AppTabs() {
             }}
           />
           <Tabs.Screen
+            name="shopping"
+            options={{
+              title: t('tabs.shopping'),
+              tabBarIcon: ({ color, focused }) => (
+                <TabIcon
+                  android="shopping_basket"
+                  color={color}
+                  focused={focused}
+                  ios={focused ? 'basket.fill' : 'basket'}
+                />
+              ),
+            }}
+          />
+          <Tabs.Screen
             name="sources"
             options={{
               title: t('tabs.imports'),

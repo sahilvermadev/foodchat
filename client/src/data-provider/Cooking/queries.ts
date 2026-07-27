@@ -8,7 +8,6 @@ import type {
 import type {
   CookingDraft,
   ConversationCookingDocuments,
-  CookingSession,
   CookingVoiceConfig,
   SavedRecipe,
   SavedRecipesQuery,
@@ -61,23 +60,6 @@ export const useCookingDocumentsByConversationQuery = (
     {
       enabled: enabled && (config?.enabled ?? true),
       keepPreviousData: true,
-      retry: false,
-      refetchOnWindowFocus: false,
-      ...config,
-    },
-  );
-};
-
-export const useCookingSessionQuery = (
-  sessionId: string | undefined,
-  config?: UseQueryOptions<CookingSession>,
-): QueryObserverResult<CookingSession> => {
-  const enabled = Boolean(sessionId);
-  return useQuery<CookingSession>(
-    [QueryKeys.cookingSession, sessionId],
-    () => dataService.getCookingSession(sessionId as string),
-    {
-      enabled: enabled && (config?.enabled ?? true),
       retry: false,
       refetchOnWindowFocus: false,
       ...config,

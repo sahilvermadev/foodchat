@@ -1,228 +1,230 @@
 <p align="center">
-  <a href="https://librechat.ai">
-    <img src="client/public/assets/logo.svg" height="256">
-  </a>
-  <h1 align="center">
-    <a href="https://librechat.ai">LibreChat</a>
-  </h1>
+  <img src="apps/mobile/assets/images/rekky-icon.png" width="128" alt="Rekky logo">
+</p>
+
+<h1 align="center">Rekky</h1>
+
+<p align="center">
+  <strong>An AI cooking assistant for practical answers, durable recipes, and hands-free kitchen guidance.</strong>
 </p>
 
 <p align="center">
-  <strong>English</strong> ·
-  <a href="README.zh.md">中文</a>
+  <a href="https://rekky.ai">Web app</a> ·
+  <a href="DEPLOYMENT.md">Deployment</a> ·
+  <a href="services/voice/README.md">Voice service</a> ·
+  <a href="DESIGN.md">Product design</a>
 </p>
 
-<p align="center">
-  <a href="https://discord.librechat.ai"> 
-    <img
-      src="https://img.shields.io/discord/1086345563026489514?label=&logo=discord&style=for-the-badge&logoWidth=20&logoColor=white&labelColor=000000&color=blueviolet">
-  </a>
-  <a href="https://www.youtube.com/@LibreChat"> 
-    <img
-      src="https://img.shields.io/badge/YOUTUBE-red.svg?style=for-the-badge&logo=youtube&logoColor=white&labelColor=000000&logoWidth=20">
-  </a>
-  <a href="https://docs.librechat.ai"> 
-    <img
-      src="https://img.shields.io/badge/DOCS-blue.svg?style=for-the-badge&logo=read-the-docs&logoColor=white&labelColor=000000&logoWidth=20">
-  </a>
-  <a aria-label="Sponsors" href="https://github.com/sponsors/danny-avila">
-    <img
-      src="https://img.shields.io/badge/SPONSORS-brightgreen.svg?style=for-the-badge&logo=github-sponsors&logoColor=white&labelColor=000000&logoWidth=20">
-  </a>
-</p>
+## Overview
 
-<p align="center">
-<a href="https://railway.com/deploy/librechat-official?referralCode=HI9hWz&utm_medium=integration&utm_source=readme&utm_campaign=librechat">
-  <img src="https://railway.com/button.svg" alt="Deploy on Railway" height="30">
-</a>
-<a href="https://zeabur.com/templates/0X2ZY8">
-  <img src="https://zeabur.com/button.svg" alt="Deploy on Zeabur" height="30"/>
-</a>
-<a href="https://template.cloud.sealos.io/deploy?templateName=librechat">
-  <img src="https://raw.githubusercontent.com/labring-actions/templates/main/Deploy-on-Sealos.svg" alt="Deploy on Sealos" height="30">
-</a>
-</p>
+Rekky helps people decide what to cook, adapt recipes to real constraints, plan preparation, and stay guided while their hands are busy.
 
-<p align="center">
-  <a href="https://www.librechat.ai/docs/translation">
-    <img 
-      src="https://img.shields.io/badge/dynamic/json.svg?style=for-the-badge&color=2096F3&label=locize&query=%24.translatedPercentage&url=https://api.locize.app/badgedata/4cb2598b-ed4d-469c-9b04-2ed531a8cb45&suffix=%+translated" 
-      alt="Translation Progress">
-  </a>
-</p>
+Rekky is the product. Samwise is the cooking assistant users meet inside conversations.
 
+This repository began as a product-specific fork of LibreChat. It now includes Rekky's cooking runtime, native mobile app, recipe workspace, and real-time voice service.
 
-# ✨ Features
+## Features
 
-- 🖥️ **UI & Experience** inspired by ChatGPT with enhanced design and features
+- **Cooking-first conversations:** answers shaped around ingredients, equipment, skill level, dietary needs, and household preferences.
+- **Recipe workspace:** structured recipes, guides, and prep plans that can be refined in chat and saved for later.
+- **Source-aware import:** turn recipe URLs and images into usable cooking documents while preserving provenance.
+- **Personal context:** remember relevant taste, kitchen, household, location, cultural, and safety preferences.
+- **Optional web research:** use Tavily when current or source-backed information is needed.
+- **Native mobile app:** an Expo and React Native client for Android and iOS.
+- **Real-time voice:** streamed speech recognition, response generation, and speech synthesis through an authenticated Modal worker.
+- **Multi-user foundation:** authentication, persistence, and conversation infrastructure inherited from LibreChat.
 
-- 🤖 **AI Model Selection**:  
-  - Anthropic (Claude), AWS Bedrock, OpenAI, Azure OpenAI, Google, Vertex AI, OpenAI Responses API (incl. Azure)
-  - [Custom Endpoints](https://www.librechat.ai/docs/quick_start/custom_endpoints): Use any OpenAI-compatible API with LibreChat, no proxy required
-  - Compatible with [Local & Remote AI Providers](https://www.librechat.ai/docs/configuration/librechat_yaml/ai_endpoints):
-    - Ollama, groq, Cohere, Mistral AI, Apple MLX, koboldcpp, together.ai,
-    - OpenRouter, Helicone, Perplexity, ShuttleAI, Deepseek, Qwen, and more
+## Architecture
 
-- 🔧 **[Code Interpreter API](https://www.librechat.ai/docs/features/code_interpreter)**: 
-  - Secure, Sandboxed Execution in Python, Node.js (JS/TS), Go, C/C++, Java, PHP, Rust, and Fortran
-  - Seamless File Handling: Upload, process, and download files directly
-  - No Privacy Concerns: Fully isolated and secure execution
+| Area | Location | Responsibility |
+| --- | --- | --- |
+| Web client | `client/` | React browser experience |
+| Mobile client | `apps/mobile/` | Expo and React Native app |
+| API server | `api/` | Express routes, auth, and service boundary |
+| Cooking runtime | `packages/api/` | Agent orchestration, tools, and recipe behavior |
+| Shared contracts | `packages/data-provider/` | Shared types and client services |
+| Voice worker | `services/voice/` | Authenticated speech-to-speech gateway on Modal |
+| Persistence | MongoDB | Users, conversations, recipes, and app state |
 
-- 🔦 **Agents & Tools Integration**:  
-  - **[LibreChat Agents](https://www.librechat.ai/docs/features/agents)**:
-    - No-Code Custom Assistants: Build specialized, AI-driven helpers
-    - Agent Marketplace: Discover and deploy community-built agents
-    - Collaborative Sharing: Share agents with specific users and groups
-    - Flexible & Extensible: Use MCP Servers, tools, file search, code execution, and more
-    - [Skills](https://www.librechat.ai/docs/features/skills): Create reusable `SKILL.md` instruction bundles for manual, automatic, or always-on agent workflows
-    - [Subagents](https://www.librechat.ai/docs/features/subagents): Delegate focused work to isolated child agent runs with their own context windows
-    - Compatible with Custom Endpoints, OpenAI, Azure, Anthropic, AWS Bedrock, Google, Vertex AI, Responses API, and more
-    - [Model Context Protocol (MCP) Support](https://modelcontextprotocol.io/clients#librechat) for Tools
+```text
+Web / Mobile
+      │
+      ▼
+Express API ──► Cooking runtime ──► OpenRouter
+      │                 ├─────────► Tavily
+      │                 └─────────► Epicure MCP
+      ├────────► MongoDB
+      └────────► Modal voice worker
+```
 
-- 🔍 **Web Search**:  
-  - Search the internet and retrieve relevant information to enhance your AI context
-  - Combines search providers, content scrapers, and result rerankers for optimal results
-  - **Customizable Jina Reranking**: Configure custom Jina API URLs for reranking services
-  - **[Learn More →](https://www.librechat.ai/docs/features/web_search)**
+The default cooking model is `google/gemini-3.1-flash-lite` through OpenRouter. The voice worker uses Hugging Face `speech-to-speech` with Parakeet TDT, Silero VAD, Qwen3-TTS, and the configured OpenRouter model.
 
-- 🪄 **Generative UI with Code Artifacts**:  
-  - [Code Artifacts](https://youtu.be/GfTj7O4gmd0?si=WJbdnemZpJzBrJo3) allow creation of React, HTML, and Mermaid diagrams directly in chat
+## Prerequisites
 
-- 🎨 **Image Generation & Editing**
-  - Text-to-image and image-to-image with [GPT-Image-1](https://www.librechat.ai/docs/features/image_gen#1--openai-image-tools-recommended)
-  - Text-to-image with [DALL-E (3/2)](https://www.librechat.ai/docs/features/image_gen#2--dalle-legacy), [Stable Diffusion](https://www.librechat.ai/docs/features/image_gen#3--stable-diffusion-local), [Flux](https://www.librechat.ai/docs/features/image_gen#4--flux), or any [MCP server](https://www.librechat.ai/docs/features/image_gen#5--model-context-protocol-mcp)
-  - Produce stunning visuals from prompts or refine existing images with a single instruction
+- Node.js `20.19+`, `22.12+`, or `23+`
+- npm
+- Docker, for the simplest local MongoDB setup
+- An OpenRouter API key
+- Android Studio and ADB for Android development, or Xcode for iOS development
+- A Modal account only if you are deploying the voice worker
+- A Tavily API key only if you want web search and scraping
 
-- 💾 **Presets & Context Management**:  
-  - Create, Save, & Share Custom Presets  
-  - Switch between AI Endpoints and Presets mid-chat
-  - Edit, Resubmit, and Continue Messages with Conversation branching  
-  - Create and share prompts with specific users and groups
-  - [Fork Messages & Conversations](https://www.librechat.ai/docs/features/fork) for Advanced Context control
+## Local setup
 
-- 💬 **Multimodal & File Interactions**:  
-  - Upload and analyze images with Claude 3, GPT-4.5, GPT-4o, o1, Llama-Vision, and Gemini 📸  
-  - Chat with Files using Custom Endpoints, OpenAI, Azure, Anthropic, AWS Bedrock, & Google 🗃️
+```bash
+git clone https://github.com/sahilvermadev/foodchat.git
+cd foodchat
+cp .env.example .env
+npm ci
+docker compose up -d mongodb
+```
 
-- 🌎 **Multilingual UI**:
-  - English, 中文 (简体), 中文 (繁體), العربية, Deutsch, Español, Français, Italiano
-  - Polski, Português (PT), Português (BR), Русский, 日本語, Svenska, 한국어, Tiếng Việt
-  - Türkçe, Nederlands, עברית, Català, Čeština, Dansk, Eesti, فارسی
-  - Suomi, Magyar, Հայերեն, Bahasa Indonesia, ქართული, Latviešu, ไทย, ئۇيغۇرچە
+Set the required variables described below in `.env`, then start the application:
 
-- 🧠 **Reasoning UI**:  
-  - Dynamic Reasoning UI for Chain-of-Thought/Reasoning AI models like DeepSeek-R1
+```bash
+npm run dev:app -- --build
+```
 
-- 🎨 **Customizable Interface**:  
-  - Customizable Dropdown & Interface that adapts to both power users and newcomers
+The development launcher builds shared packages, then starts the API at `http://localhost:3080` and the web client at `http://localhost:3090`.
 
-- 🌊 **[Resumable Streams](https://www.librechat.ai/docs/features/resumable_streams)**:  
-  - Never lose a response: AI responses automatically reconnect and resume if your connection drops
-  - Multi-Tab & Multi-Device Sync: Open the same chat in multiple tabs or pick up on another device
-  - Production-Ready: Works from single-server setups to horizontally scaled deployments with Redis
+On later runs, use `npm run dev:app` to skip the package build.
 
-- 🗣️ **Speech & Audio**:  
-  - Chat hands-free with Speech-to-Text and Text-to-Speech  
-  - Automatically send and play Audio  
-  - Supports OpenAI, Azure OpenAI, and Elevenlabs
+## Configuration
 
-- 📥 **Import & Export Conversations**:  
-  - Import Conversations from LibreChat, ChatGPT, Chatbot UI  
-  - Export conversations as screenshots, markdown, text, json
+At minimum, configure MongoDB and OpenRouter in the root `.env` file.
 
-- 🔍 **Search & Discovery**:  
-  - Search all messages/conversations
+| Variable | Purpose |
+| --- | --- |
+| `MONGO_URI` | MongoDB connection string |
+| `OPENROUTER_KEY` | Main cooking-agent provider credential |
+| `COOKING_AGENT_BASE_URL` | OpenAI-compatible provider endpoint |
+| `COOKING_AGENT_MODEL` | Main cooking model |
+| `TAVILY_API_KEY` | Optional search and scraping |
+| `JWT_SECRET` | Access-token signing secret |
+| `JWT_REFRESH_SECRET` | Refresh-token signing secret |
+| `CREDS_KEY` / `CREDS_IV` | Encryption material for stored credentials |
+| `REKKY_VOICE_URL` | Deployed Modal voice endpoint |
+| `REKKY_VOICE_TOKEN_SECRET` | Shared signing secret for short-lived voice grants |
+| `REKKY_VOICE_SESSION_TTL_SECONDS` | Voice-grant lifetime |
+| `REKKY_VOICE_SHARE_RECIPE_CONTEXT` | Whether recipe context is sent into voice sessions |
 
-- 👥 **Multi-User & Secure Access**:
-  - Multi-User, Secure Authentication with OAuth2, LDAP, & Email Login Support
-  - Built-in Moderation, and Token spend tools
+Generate strong secrets before using a shared or production environment:
 
-- ⚙️ **Configuration & Deployment**:  
-  - Configure Proxy, Reverse Proxy, Docker, & many Deployment options  
-  - Use [S3 with CloudFront](https://www.librechat.ai/docs/configuration/cdn/cloudfront) for stable media links, edge delivery, signed cookies, and secured downloads
-  - Use completely local or deploy on the cloud
+```bash
+openssl rand -hex 32
+```
 
-- 📖 **Open-Source & Community**:  
-  - Completely Open-Source & Built in Public  
-  - Community-driven development, support, and feedback
+The values in `.env.example` are development placeholders. Replace them, keep `.env` out of version control, and never expose provider keys in a client application.
 
-[For a thorough review of our features, see our docs here](https://docs.librechat.ai/) 📚
+## Running the apps
 
-## 🪶 All-In-One AI Conversations with LibreChat
+Run the backend and web client separately when you need independent logs:
 
-LibreChat is a self-hosted AI chat platform that unifies all major AI providers in a single, privacy-focused interface.
+```bash
+npm run backend:dev
+npm run frontend:dev
+```
 
-Beyond chat, LibreChat provides AI Agents, Model Context Protocol (MCP) support, Artifacts, Code Interpreter, custom actions, conversation search, and enterprise-ready multi-user authentication.
+Start the mobile bundler and create a native development build:
 
-Open source, actively developed, and built for anyone who values control over their AI infrastructure.
+```bash
+cp apps/mobile/.env.example apps/mobile/.env.local
+npm run mobile
+npm run mobile:android
+# or
+npm run mobile:ios
+```
 
----
+The mobile app targets `https://rekky.ai` by default. To use the local API, set `EXPO_PUBLIC_API_URL=http://127.0.0.1:3080` in `apps/mobile/.env.local`.
 
-## 🌐 Resources
+For a USB-connected Android device, expose the local API and Metro through ADB:
 
-**GitHub Repo:**
-  - **RAG API:** [github.com/danny-avila/rag_api](https://github.com/danny-avila/rag_api)
-  - **Website:** [github.com/LibreChat-AI/librechat.ai](https://github.com/LibreChat-AI/librechat.ai)
+```bash
+adb reverse tcp:3080 tcp:3080
+adb reverse tcp:8081 tcp:8081
+```
 
-**Other:**
-  - **Website:** [librechat.ai](https://librechat.ai)
-  - **Documentation:** [librechat.ai/docs](https://librechat.ai/docs)
-  - **Blog:** [librechat.ai/blog](https://librechat.ai/blog)
+Voice and other native features require a development build; they do not run fully in Expo Go. See [the mobile guide](apps/mobile/README.md) and [mobile architecture](docs/mobile/ARCHITECTURE.md).
 
----
+## Voice mode
 
-## 📝 Changelog
+The voice path is hosted rather than fully on-device:
 
-Keep up with the latest updates by visiting the releases page and notes:
-- [Releases](https://github.com/danny-avila/LibreChat/releases)
-- [Changelog](https://www.librechat.ai/changelog) 
+```text
+Mobile ── short-lived grant ──► Rekky API
+Mobile ── authenticated WebSocket ──► Modal GPU worker
+```
 
-**⚠️ Please consult the [changelog](https://www.librechat.ai/changelog) for breaking changes before updating.**
+The API signs a short-lived session grant. The mobile app uses it to open a WebSocket without receiving a reusable Modal or OpenRouter credential.
 
----
+Deploy the worker from the repository root:
 
-## ⭐ Star History
+```bash
+python -m pip install modal
+modal setup
+openssl rand -hex 32
 
-<p align="center">
-  <a href="https://star-history.com/#danny-avila/LibreChat&Date">
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=danny-avila/LibreChat&type=Date&theme=dark" onerror="this.src='https://api.star-history.com/svg?repos=danny-avila/LibreChat&type=Date'" />
-  </a>
-</p>
-<p align="center">
-  <a href="https://trendshift.io/repositories/4685" target="_blank" style="padding: 10px;">
-    <img src="https://trendshift.io/api/badge/repositories/4685" alt="danny-avila%2FLibreChat | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
-  </a>
-  <a href="https://runacap.com/ross-index/q1-24/" target="_blank" rel="noopener" style="margin-left: 20px;">
-    <img style="width: 260px; height: 56px" src="https://runacap.com/wp-content/uploads/2024/04/ROSS_badge_white_Q1_2024.svg" alt="ROSS Index - Fastest Growing Open-Source Startups in Q1 2024 | Runa Capital" width="260" height="56"/>
-  </a>
-</p>
+modal secret create rekky-voice-auth \
+  VOICE_TOKEN_SECRET='<shared secret>'
 
----
+modal secret create rekky-voice-provider \
+  OPENROUTER_API_KEY='<OpenRouter key>' \
+  VOICE_LLM_MODEL='google/gemini-3.1-flash-lite'
 
-## ✨ Contributions
+modal deploy services/voice/modal_app.py
+```
 
-Contributions, suggestions, bug reports and fixes are welcome!
+Then set `REKKY_VOICE_URL` and the matching `REKKY_VOICE_TOKEN_SECRET` on the Rekky API. The current worker scales from zero to two L4 GPU containers and keeps a container warm for ten minutes.
 
-For new features, components, or extensions, please open an issue and discuss before sending a PR.
+For security, health checks, cold-start behavior, and scaling controls, read [the voice service guide](services/voice/README.md).
 
-If you'd like to help translate LibreChat into your language, we'd love your contribution! Improving our translations not only makes LibreChat more accessible to users around the world but also enhances the overall user experience. Please check out our [Translation Guide](https://www.librechat.ai/docs/translation).
+## Testing
 
----
+Run the main repository checks:
 
-## 💖 This project exists in its current state thanks to all the people who contribute
+```bash
+npm run lint
+npm run test:all
+npm run build:safe
+```
 
-<a href="https://github.com/danny-avila/LibreChat/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=danny-avila/LibreChat" />
-</a>
+Run the mobile checks:
 
----
+```bash
+npm run typecheck --workspace=@rekky/mobile
+npm run lint --workspace=@rekky/mobile
+npm test --workspace=@rekky/mobile
+npx expo-doctor@latest apps/mobile
+```
 
-## 🎉 Special Thanks
+Run the voice gateway tests:
 
-We thank [Locize](https://locize.com) for their translation management tools that support multiple languages in LibreChat.
+```bash
+python -m unittest discover -s services/voice -p 'test_*.py'
+```
 
-<p align="center">
-  <a href="https://locize.com" target="_blank" rel="noopener noreferrer">
-    <img src="https://github.com/user-attachments/assets/d6b70894-6064-475e-bb65-92a9e23e0077" alt="Locize Logo" height="50">
-  </a>
-</p>
+End-to-end browser tests are available through `npm run e2e` after the local application is running.
+
+## Deployment
+
+The production topology uses Vercel for the web client, Railway for the API and MongoDB, and Modal for GPU-backed voice inference.
+
+The public app is [rekky.ai](https://rekky.ai), and the API health endpoint is [rekky.ai/health](https://rekky.ai/health).
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for environment variables, service configuration, CORS rules, domains, and deployment checks.
+
+## Project documentation
+
+- [Product and interaction design](DESIGN.md)
+- [Deployment guide](DEPLOYMENT.md)
+- [Cooking-assistant runtime design](docs/cooking-assistant-runtime-design.md)
+- [Mobile architecture](docs/mobile/ARCHITECTURE.md)
+- [Mobile backend readiness](docs/mobile/BACKEND_READINESS.md)
+- [Voice service operations](services/voice/README.md)
+- [Repository development guide](CLAUDE.md)
+
+## LibreChat attribution and license
+
+Rekky is derived from [LibreChat](https://github.com/danny-avila/LibreChat) and retains substantial upstream infrastructure. We are grateful to LibreChat's maintainers and contributors.
+
+This repository is distributed under the [MIT License](LICENSE). Existing copyright and license notices are preserved.

@@ -10,7 +10,7 @@ const locale = getLocales()[0]?.languageCode;
 const active = locale === 'en' ? resources.en : resources.en;
 
 export function translate(key: TranslationKey, values: TranslationValues = {}): string {
-  let message: string = active[key];
+  let message: string = active[key] ?? key;
   for (const [name, value] of Object.entries(values)) {
     message = message.replaceAll(`{{${name}}}`, String(value));
   }

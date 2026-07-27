@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { TextInput } from 'react-native';
 import { router } from 'expo-router';
 
 import { AuthButton, AuthError, AuthField, AuthLink, AuthShell } from '@/features/auth/ui';
@@ -11,12 +12,15 @@ export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [validation, setValidation] = useState<string | null>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const [validation, setValidation] = useState<{ field: 'email' | 'password'; message: string }>();
 
   const submit = async () => {
-    if (!email || !password) return setValidation(t('auth.required'));
-    if (!/^\S+@\S+\.\S+$/.test(email)) return setValidation(t('auth.invalidEmail'));
-    setValidation(null);
+    if (!email) return setValidation({ field: 'email', message: t('auth.emailRequired') });
+    if (!/^\S+@\S+\.\S+$/.test(email))
+      return setValidation({ field: 'email', message: t('auth.invalidEmail') });
+    if (!password) return setValidation({ field: 'password', message: t('auth.passwordRequired') });
+    setValidation(undefined);
     setLoading(true);
     try {
       await auth.login(email, password);
@@ -29,20 +33,25 @@ export default function SignInScreen() {
 
   return (
     <AuthShell subtitle={t('auth.signInSubtitle')} title={t('auth.signInTitle')}>
-      <AuthError message={validation ?? auth.error} />
+      <AuthError message={auth.error} />
       <AuthField
         autoComplete="email"
+        error={validation?.field === 'email' ? validation.message : undefined}
         keyboardType="email-address"
         label={t('auth.email')}
         onChangeText={setEmail}
+        onSubmitEditing={() => passwordRef.current?.focus()}
         returnKeyType="next"
         value={email}
       />
       <AuthField
         autoComplete="current-password"
+        error={validation?.field === 'password' ? validation.message : undefined}
         label={t('auth.password')}
         onChangeText={setPassword}
         onSubmitEditing={() => void submit()}
+        ref={passwordRef}
+        returnKeyType="done"
         secureTextEntry
         value={password}
       />

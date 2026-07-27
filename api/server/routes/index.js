@@ -3,6 +3,7 @@ const categories = require('./categories');
 const cooking = require('./cooking');
 const recipes = require('./recipes');
 const social = require('./social');
+const shopping = require('./shopping');
 const adminAuth = require('./admin/auth');
 const adminConfig = require('./admin/config');
 const adminGrants = require('./admin/grants');
@@ -64,6 +65,7 @@ module.exports = {
   cooking,
   recipes,
   social,
+  shopping,
   staticRoute,
   accessPermissions,
 };

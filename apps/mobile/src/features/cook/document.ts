@@ -1,21 +1,12 @@
 import type { CookingDocument } from 'librechat-data-provider';
+import { hasUsableStructuredRecipe } from 'librechat-data-provider/mobile';
+
+export { hasUsableStructuredRecipe } from 'librechat-data-provider/mobile';
 
 type RecipeDisplayContent = {
   ingredients: Array<{ item?: string; originalText: string }>;
   steps: Array<{ text: string }>;
 };
-
-export function hasUsableStructuredRecipe(recipe: RecipeDisplayContent): boolean {
-  const placeholderIngredient =
-    recipe.ingredients.length === 1 &&
-    (!recipe.ingredients[0]?.item || recipe.ingredients[0].item.trim().toLowerCase() === 'item') &&
-    recipe.ingredients[0]?.originalText.trim().toLowerCase() === '1 item';
-  const placeholderStep =
-    recipe.steps.length === 1 &&
-    recipe.steps[0]?.text.trim().toLowerCase() === 'prepare the recipe.';
-
-  return !(placeholderIngredient && placeholderStep);
-}
 
 export function shouldRenderRecipeMarkdown(content: {
   documentMarkdown?: string;

@@ -52,13 +52,14 @@ export function RecipeVoiceMode({
       onPress={activate}
       style={({ pressed }) => [
         styles.launcher,
+        tone === 'compact' && styles.launcherCompact,
         tone === 'overlay' && styles.launcherOverlay,
         active && styles.launcherActive,
         pressed && styles.pressed,
       ]}
     >
       <SymbolView
-        name={{ android: active ? 'stop' : 'mic', ios: active ? 'stop.fill' : 'waveform' }}
+        name={{ android: active ? 'stop' : 'graphic_eq', ios: active ? 'stop.fill' : 'waveform' }}
         size={18}
         tintColor={active || tone === 'overlay' ? colors.white : colors.ember}
       />
@@ -89,6 +90,13 @@ const useStyles = createThemeStyles((palette) => ({
     justifyContent: 'center',
     paddingHorizontal: 0,
     width: 42,
+  },
+  launcherCompact: {
+    height: 38,
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: 0,
+    width: 38,
   },
   launcherActive: { backgroundColor: palette.ember, borderColor: palette.ember },
   launcherText: { color: palette.ink, fontFamily: fonts.sansSemibold, fontSize: 12 },

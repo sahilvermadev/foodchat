@@ -19,6 +19,8 @@ export type Ingredient = {
   unit?: string;
   item: string;
   preparation?: string;
+  group?: string;
+  optional?: boolean;
   quantityType: CookingQuantityType;
 };
 
@@ -42,6 +44,8 @@ export type StructuredRecipe = {
     cookMinutes: number;
     totalMinutes: number;
   };
+  difficulty?: RecipeDifficulty;
+  equipment?: string[];
   ingredients: Ingredient[];
   steps: RecipeStep[];
   notes: string[];
@@ -58,12 +62,17 @@ export const CookingChatCategories = [
   'cooking_help',
 ] as const;
 export type CookingChatCategory = (typeof CookingChatCategories)[number];
-export type CookingSessionStatus = 'active' | 'completed';
 export type RecipeCategorizationStatus = 'pending' | 'processing' | 'complete' | 'failed';
 export type RecipeIllustrationStatus = 'pending' | 'generating' | 'complete' | 'failed';
 export type RecipeDifficulty = 'beginner' | 'intermediate' | 'advanced';
 export type RecipeTimeBucket = 'under_15' | 'under_30' | 'under_60' | 'long_cook';
 export type SavedRecipeList = 'want_to_cook' | 'cooked_already';
+export type SavedRecipeSort =
+  | 'recently_updated'
+  | 'recently_saved'
+  | 'recently_cooked'
+  | 'title'
+  | 'quickest';
 
 export type CookingDocument = {
   _id: string;
@@ -99,13 +108,22 @@ export type RecipeCategorization = {
   timeBucket?: RecipeTimeBucket;
   occasion: string[];
   equipment: string[];
+  potentialAllergens: string[];
+  evidence?: RecipeMetadataEvidence[];
   mainIngredients: string[];
   techniques: string[];
   flavorProfile: string[];
   confidence?: number;
-  source: 'llm';
+  source: 'llm' | 'hybrid';
   model?: string;
   updatedAt: string;
+};
+
+export type RecipeMetadataEvidence = {
+  value: string;
+  kind?: 'diet' | 'equipment' | 'allergen';
+  source: 'source' | 'llm' | 'ingredient_rules' | 'instruction_rules';
+  confidence: number;
 };
 
 export type SavedRecipe = {
@@ -119,12 +137,19 @@ export type SavedRecipe = {
   illustrationModel?: string;
   documentMarkdown: string;
   saveList: SavedRecipeList;
+  collections: string[];
+  favorite: boolean;
+  pinned: boolean;
+  personalNotes?: string;
+  lastCookedAt?: string;
   recipe?: StructuredRecipe;
+  yield?: string;
   sourceConversationId?: string;
   sourceDraftId?: string;
   sourceUrl?: string;
   categorization?: RecipeCategorization;
   categorizationStatus: RecipeCategorizationStatus;
+  categorizationAttempts?: number;
   categorizationVersion: number;
   createdAt: string;
   updatedAt: string;
@@ -132,30 +157,7 @@ export type SavedRecipe = {
 
 export type SavedRecipeSummary = Omit<SavedRecipe, 'documentMarkdown' | 'recipe'> & {
   servings?: number;
-};
-
-export type CookingSession = {
-  _id: string;
-  user: string;
-  status: CookingSessionStatus;
-  currentStepIndex: number;
-  draftId?: string;
-  recipeSnapshot: StructuredRecipe;
-  summary: {
-    notes: string[];
-    substitutions: Array<{ ingredientId?: string; text: string }>;
-    problems: string[];
-    rating?: number;
-    reviewNote?: string;
-  };
-  startedAt: string;
-  completedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type CookingSessionsResponse = {
-  sessions: CookingSession[];
+  totalMinutes?: number;
 };
 
 export type CookingChatMessageMetadata = {
@@ -250,53 +252,6 @@ export type CookingChatProgress = {
   payload: { [key: string]: CookingChatProgressValue };
 };
 
-export type CookingNavigationEvent = {
-  type: 'navigation';
-  action: 'previous' | 'next' | 'jump' | 'repeat';
-  stepIndex?: number;
-};
-
-export type CookingSessionNoteEvent = {
-  type: 'note';
-  stepIndex?: number;
-  text: string;
-};
-
-export type CookingSubstitutionEvent = {
-  type: 'substitution';
-  stepIndex?: number;
-  ingredientId?: string;
-  text: string;
-};
-
-export type CookingTimerEvent = {
-  type: 'timer';
-  stepIndex?: number;
-  timerId: string;
-  action: 'started' | 'completed';
-  durationSeconds?: number;
-};
-
-export type CookingProblemEvent = {
-  type: 'problem';
-  stepIndex?: number;
-  text: string;
-};
-
-export type CookingReviewEvent = {
-  type: 'review';
-  rating: number;
-  note: string;
-};
-
-export type CookingSessionEvent =
-  | CookingNavigationEvent
-  | CookingSessionNoteEvent
-  | CookingSubstitutionEvent
-  | CookingTimerEvent
-  | CookingProblemEvent
-  | CookingReviewEvent;
-
 export type GenerateCookingDraftRequest = {
   prompt: string;
   conversationId?: string;
@@ -315,15 +270,6 @@ export type CreateCookingDocumentRequest = GenerateCookingDraftRequest & {
 };
 
 export type UpdateCookingDocumentRequest = UpdateCookingDraftRequest;
-
-export type StartCookingSessionRequest = {
-  draftId: string;
-};
-
-export type CompleteCookingSessionRequest = {
-  rating: number;
-  note: string;
-};
 
 export type CookingVoiceConfig = {
   enabled: boolean;
@@ -366,6 +312,10 @@ export type UpdateSavedRecipeRequest = {
   shortDescription?: string;
   documentMarkdown?: string;
   saveList?: SavedRecipeList;
+  collections?: string[];
+  favorite?: boolean;
+  pinned?: boolean;
+  personalNotes?: string;
   recipe?: StructuredRecipe;
 };
 
@@ -379,8 +329,31 @@ export type SavedRecipesQuery = {
   equipment?: string;
   documentType?: CookingDocumentType;
   saveList?: SavedRecipeList;
+  collection?: string;
+  favorite?: boolean | string;
+  pinned?: boolean | string;
+  difficulty?: RecipeDifficulty | string;
+  sort?: SavedRecipeSort;
   limit?: number;
   cursor?: string;
+};
+
+export type RecipeFacetOption = {
+  value: string;
+  count: number;
+};
+
+export type SavedRecipeFacetsResponse = {
+  total: number;
+  documentType: RecipeFacetOption[];
+  cuisine: RecipeFacetOption[];
+  mealType: RecipeFacetOption[];
+  diet: RecipeFacetOption[];
+  difficulty: RecipeFacetOption[];
+  timeBucket: RecipeFacetOption[];
+  mainIngredient: RecipeFacetOption[];
+  equipment: RecipeFacetOption[];
+  collection: RecipeFacetOption[];
 };
 
 export type SavedRecipesResponse = {
@@ -412,6 +385,7 @@ export type PublicRecipeSummary = Pick<
   | 'illustrationStatus'
   | 'categorization'
   | 'servings'
+  | 'yield'
   | 'updatedAt'
 > & { author: PublicRecipeAuthor };
 
@@ -459,6 +433,7 @@ export type SocialImport = {
   creatorUrl?: string;
   title?: string;
   thumbnailUrl?: string;
+  thumbnailAssetAvailable?: boolean;
   userSuppliedText?: string;
   extractedText?: string;
   extractedAt?: string;

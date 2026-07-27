@@ -28,6 +28,7 @@ export { default as systemGrantSchema } from './systemGrant';
 export { default as configSchema } from './config';
 export { preferencesSchema } from './preferences';
 export { specialtyIngredientSchema } from './ingredient';
+export { shoppingListSchema } from './shopping';
 export {
   cookingDraftSchema,
   savedRecipeSchema,
@@ -35,8 +36,6 @@ export {
   socialImportJobSchema,
   socialPlaylistSubscriptionSchema,
   socialTranscriptSchema,
-  cookingSessionSchema,
   structuredRecipeSchema,
-  cookingSessionEventSchema,
   guestLimitSchema,
 } from './cooking';

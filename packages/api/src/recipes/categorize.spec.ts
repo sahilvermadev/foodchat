@@ -1,5 +1,5 @@
 import type { StructuredRecipe } from 'librechat-data-provider';
-import { inferTimeBucket, normalizeCategorization } from './categorize';
+import { categorizeRecipe, inferTimeBucket, normalizeCategorization } from './categorize';
 
 const recipe: StructuredRecipe = {
   title: 'Soup',
@@ -30,6 +30,11 @@ const recipe: StructuredRecipe = {
 };
 
 describe('recipe categorization helpers', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    delete process.env.RECIPE_CATEGORIZATION_API_KEY;
+  });
+
   test('normalizes category casing, duplicates, array limits, and invalid enums', () => {
     const categorization = normalizeCategorization(
       {
@@ -71,5 +76,59 @@ describe('recipe categorization helpers', () => {
         timing: { prepMinutes: 0, cookMinutes: totalMinutes, totalMinutes },
       }),
     ).toBe(expected);
+  });
+
+  test('combines LLM suggestions with deterministic safety verification and provenance', async () => {
+    process.env.RECIPE_CATEGORIZATION_API_KEY = 'test-key';
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                shortDescription: 'A creamy lentil soup.',
+                cuisine: [],
+                mealType: ['dinner'],
+                dishType: ['soup'],
+                diet: ['vegan', 'gluten free'],
+                occasion: [],
+                equipment: ['Dutch oven'],
+                mainIngredients: ['lentils'],
+                techniques: ['simmering'],
+                flavorProfile: ['savory'],
+              }),
+            },
+          },
+        ],
+      }),
+    } as Response);
+    const dairyRecipe: StructuredRecipe = {
+      ...recipe,
+      ingredients: [
+        ...recipe.ingredients,
+        {
+          id: 'ingredient-2',
+          item: 'yogurt',
+          originalText: '1 cup yogurt',
+          quantityType: 'measured',
+        },
+      ],
+    };
+
+    const result = await categorizeRecipe({
+      title: dairyRecipe.title,
+      documentMarkdown: '# Soup',
+      recipe: dairyRecipe,
+    });
+
+    expect(result.categorization.diet).toEqual(['gluten free']);
+    expect(result.categorization.potentialAllergens).toEqual(['Dairy']);
+    expect(result.categorization.source).toBe('hybrid');
+    expect(result.categorization.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'allergen', source: 'ingredient_rules', value: 'Dairy' }),
+      ]),
+    );
   });
 });

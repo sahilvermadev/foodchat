@@ -112,9 +112,10 @@ export function RecipeVoiceProvider({ children }: PropsWithChildren) {
           throw new VoiceClientError('unavailable', 'Voice mode is not configured.');
         }
         const sessionUrl = config.sessionUrl;
-        const instructions = config.shareRecipeContext
-          ? `${DEFAULT_INSTRUCTIONS}\n\nThe recipe currently open is:\n${session.recipeMarkdown}`
-          : DEFAULT_INSTRUCTIONS;
+        const instructions =
+          config.shareRecipeContext && session.recipeMarkdown.trim()
+            ? `${DEFAULT_INSTRUCTIONS}\n\nThe recipe currently open is:\n${session.recipeMarkdown}`
+            : DEFAULT_INSTRUCTIONS;
         const client = new RecipeVoiceClient({
           callbacks: {
             onError: (caught) => {

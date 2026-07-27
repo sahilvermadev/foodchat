@@ -42,6 +42,22 @@ const database = openDatabaseAsync('rekky-offline-v1.db').then(async (db) => {
       synced_at TEXT NOT NULL,
       PRIMARY KEY (user_id, dataset)
     );
+
+    CREATE TABLE IF NOT EXISTS offline_shopping_lists (
+      user_id TEXT NOT NULL PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS offline_shopping_mutations (
+      mutation_id TEXT NOT NULL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS offline_shopping_mutations_user_created
+      ON offline_shopping_mutations (user_id, created_at ASC);
   `);
   return db;
 });
@@ -55,6 +71,8 @@ export async function clearOfflineUser(userId: string) {
     await transaction.runAsync('DELETE FROM offline_imports WHERE user_id = ?', userId);
     await transaction.runAsync('DELETE FROM offline_playlists WHERE user_id = ?', userId);
     await transaction.runAsync('DELETE FROM offline_sync_state WHERE user_id = ?', userId);
+    await transaction.runAsync('DELETE FROM offline_shopping_lists WHERE user_id = ?', userId);
+    await transaction.runAsync('DELETE FROM offline_shopping_mutations WHERE user_id = ?', userId);
   });
 }
 

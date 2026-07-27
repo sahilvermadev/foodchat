@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import type {
   OfflineRecipesResponse,
   RecipeCategorization,
+  RecipeFacetOption,
   PublicRecipe,
   PublicRecipeAuthor,
   PublicRecipeSummary,
@@ -9,11 +10,17 @@ import type {
   SavedRecipe,
   SavedRecipeList,
   SavedRecipeSummary,
+  SavedRecipeFacetsResponse,
   SaveRecipeRequest,
   SavedRecipesQuery,
   SavedRecipesResponse,
   StructuredRecipe,
   UpdateSavedRecipeRequest,
+} from 'librechat-data-provider';
+import {
+  canonicalRecipeFromContent,
+  hasUsableStructuredRecipe,
+  recipeCompletenessIssues,
 } from 'librechat-data-provider';
 import type { ISavedRecipe, ISocialImport, IUser } from '@librechat/data-schemas';
 import { categorizeRecipe } from './categorize';
@@ -34,19 +41,26 @@ const activeIllustrationJobs = new Set<string>();
 const activeCategorizationJobs = new Set<string>();
 const usersWithRepairedTitles = new Set<string>();
 const usersWithRepairedSaveLists = new Set<string>();
+const usersWithRepairedImportImages = new Set<string>();
+const usersWithRepairedStructures = new Set<string>();
+const importedIllustrationVersion = 2;
 
 type RecipeListFilter = {
   user: string;
-  documentType?: string;
+  documentType?: string | { $in: string[] };
   saveList?: SavedRecipeList;
+  collections?: string | RegExp | { $in: Array<string | RegExp> };
+  favorite?: boolean;
+  pinned?: boolean;
   updatedAt?: { $lt: Date };
   $or?: Array<{ title?: RegExp; shortDescription?: RegExp; documentMarkdown?: RegExp }>;
-  'categorization.cuisine'?: string;
-  'categorization.mealType'?: string;
-  'categorization.diet'?: string;
-  'categorization.timeBucket'?: string;
-  'categorization.mainIngredients'?: string;
-  'categorization.equipment'?: string;
+  'categorization.cuisine'?: string | RegExp | { $in: Array<string | RegExp> };
+  'categorization.mealType'?: string | RegExp | { $in: Array<string | RegExp> };
+  'categorization.diet'?: string | RegExp | { $in: Array<string | RegExp> };
+  'categorization.difficulty'?: string | RegExp | { $in: Array<string | RegExp> };
+  'categorization.timeBucket'?: string | RegExp | { $in: Array<string | RegExp> };
+  'categorization.mainIngredients'?: string | RegExp | { $in: Array<string | RegExp> };
+  'categorization.equipment'?: string | RegExp | { $in: Array<string | RegExp> };
 };
 
 function idOf(doc: { _id: unknown }): string {
@@ -72,7 +86,6 @@ function socialImportModel() {
 async function fetchExternalImage(url: string): Promise<IllustrationMedia | null> {
   try {
     return await fetchRemoteImage(url, {
-      allowedHosts: ['ytimg.com', 'img.youtube.com'],
       maxBytes: maxExternalImageBytes,
       timeoutMs: externalImageFetchTimeoutMs,
     });
@@ -102,18 +115,38 @@ async function importExternalIllustration(url: string | undefined): Promise<{
   }
 }
 
-async function socialImportThumbnailUrl(
+type SocialImportIllustration = {
+  media?: {
+    illustration: IllustrationMedia;
+    thumbnail: IllustrationMedia;
+  };
+  url?: string;
+  sourceUrl?: string;
+};
+
+async function socialImportIllustration(
   user: string,
   sourceDraftId: string | undefined,
-): Promise<string | undefined> {
+): Promise<SocialImportIllustration> {
   if (!sourceDraftId) {
-    return undefined;
+    return {};
   }
   const socialImport = await socialImportModel()
     .findOne({ user, draftId: sourceDraftId })
-    .select('thumbnailUrl')
-    .lean<{ thumbnailUrl?: string }>();
-  return socialImport?.thumbnailUrl?.trim() || undefined;
+    .select('sourceUrl thumbnailUrl thumbnailData thumbnailContentType thumbnailThumbnail');
+  const url = socialImport?.thumbnailUrl?.trim() || undefined;
+  const sourceUrl = socialImport?.sourceUrl?.trim() || undefined;
+  if (!socialImport?.thumbnailData?.length) {
+    return { sourceUrl, url };
+  }
+  const illustration = {
+    buffer: Buffer.from(socialImport.thumbnailData),
+    contentType: socialImport.thumbnailContentType ?? 'image/jpeg',
+  };
+  const thumbnail = socialImport.thumbnailThumbnail?.length
+    ? { buffer: Buffer.from(socialImport.thumbnailThumbnail), contentType: 'image/webp' }
+    : await createIllustrationThumbnail(illustration);
+  return { media: { illustration, thumbnail }, sourceUrl, url };
 }
 
 async function markSocialImportSavedRecipe(
@@ -445,9 +478,16 @@ export function parseServingsFromMarkdown(markdown?: string): number | undefined
   const lines = markdown.split('\n');
   for (const line of lines) {
     const trimmed = line.trim();
-    const match = trimmed.match(
-      /^(?:[-*]\s*)?(?:\*\*|__)?(?:servings|yield)(?:\*\*|__)?\s*:\s*(.+)$/i,
+    const tableMatch = trimmed.match(/^\|\s*(?:servings|serves)\s*\|\s*([^|]+)\|/i);
+    const yieldMatch = trimmed.match(
+      /^(?:[-*]\s*)?(?:\*\*|__)?yield(?::)?(?:\*\*|__)?\s*:?[ \t]*(.+\bservings?\b.*)$/i,
     );
+    const match =
+      tableMatch ??
+      trimmed.match(
+        /^(?:[-*]\s*)?(?:\*\*|__)?(?:servings|serves)(?::)?(?:\*\*|__)?\s*:?[ \t]*(.+)$/i,
+      ) ??
+      yieldMatch;
     if (match) {
       const valuePart = match[1].trim();
       const numMatch = valuePart.match(/(\d+)/);
@@ -462,6 +502,22 @@ export function parseServingsFromMarkdown(markdown?: string): number | undefined
   return undefined;
 }
 
+export function parseYieldFromMarkdown(markdown?: string): string | undefined {
+  if (!markdown) return undefined;
+  for (const line of markdown.split('\n')) {
+    const trimmed = line.trim();
+    const tableMatch = trimmed.match(/^\|\s*(?:servings|serves|yield)\s*\|\s*([^|]+)\|/i);
+    const match =
+      tableMatch ??
+      trimmed.match(
+        /^(?:[-*]\s*)?(?:\*\*|__)?(?:servings|serves|yield)(?::)?(?:\*\*|__)?\s*:?[ \t]*(.+)$/i,
+      );
+    const value = match?.[1]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
 function serializeRecipe(recipe?: StructuredRecipe): StructuredRecipe | undefined {
   return recipe ? normalizeRecipe(recipe) : undefined;
 }
@@ -470,10 +526,13 @@ function canonicalRecipe(
   recipe: StructuredRecipe | undefined,
   documentMarkdown: string,
 ): StructuredRecipe | undefined {
-  const structuredRecipe = serializeRecipe(recipe);
-  if (!structuredRecipe) {
-    return undefined;
-  }
+  const serializedInput = recipe ? normalizeRecipe(recipe) : undefined;
+  const resolved = canonicalRecipeFromContent({
+    markdown: documentMarkdown,
+    recipe: serializedInput,
+  });
+  const structuredRecipe = resolved ? normalizeRecipe(resolved) : undefined;
+  if (!structuredRecipe) return undefined;
 
   const markdownTitle = headingTitleFromMarkdown(documentMarkdown);
   const updatedRecipe = markdownTitle
@@ -517,11 +576,13 @@ function serializeCategorization(value: unknown): RecipeCategorization | undefin
     ...(record.timeBucket ? { timeBucket: record.timeBucket } : {}),
     occasion: stringArray(record.occasion),
     equipment: stringArray(record.equipment),
+    potentialAllergens: stringArray(record.potentialAllergens),
+    evidence: Array.isArray(record.evidence) ? record.evidence : [],
     mainIngredients: stringArray(record.mainIngredients),
     techniques: stringArray(record.techniques),
     flavorProfile: stringArray(record.flavorProfile),
     ...(typeof record.confidence === 'number' ? { confidence: record.confidence } : {}),
-    source: 'llm',
+    source: record.source === 'hybrid' ? 'hybrid' : 'llm',
     ...(record.model ? { model: record.model } : {}),
     updatedAt: iso(record.updatedAt ? new Date(record.updatedAt) : undefined),
   };
@@ -562,6 +623,7 @@ function serializeSavedRecipe(recipe: ISavedRecipe, thumbnail = false): SavedRec
   const structuredRecipe = canonicalRecipe(recipe.recipe, recipe.documentMarkdown);
   const categorization = serializeCategorization(recipe.categorization);
   const descriptionTitle = titleForDescription(title, recipe.documentMarkdown, structuredRecipe);
+  const recipeYield = parseYieldFromMarkdown(recipe.documentMarkdown);
   return {
     _id: idOf(recipe),
     user: recipe.user,
@@ -581,11 +643,19 @@ function serializeSavedRecipe(recipe: ISavedRecipe, thumbnail = false): SavedRec
     ...(recipe.illustrationModel ? { illustrationModel: recipe.illustrationModel } : {}),
     documentMarkdown: recipe.documentMarkdown,
     saveList: cleanSaveList(recipe.saveList),
+    collections: [...(recipe.collections ?? [])],
+    favorite: recipe.favorite ?? false,
+    pinned: recipe.pinned ?? false,
+    ...(recipe.personalNotes ? { personalNotes: recipe.personalNotes } : {}),
+    ...(recipe.lastCookedAt ? { lastCookedAt: iso(recipe.lastCookedAt) } : {}),
     ...(structuredRecipe ? { recipe: structuredRecipe } : {}),
+    ...(recipeYield ? { yield: recipeYield } : {}),
     ...(recipe.sourceConversationId ? { sourceConversationId: recipe.sourceConversationId } : {}),
     ...(recipe.sourceDraftId ? { sourceDraftId: recipe.sourceDraftId } : {}),
+    ...(recipe.sourceUrl ? { sourceUrl: recipe.sourceUrl } : {}),
     ...(categorization ? { categorization } : {}),
     categorizationStatus: recipe.categorizationStatus,
+    categorizationAttempts: recipe.categorizationAttempts ?? 0,
     categorizationVersion: recipe.categorizationVersion,
     createdAt: iso(recipe.createdAt),
     updatedAt: iso(recipe.updatedAt),
@@ -643,6 +713,112 @@ async function repairLegacySaveLists(user: string): Promise<void> {
   usersWithRepairedSaveLists.add(user);
 }
 
+async function repairLegacyRecipeStructures(user: string): Promise<void> {
+  if (usersWithRepairedStructures.has(user)) return;
+  const recipes = await model()
+    .find({ user, documentType: 'recipe' })
+    .select('recipe documentMarkdown categorizationVersion');
+  await Promise.all(
+    recipes.map(async (stored) => {
+      if (hasUsableStructuredRecipe(stored.recipe)) return;
+      const repaired = canonicalRecipe(stored.recipe, stored.documentMarkdown);
+      if (!repaired || !hasUsableStructuredRecipe(repaired)) return;
+      await model().updateOne(
+        { _id: stored._id, user },
+        {
+          $set: { recipe: repaired, categorizationStatus: 'pending', categorizationAttempts: 0 },
+          $inc: { categorizationVersion: 1 },
+        },
+        { timestamps: false },
+      );
+    }),
+  );
+  usersWithRepairedStructures.add(user);
+}
+
+async function repairLegacyImportedIllustrations(user: string): Promise<void> {
+  if (usersWithRepairedImportImages.has(user)) return;
+  const imports = await socialImportModel()
+    .find({
+      user,
+      $or: [
+        { thumbnailData: { $exists: true, $ne: null } },
+        { thumbnailUrl: { $exists: true, $ne: '' } },
+      ],
+    })
+    .select(
+      'savedRecipeId draftId sourceUrl thumbnailUrl thumbnailData thumbnailContentType thumbnailThumbnail',
+    );
+  if (!imports.length) {
+    usersWithRepairedImportImages.add(user);
+    return;
+  }
+  const savedRecipeIds = imports.flatMap((item) =>
+    item.savedRecipeId ? [item.savedRecipeId] : [],
+  );
+  const draftIds = imports.flatMap((item) => (item.draftId ? [item.draftId] : []));
+  const recipes = await model()
+    .find({
+      user,
+      $and: [
+        {
+          $or: [
+            { illustrationSource: { $ne: 'imported' } },
+            { illustrationSourceVersion: { $ne: importedIllustrationVersion } },
+          ],
+        },
+      ],
+      $or: [{ _id: { $in: savedRecipeIds } }, { sourceDraftId: { $in: draftIds } }],
+    })
+    .select('sourceDraftId illustrationData illustrationUrl');
+  const importByDraft = new Map(
+    imports.flatMap((item) => (item.draftId ? [[item.draftId, item] as const] : [])),
+  );
+  const importByRecipe = new Map(
+    imports.flatMap((item) => (item.savedRecipeId ? [[item.savedRecipeId, item] as const] : [])),
+  );
+  await Promise.all(
+    recipes.map(async (recipe) => {
+      const socialImport =
+        importByRecipe.get(idOf(recipe)) ??
+        (recipe.sourceDraftId ? importByDraft.get(recipe.sourceDraftId) : undefined);
+      if (!socialImport) return;
+      if (socialImport.thumbnailData?.length) {
+        const illustration = {
+          buffer: Buffer.from(socialImport.thumbnailData),
+          contentType: socialImport.thumbnailContentType ?? 'image/jpeg',
+        };
+        const thumbnail = socialImport.thumbnailThumbnail?.length
+          ? Buffer.from(socialImport.thumbnailThumbnail)
+          : (await createIllustrationThumbnail(illustration)).buffer;
+        recipe.illustrationData = illustration.buffer;
+        recipe.illustrationContentType = illustration.contentType;
+        recipe.illustrationThumbnail = thumbnail;
+        recipe.illustrationStatus = 'complete';
+        recipe.illustrationSource = 'imported';
+        recipe.illustrationSourceVersion = importedIllustrationVersion;
+        recipe.illustrationModel = undefined;
+        recipe.illustrationUrl = undefined;
+        if (socialImport.sourceUrl) recipe.sourceUrl = socialImport.sourceUrl;
+        await recipe.save();
+        return;
+      }
+      if (!socialImport.thumbnailUrl) return;
+      recipe.illustrationUrl = socialImport.thumbnailUrl;
+      recipe.illustrationStatus = 'complete';
+      recipe.illustrationSource = 'imported';
+      recipe.illustrationSourceVersion = importedIllustrationVersion;
+      recipe.illustrationModel = undefined;
+      recipe.illustrationData = undefined;
+      recipe.illustrationContentType = undefined;
+      recipe.illustrationThumbnail = undefined;
+      if (socialImport.sourceUrl) recipe.sourceUrl = socialImport.sourceUrl;
+      await recipe.save();
+    }),
+  );
+  usersWithRepairedImportImages.add(user);
+}
+
 function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
   const categorization = serializeCategorization(recipe.categorization);
   const storedTitle = recipe.title.trim();
@@ -660,6 +836,8 @@ function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
 
   const parsedServings = parseServingsFromMarkdown(recipe.documentMarkdown);
   const servings = parsedServings !== undefined ? parsedServings : recipe.recipe?.servings;
+  const recipeYield = parseYieldFromMarkdown(recipe.documentMarkdown);
+  const totalMinutes = recipe.recipe?.timing?.totalMinutes;
 
   return {
     _id: idOf(recipe),
@@ -667,6 +845,10 @@ function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
     title,
     documentType: recipe.documentType ?? 'recipe',
     saveList: cleanSaveList(recipe.saveList),
+    collections: [...(recipe.collections ?? [])],
+    favorite: recipe.favorite ?? false,
+    pinned: recipe.pinned ?? false,
+    ...(recipe.lastCookedAt ? { lastCookedAt: iso(recipe.lastCookedAt) } : {}),
     ...(recipe.shortDescription?.trim()
       ? { shortDescription: truncateSentence(recipe.shortDescription) }
       : {}),
@@ -675,10 +857,14 @@ function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
     ...(recipe.illustrationModel ? { illustrationModel: recipe.illustrationModel } : {}),
     ...(recipe.sourceConversationId ? { sourceConversationId: recipe.sourceConversationId } : {}),
     ...(recipe.sourceDraftId ? { sourceDraftId: recipe.sourceDraftId } : {}),
+    ...(recipe.sourceUrl ? { sourceUrl: recipe.sourceUrl } : {}),
     ...(categorization ? { categorization } : {}),
     categorizationStatus: recipe.categorizationStatus,
+    categorizationAttempts: recipe.categorizationAttempts ?? 0,
     categorizationVersion: recipe.categorizationVersion,
     ...(servings ? { servings } : {}),
+    ...(recipeYield ? { yield: recipeYield } : {}),
+    ...(totalMinutes ? { totalMinutes } : {}),
     createdAt: iso(recipe.createdAt),
     updatedAt: iso(recipe.updatedAt),
   };
@@ -700,6 +886,7 @@ function serializePublicRecipeSummary(
     illustrationStatus: summary.illustrationStatus,
     ...(summary.categorization ? { categorization: summary.categorization } : {}),
     ...(summary.servings ? { servings: summary.servings } : {}),
+    ...(summary.yield ? { yield: summary.yield } : {}),
     updatedAt: summary.updatedAt,
     author,
   };
@@ -730,9 +917,32 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function cleanFilter(value: string | undefined): string | undefined {
-  const clean = value?.trim().toLowerCase();
-  return clean || undefined;
+function cleanFilters(value: string | undefined): string[] {
+  return [
+    ...new Set(
+      (value ?? '')
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function arrayFilter(values: string[]): string | { $in: string[] } | undefined {
+  if (!values.length) return undefined;
+  return values.length === 1 ? values[0] : { $in: values };
+}
+
+function textArrayFilter(values: string[]): RegExp | { $in: RegExp[] } | undefined {
+  if (!values.length) return undefined;
+  const expressions = values.map((value) => new RegExp(`^${escapeRegex(value)}$`, 'i'));
+  return expressions.length === 1 ? expressions[0] : { $in: expressions };
+}
+
+function booleanFilter(value: boolean | string | undefined): boolean | undefined {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return undefined;
 }
 
 function cleanSaveList(value: string | undefined): SavedRecipeList {
@@ -743,19 +953,31 @@ function querySaveList(value: string | undefined): SavedRecipeList | undefined {
   return value === 'want_to_cook' || value === 'cooked_already' ? value : undefined;
 }
 
-function listFilter(
-  user: string,
-  query: SavedRecipesQuery,
-  includeCursor = true,
-): RecipeListFilter {
+function cleanCollections(values: string[] | undefined): string[] {
+  return [
+    ...new Set(
+      (values ?? [])
+        .map((value) => value.trim().replace(/\s+/g, ' '))
+        .filter(Boolean)
+        .map((value) => value.slice(0, 60)),
+    ),
+  ].slice(0, 20);
+}
+
+function listFilter(user: string, query: SavedRecipesQuery): RecipeListFilter {
   const filter: RecipeListFilter = { user };
-  if (query.documentType) {
-    filter.documentType = query.documentType;
-  }
+  const documentTypes = arrayFilter(cleanFilters(query.documentType));
+  if (documentTypes) filter.documentType = documentTypes;
   const saveList = querySaveList(query.saveList);
   if (saveList) {
     filter.saveList = saveList;
   }
+  const collections = textArrayFilter(cleanFilters(query.collection));
+  if (collections) filter.collections = collections;
+  const favorite = booleanFilter(query.favorite);
+  const pinned = booleanFilter(query.pinned);
+  if (favorite !== undefined) filter.favorite = favorite;
+  if (pinned !== undefined) filter.pinned = pinned;
   const q = query.q?.trim();
   if (q) {
     const expression = new RegExp(escapeRegex(q), 'i');
@@ -765,17 +987,13 @@ function listFilter(
       { documentMarkdown: expression },
     ];
   }
-  if (includeCursor && query.cursor) {
-    const cursorDate = new Date(query.cursor);
-    if (!Number.isNaN(cursorDate.getTime())) {
-      filter.updatedAt = { $lt: cursorDate };
-    }
-  }
-  const cuisine = cleanFilter(query.cuisine);
-  const mealType = cleanFilter(query.mealType);
-  const diet = cleanFilter(query.diet);
-  const mainIngredient = cleanFilter(query.mainIngredient);
-  const equipment = cleanFilter(query.equipment);
+  const cuisine = textArrayFilter(cleanFilters(query.cuisine));
+  const mealType = textArrayFilter(cleanFilters(query.mealType));
+  const diet = textArrayFilter(cleanFilters(query.diet));
+  const difficulty = textArrayFilter(cleanFilters(query.difficulty));
+  const timeBucket = textArrayFilter(cleanFilters(query.timeBucket));
+  const mainIngredient = textArrayFilter(cleanFilters(query.mainIngredient));
+  const equipment = textArrayFilter(cleanFilters(query.equipment));
   if (cuisine) {
     filter['categorization.cuisine'] = cuisine;
   }
@@ -785,8 +1003,11 @@ function listFilter(
   if (diet) {
     filter['categorization.diet'] = diet;
   }
-  if (query.timeBucket) {
-    filter['categorization.timeBucket'] = query.timeBucket;
+  if (difficulty) {
+    filter['categorization.difficulty'] = difficulty;
+  }
+  if (timeBucket) {
+    filter['categorization.timeBucket'] = timeBucket;
   }
   if (mainIngredient) {
     filter['categorization.mainIngredients'] = mainIngredient;
@@ -795,6 +1016,93 @@ function listFilter(
     filter['categorization.equipment'] = equipment;
   }
   return filter;
+}
+
+function listSort(sort: SavedRecipesQuery['sort']): Record<string, 1 | -1> {
+  const leading = { pinned: -1 as const };
+  if (sort === 'recently_saved') return { ...leading, createdAt: -1, _id: -1 };
+  if (sort === 'recently_cooked') return { ...leading, lastCookedAt: -1, _id: -1 };
+  if (sort === 'title') return { ...leading, title: 1, _id: 1 };
+  if (sort === 'quickest') return { ...leading, 'recipe.timing.totalMinutes': 1, _id: 1 };
+  return { ...leading, updatedAt: -1, _id: -1 };
+}
+
+const facetAliases = new Map([
+  ['side dish', 'side'],
+  ['vegan (optional)', 'vegan'],
+  ['non vegetarian', 'non-vegetarian'],
+]);
+const excludedCuisineFacets = new Set(['artisan']);
+
+function normalizedFacet(
+  value: string,
+  group: keyof SavedRecipeFacetsResponse,
+): string | undefined {
+  const clean = value.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!clean) return undefined;
+  const normalized = facetAliases.get(clean) ?? clean;
+  if (group === 'cuisine' && excludedCuisineFacets.has(normalized)) return undefined;
+  return normalized;
+}
+
+function facetOptions(values: Map<string, number>): RecipeFacetOption[] {
+  return [...values.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
+}
+
+type FacetRecipe = Pick<ISavedRecipe, 'documentType' | 'collections' | 'categorization'>;
+
+export async function getRecipeFacets(
+  user: string,
+  query: Pick<SavedRecipesQuery, 'q' | 'saveList'> = {},
+): Promise<SavedRecipeFacetsResponse> {
+  const recipes = await model()
+    .find(listFilter(user, query))
+    .select('documentType collections categorization')
+    .lean<FacetRecipe[]>();
+  const maps = {
+    documentType: new Map<string, number>(),
+    cuisine: new Map<string, number>(),
+    mealType: new Map<string, number>(),
+    diet: new Map<string, number>(),
+    difficulty: new Map<string, number>(),
+    timeBucket: new Map<string, number>(),
+    mainIngredient: new Map<string, number>(),
+    equipment: new Map<string, number>(),
+    collection: new Map<string, number>(),
+  };
+  const add = (group: keyof typeof maps, rawValues: Array<string | undefined>) => {
+    const unique = new Set(
+      rawValues
+        .map((value) => (value ? normalizedFacet(value, group) : undefined))
+        .filter((value): value is string => Boolean(value)),
+    );
+    for (const value of unique) maps[group].set(value, (maps[group].get(value) ?? 0) + 1);
+  };
+  for (const recipe of recipes) {
+    add('documentType', [recipe.documentType]);
+    add('collection', recipe.collections ?? []);
+    add('cuisine', recipe.categorization?.cuisine ?? []);
+    add('mealType', recipe.categorization?.mealType ?? []);
+    add('diet', recipe.categorization?.diet ?? []);
+    add('difficulty', [recipe.categorization?.difficulty]);
+    add('timeBucket', [recipe.categorization?.timeBucket]);
+    add('mainIngredient', recipe.categorization?.mainIngredients ?? []);
+    add('equipment', recipe.categorization?.equipment ?? []);
+  }
+  return {
+    total: recipes.length,
+    documentType: facetOptions(maps.documentType),
+    cuisine: facetOptions(maps.cuisine),
+    mealType: facetOptions(maps.mealType),
+    diet: facetOptions(maps.diet),
+    difficulty: facetOptions(maps.difficulty),
+    timeBucket: facetOptions(maps.timeBucket),
+    mainIngredient: facetOptions(maps.mainIngredient),
+    equipment: facetOptions(maps.equipment),
+    collection: facetOptions(maps.collection),
+  };
 }
 
 async function failStalePending(user: string): Promise<void> {
@@ -816,6 +1124,10 @@ async function failStalePending(user: string): Promise<void> {
       },
       { $set: { illustrationStatus: 'pending' } },
     ),
+    model().updateMany(
+      { user, categorizationStatus: 'failed', categorizationAttempts: { $lt: 3 } },
+      { $set: { categorizationStatus: 'pending' } },
+    ),
   ]);
 }
 
@@ -823,7 +1135,7 @@ async function runCategorization(recipeId: string, version: number): Promise<voi
   const Recipe = model();
   const recipe = await Recipe.findOneAndUpdate(
     { _id: recipeId, categorizationVersion: version, categorizationStatus: 'pending' },
-    { $set: { categorizationStatus: 'processing' } },
+    { $set: { categorizationStatus: 'processing' }, $inc: { categorizationAttempts: 1 } },
     { new: true },
   ).select('-illustrationUrl -illustrationData -illustrationThumbnail');
   if (!recipe) {
@@ -893,6 +1205,7 @@ async function runIllustration(recipeId: string, version: number): Promise<void>
           illustrationContentType: illustration.contentType,
           illustrationThumbnail: thumbnail.buffer,
           illustrationModel,
+          illustrationSource: 'generated',
           illustrationStatus: 'complete',
         },
         $unset: { illustrationUrl: 1 },
@@ -945,23 +1258,41 @@ export async function saveRecipe(user: string, payload: SaveRecipeRequest): Prom
   const Recipe = model();
   const documentMarkdown = cleanMarkdown(payload.documentMarkdown);
   const recipe = canonicalRecipe(payload.recipe, documentMarkdown);
-  const socialThumbnailUrl = await socialImportThumbnailUrl(user, payload.sourceDraftId);
-  const importedSocialThumbnail = await importExternalIllustration(socialThumbnailUrl);
+  const socialIllustration = await socialImportIllustration(user, payload.sourceDraftId);
+  const importedSocialThumbnail =
+    socialIllustration.media ?? (await importExternalIllustration(socialIllustration.url));
   const title = cleanTitle(
     headingTitleFromMarkdown(documentMarkdown) ?? payload.title ?? recipe?.title,
     documentMarkdown,
   );
   const documentType = payload.documentType ?? 'recipe';
   const enrichRecipe = documentType === 'recipe';
+  if (enrichRecipe && !recipe) {
+    throw new CookingValidationError(
+      'Recipe content requires structured ingredients and instructions.',
+    );
+  }
+  if (enrichRecipe) {
+    const issues = recipeCompletenessIssues(recipe);
+    if (issues.length) {
+      throw new CookingValidationError(`Recipe content is missing required ${issues.join(', ')}.`);
+    }
+  }
   let illustrationFields = {};
   if (importedSocialThumbnail) {
     illustrationFields = {
       illustrationData: importedSocialThumbnail.illustration.buffer,
       illustrationContentType: importedSocialThumbnail.illustration.contentType,
       illustrationThumbnail: importedSocialThumbnail.thumbnail.buffer,
+      illustrationSource: 'imported',
+      illustrationSourceVersion: importedIllustrationVersion,
     };
-  } else if (socialThumbnailUrl) {
-    illustrationFields = { illustrationUrl: socialThumbnailUrl };
+  } else if (socialIllustration.url) {
+    illustrationFields = {
+      illustrationUrl: socialIllustration.url,
+      illustrationSource: 'imported',
+      illustrationSourceVersion: importedIllustrationVersion,
+    };
   }
   const saved = await Recipe.create({
     user,
@@ -975,18 +1306,23 @@ export async function saveRecipe(user: string, payload: SaveRecipeRequest): Prom
     ),
     documentMarkdown,
     saveList: cleanSaveList(payload.saveList),
+    collections: [],
+    favorite: false,
+    pinned: false,
     ...(recipe ? { recipe } : {}),
     ...(payload.sourceConversationId ? { sourceConversationId: payload.sourceConversationId } : {}),
     ...(payload.sourceDraftId ? { sourceDraftId: payload.sourceDraftId } : {}),
+    ...(socialIllustration.sourceUrl ? { sourceUrl: socialIllustration.sourceUrl } : {}),
     ...illustrationFields,
     categorizationStatus: enrichRecipe ? 'pending' : 'complete',
-    illustrationStatus: socialThumbnailUrl ? 'complete' : 'pending',
+    categorizationAttempts: 0,
+    illustrationStatus: socialIllustration.url ? 'complete' : 'pending',
     categorizationVersion: 1,
   });
   if (enrichRecipe) {
     scheduleCategorization(idOf(saved), saved.categorizationVersion);
   }
-  if (!socialThumbnailUrl) {
+  if (!socialIllustration.url) {
     scheduleIllustration(idOf(saved), saved.categorizationVersion);
   }
   await markSocialImportSavedRecipe(user, payload.sourceDraftId, idOf(saved));
@@ -995,12 +1331,15 @@ export async function saveRecipe(user: string, payload: SaveRecipeRequest): Prom
 export async function getRecipe(user: string, recipeId: string): Promise<SavedRecipe | null> {
   await repairLegacyWrapperTitles(user);
   await repairLegacySaveLists(user);
+  await repairLegacyImportedIllustrations(user);
+  await repairLegacyRecipeStructures(user);
   await failStalePending(user);
   const recipe = await model()
     .findOne({ _id: recipeId, user })
     .select('-illustrationUrl -illustrationData -illustrationThumbnail');
   if (recipe) {
     scheduleMissingIllustrations([recipe]);
+    scheduleMissingCategorizations([recipe]);
   }
   if (!recipe) {
     return null;
@@ -1025,6 +1364,8 @@ export async function ownsRecipe(user: string, recipeId: string): Promise<boolea
 export async function getRecipeByDraft(user: string, draftId: string): Promise<SavedRecipe | null> {
   await repairLegacyWrapperTitles(user);
   await repairLegacySaveLists(user);
+  await repairLegacyImportedIllustrations(user);
+  await repairLegacyRecipeStructures(user);
   await failStalePending(user);
   const recipe = await model()
     .findOne({ user, sourceDraftId: draftId })
@@ -1032,6 +1373,7 @@ export async function getRecipeByDraft(user: string, draftId: string): Promise<S
     .sort({ updatedAt: -1 });
   if (recipe) {
     scheduleMissingIllustrations([recipe]);
+    scheduleMissingCategorizations([recipe]);
   }
   if (!recipe) {
     return null;
@@ -1192,8 +1534,12 @@ export async function listRecipes(
 ): Promise<SavedRecipesResponse> {
   await repairLegacyWrapperTitles(user);
   await repairLegacySaveLists(user);
+  await repairLegacyImportedIllustrations(user);
+  await repairLegacyRecipeStructures(user);
   await failStalePending(user);
   const limit = Math.min(Math.max(Number(query.limit) || 20, 1), maxLimit);
+  const sort = query.sort ?? 'recently_updated';
+  const offset = Number(query.cursor?.replace(/^offset:/, '')) || 0;
   const Recipe = model();
   const [recipes, total] = await Promise.all([
     Recipe.find(listFilter(user, query))
@@ -1208,29 +1554,57 @@ export async function listRecipes(
           'illustrationModel',
           'sourceConversationId',
           'sourceDraftId',
+          'sourceUrl',
+          'collections',
+          'favorite',
+          'pinned',
+          'lastCookedAt',
           'categorization',
           'categorizationStatus',
           'categorizationVersion',
           'recipe.title',
           'recipe.servings',
+          'recipe.timing.totalMinutes',
           'documentMarkdown',
           'saveList',
           'createdAt',
           'updatedAt',
         ].join(' '),
       )
-      .sort({ updatedAt: -1 })
+      .sort(listSort(sort))
+      .skip(offset)
       .limit(limit + 1),
-    Recipe.countDocuments(listFilter(user, query, false)),
+    Recipe.countDocuments(listFilter(user, query)),
   ]);
   scheduleMissingIllustrations(recipes);
   scheduleMissingCategorizations(recipes);
-  const page = recipes.slice(0, limit).map(serializeSavedRecipeSummary);
+  const pageRecipes = recipes.slice(0, limit);
+  const page = pageRecipes.map(serializeSavedRecipeSummary);
+  const legacyDraftIds = pageRecipes.flatMap((recipe) =>
+    !recipe.sourceUrl && recipe.sourceDraftId ? [recipe.sourceDraftId] : [],
+  );
+  if (legacyDraftIds.length) {
+    const imports = await socialImportModel()
+      .find({ user, draftId: { $in: legacyDraftIds } })
+      .select('draftId sourceUrl')
+      .lean<Array<{ draftId?: string; sourceUrl?: string }>>();
+    const sourceByDraft = new Map(
+      imports.flatMap((item) =>
+        item.draftId && item.sourceUrl ? [[item.draftId, item.sourceUrl] as const] : [],
+      ),
+    );
+    for (const recipe of page) {
+      if (!recipe.sourceUrl && recipe.sourceDraftId) {
+        recipe.sourceUrl = sourceByDraft.get(recipe.sourceDraftId);
+      }
+    }
+  }
   const next = recipes.length > limit ? recipes[limit - 1] : undefined;
+  const nextCursor = next ? `offset:${offset + limit}` : undefined;
   return {
     recipes: page,
     total,
-    ...(next?.updatedAt ? { nextCursor: next.updatedAt.toISOString() } : {}),
+    ...(nextCursor ? { nextCursor } : {}),
   };
 }
 
@@ -1240,6 +1614,8 @@ export async function listOfflineRecipes(
 ): Promise<OfflineRecipesResponse> {
   await repairLegacyWrapperTitles(user);
   await repairLegacySaveLists(user);
+  await repairLegacyImportedIllustrations(user);
+  await repairLegacyRecipeStructures(user);
   await failStalePending(user);
   const limit = Math.min(Math.max(Number(query.limit) || maxLimit, 1), 100);
   const filter: RecipeListFilter = { user };
@@ -1273,6 +1649,13 @@ export async function updateSavedRecipe(
     return null;
   }
 
+  const contentChanged =
+    payload.title != null ||
+    payload.documentType != null ||
+    payload.shortDescription != null ||
+    payload.documentMarkdown != null ||
+    payload.recipe != null;
+  const previousSaveList = cleanSaveList(existing.saveList);
   const oldTitle = existing.title;
   const documentMarkdown =
     typeof payload.documentMarkdown === 'string'
@@ -1287,34 +1670,60 @@ export async function updateSavedRecipe(
   const shouldRegenerateIllustration = !hasIllustration(existing) || titleChanged;
 
   existing.documentType = payload.documentType ?? existing.documentType ?? 'recipe';
+  if (contentChanged && existing.documentType === 'recipe' && !recipe) {
+    throw new CookingValidationError(
+      'Recipe content requires structured ingredients and instructions.',
+    );
+  }
+  if (contentChanged && existing.documentType === 'recipe') {
+    const issues = recipeCompletenessIssues(recipe);
+    if (issues.length) {
+      throw new CookingValidationError(`Recipe content is missing required ${issues.join(', ')}.`);
+    }
+  }
   existing.saveList = cleanSaveList(payload.saveList ?? existing.saveList);
-  existing.shortDescription = cleanShortDescription(
-    payload.shortDescription,
-    existing.title,
-    documentMarkdown,
-    recipe,
-  );
+  existing.collections =
+    payload.collections == null ? existing.collections : cleanCollections(payload.collections);
+  existing.favorite = payload.favorite ?? existing.favorite ?? false;
+  existing.pinned = payload.pinned ?? existing.pinned ?? false;
+  if (payload.personalNotes != null) {
+    existing.personalNotes = payload.personalNotes.trim().slice(0, 5000);
+  }
+  if (existing.saveList === 'cooked_already' && previousSaveList !== 'cooked_already') {
+    existing.lastCookedAt = new Date();
+  }
+  if (contentChanged) {
+    existing.shortDescription = cleanShortDescription(
+      payload.shortDescription,
+      existing.title,
+      documentMarkdown,
+      recipe,
+    );
+  }
   existing.documentMarkdown = documentMarkdown;
   if (recipe) {
     existing.recipe = recipe;
   }
-  existing.categorization = undefined;
+  if (contentChanged) existing.categorization = undefined;
   const enrichRecipe = existing.documentType === 'recipe';
-  existing.categorizationStatus = enrichRecipe ? 'pending' : 'complete';
-  if (shouldRegenerateIllustration) {
+  if (contentChanged) existing.categorizationStatus = enrichRecipe ? 'pending' : 'complete';
+  if (contentChanged) existing.categorizationAttempts = 0;
+  if (contentChanged && shouldRegenerateIllustration) {
     existing.illustrationUrl = '';
     existing.illustrationData = undefined;
     existing.illustrationContentType = undefined;
     existing.illustrationThumbnail = undefined;
     existing.illustrationStatus = 'pending';
     existing.illustrationModel = undefined;
+    existing.illustrationSource = undefined;
+    existing.illustrationSourceVersion = undefined;
   }
-  existing.categorizationVersion += 1;
+  if (contentChanged) existing.categorizationVersion += 1;
   await existing.save();
-  if (enrichRecipe) {
+  if (contentChanged && enrichRecipe) {
     scheduleCategorization(idOf(existing), existing.categorizationVersion);
   }
-  if (shouldRegenerateIllustration) {
+  if (contentChanged && shouldRegenerateIllustration) {
     scheduleIllustration(idOf(existing), existing.categorizationVersion);
   }
   return serializeSavedRecipe(existing);

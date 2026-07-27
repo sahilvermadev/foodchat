@@ -26,7 +26,6 @@ cookies. Social login still requires PKCE and universal-link exchange before it 
 | Recipe library               | Cursor-capable JSON endpoints                  | Ready         | Add mobile cache policies and offline snapshots                                |
 | Social imports               | JSON jobs and image proxy                      | Ready         | Add OS share-sheet URL intake on client                                        |
 | Files and images             | Multipart endpoints                            | Ready         | Use Expo FileSystem/File and multipart upload                                  |
-| Guided cooking sessions      | JSON session/event endpoints                   | Ready         | Add idempotency keys for offline event replay                                  |
 | Realtime voice               | Provider session URL and WebSocket             | Partial       | Issue short-lived mobile voice grants; verify audio-session lifecycle          |
 | Notifications                | No device registry                             | Missing       | Add device-token registration, preferences, dispatch, receipt cleanup          |
 | Deep links                   | Web routes                                     | Partial       | Define `rekky://` and `https://rekky.ai/app/*` link contracts                  |

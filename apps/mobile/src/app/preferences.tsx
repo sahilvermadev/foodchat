@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -15,10 +13,12 @@ import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
 
 import type { TranslationKey } from '@/lib/i18n';
 import type { PreferenceHeading, PreferenceSection } from '@/features/preferences/artifact';
+import { KeyboardView } from '@/components/keyboard';
 import { fonts, radius, shadow, space } from '@/constants/theme';
 import {
   cleanPreferenceLine,
@@ -190,10 +190,7 @@ function PreferenceEditor({
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.editorBackdrop}
-      >
+      <KeyboardView style={styles.editorBackdrop}>
         <Pressable
           accessibilityLabel={t('preferences.cancel')}
           onPress={onClose}
@@ -278,7 +275,7 @@ function PreferenceEditor({
             )}
           </Pressable>
         </SafeAreaView>
-      </KeyboardAvoidingView>
+      </KeyboardView>
     </Modal>
   );
 }
@@ -293,6 +290,7 @@ export default function PreferencesScreen() {
   const markdown = localMarkdown ?? query.data?.markdown ?? '';
   const sections = useMemo(() => preferenceSections(markdown), [markdown]);
   const completeCount = sections.filter((section) => section.lines.length).length;
+  const missingSection = sections.find((section) => !section.lines.length);
   const selectedSection = sections.find((section) => section.heading === selectedHeading) ?? null;
 
   return (
@@ -354,6 +352,24 @@ export default function PreferencesScreen() {
                 {t('preferences.progress', { complete: completeCount, total: sections.length })}
               </Text>
             </View>
+            {missingSection ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setSelectedHeading(missingSection.heading)}
+                style={styles.completeProfileButton}
+              >
+                <Text style={styles.completeProfileText}>
+                  {t('preferences.completeNext', {
+                    section: t(sectionMeta[missingSection.heading].label),
+                  })}
+                </Text>
+                <SymbolView
+                  name={{ android: 'arrow_forward', ios: 'arrow.right' }}
+                  size={16}
+                  tintColor={colors.white}
+                />
+              </Pressable>
+            ) : null}
           </View>
 
           {groups.map((group) => (
@@ -448,7 +464,7 @@ const useStyles = createThemeStyles((palette) => ({
   topSpacer: { width: 40 },
   content: { gap: space.xl, padding: space.lg, paddingBottom: space.hero },
   intro: {
-    backgroundColor: palette.ink,
+    backgroundColor: palette.black,
     borderRadius: radius.xl,
     gap: space.sm,
     overflow: 'hidden',
@@ -463,12 +479,12 @@ const useStyles = createThemeStyles((palette) => ({
     textTransform: 'uppercase',
   },
   heroTitle: {
-    color: palette.canvasRaised,
+    color: palette.white,
     fontFamily: fonts.recipeHeading,
     fontSize: 27,
     letterSpacing: -0.6,
   },
-  heroBody: { color: palette.line, fontFamily: fonts.sans, fontSize: 14, lineHeight: 20 },
+  heroBody: { color: '#D8D0C8', fontFamily: fonts.sans, fontSize: 14, lineHeight: 20 },
   progressRow: { alignItems: 'center', flexDirection: 'row', gap: space.md, marginTop: space.md },
   progressTrack: {
     backgroundColor: palette.inkMuted,
@@ -478,7 +494,19 @@ const useStyles = createThemeStyles((palette) => ({
     overflow: 'hidden',
   },
   progressFill: { backgroundColor: palette.ember, borderRadius: radius.pill, height: '100%' },
-  progressText: { color: palette.canvasRaised, fontFamily: fonts.sansMedium, fontSize: 11 },
+  progressText: { color: palette.white, fontFamily: fonts.sansMedium, fontSize: 11 },
+  completeProfileButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: palette.ember,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: space.sm,
+    marginTop: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: 10,
+  },
+  completeProfileText: { color: palette.white, fontFamily: fonts.sansSemibold, fontSize: 12 },
   group: { gap: space.sm },
   groupTitle: {
     color: palette.inkMuted,

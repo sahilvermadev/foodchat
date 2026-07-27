@@ -30,6 +30,8 @@ function normalizeIngredient(ingredient: Ingredient, index: number): Ingredient 
     ...(ingredient.quantity != null ? { quantity: Number(ingredient.quantity) } : {}),
     ...(ingredient.unit ? { unit: ingredient.unit.trim() } : {}),
     ...(ingredient.preparation ? { preparation: ingredient.preparation.trim() } : {}),
+    ...(ingredient.group ? { group: ingredient.group.trim() } : {}),
+    ...(ingredient.optional ? { optional: true } : {}),
   };
 }
 
@@ -246,12 +248,18 @@ export function normalizeRecipe(
   const totalMinutes = Math.max(prepMinutes + cookMinutes, Number(recipe.timing?.totalMinutes));
   const notes = Array.isArray(recipe.notes) ? recipe.notes : [];
   const tags = Array.isArray(recipe.tags) ? recipe.tags : [];
+  const equipment = Array.isArray(recipe.equipment) ? recipe.equipment : [];
+  const difficulty = ['beginner', 'intermediate', 'advanced'].includes(recipe.difficulty ?? '')
+    ? recipe.difficulty
+    : undefined;
 
   const normalized = {
     title,
     description: cleanText(recipe.description, ''),
     servings: Math.max(1, Number(recipe.servings)),
     timing: { prepMinutes, cookMinutes, totalMinutes },
+    ...(difficulty ? { difficulty } : {}),
+    equipment: equipment.map((item) => item.trim()).filter(Boolean),
     ingredients,
     steps,
     notes: notes.map((note) => note.trim()).filter(Boolean),

@@ -16,7 +16,7 @@ const hasInternet = (connected: boolean | null, reachable: boolean | null) =>
   connected !== false && reachable !== false;
 
 export function isOnlineNow() {
-  return online;
+  return online !== false;
 }
 
 export function ConnectivityProvider({ children }: PropsWithChildren) {

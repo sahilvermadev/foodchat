@@ -1,29 +1,18 @@
 /// <reference types="jest" />
 
-import type { RecipeSummary } from './types';
 import { buildFilterGroups, buildLibraryFilters, displayFilter, getLibraryState } from './library';
-
-const recipe = (overrides: Partial<RecipeSummary> = {}): RecipeSummary => ({
-  _id: 'recipe-1',
-  title: 'Dal',
-  documentType: 'recipe',
-  illustrationStatus: 'complete',
-  saveList: 'want_to_cook',
-  updatedAt: '2026-07-19T00:00:00.000Z',
-  ...overrides,
-});
 
 describe('recipe library', () => {
   it('builds the website-equivalent API filters', () => {
     expect(
       buildLibraryFilters('  pasta  ', 'cooked_already', {
-        documentType: 'recipe',
-        cuisine: 'italian',
-        mealType: 'dinner',
-        diet: 'vegetarian',
-        timeBucket: 'under_30',
-        mainIngredient: 'tomato',
-        equipment: 'oven',
+        documentType: ['recipe'],
+        cuisine: ['italian'],
+        mealType: ['dinner'],
+        diet: ['vegetarian'],
+        timeBucket: ['under_30'],
+        mainIngredient: ['tomato'],
+        equipment: ['oven'],
       }),
     ).toEqual({
       q: 'pasta',
@@ -35,31 +24,38 @@ describe('recipe library', () => {
       timeBucket: 'under_30',
       mainIngredient: 'tomato',
       equipment: 'oven',
+      sort: 'recently_updated',
     });
-    expect(buildLibraryFilters('', 'all', {})).toEqual({});
+    expect(buildLibraryFilters('', 'all', {})).toEqual({ sort: 'recently_updated' });
   });
 
   it('derives unique advanced options from cookbook recipes', () => {
-    const groups = buildFilterGroups([
-      recipe({
-        categorization: {
-          cuisine: ['indian'],
-          mealType: ['dinner'],
-          diet: ['vegetarian'],
-          timeBucket: 'under_30',
-          mainIngredients: ['lentils'],
-          equipment: ['pressure cooker'],
-        },
-      }),
-      recipe({ _id: 'recipe-2', documentType: 'guide', categorization: { cuisine: ['indian'] } }),
-    ]);
+    const groups = buildFilterGroups({
+      total: 2,
+      documentType: [
+        { value: 'guide', count: 1 },
+        { value: 'recipe', count: 1 },
+      ],
+      cuisine: [{ value: 'indian', count: 2 }],
+      mealType: [{ value: 'dinner', count: 1 }],
+      diet: [{ value: 'vegetarian', count: 1 }],
+      difficulty: [],
+      timeBucket: [{ value: 'under_30', count: 1 }],
+      mainIngredient: [{ value: 'lentils', count: 1 }],
+      equipment: [{ value: 'pressure cooker', count: 1 }],
+      collection: [],
+    });
 
     expect(groups.find((group) => group.key === 'documentType')?.values).toEqual([
-      'guide',
-      'recipe',
+      { value: 'guide', count: 1 },
+      { value: 'recipe', count: 1 },
     ]);
-    expect(groups.find((group) => group.key === 'cuisine')?.values).toEqual(['indian']);
-    expect(groups.find((group) => group.key === 'equipment')?.values).toEqual(['pressure cooker']);
+    expect(groups.find((group) => group.key === 'cuisine')?.values).toEqual([
+      { value: 'indian', count: 2 },
+    ]);
+    expect(groups.find((group) => group.key === 'equipment')?.values).toEqual([
+      { value: 'pressure cooker', count: 1 },
+    ]);
     expect(displayFilter('under_30')).toBe('Under 30');
   });
 

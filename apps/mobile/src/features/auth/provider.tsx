@@ -6,6 +6,7 @@ import { isOnlineNow, useConnectivity } from '@/features/connectivity/provider';
 import { clearOfflineUser } from '@/features/offline/database';
 import { clearOfflineMedia } from '@/features/offline/media';
 import { clearPersistedQueryCache, queryClient } from '@/lib/query-client';
+import { userErrorMessage } from '@/lib/errors';
 import { tokenVault } from '@/lib/auth/token-vault';
 import type { AuthUser } from '@/lib/auth/token-vault';
 import { authService } from './service';
@@ -156,7 +157,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           }
           await acceptTokens(response);
         } catch (reason) {
-          setError(reason instanceof Error ? reason.message : 'Sign in failed');
+          setError(userErrorMessage(reason, 'Sign in could not be completed. Please try again.'));
           throw reason;
         }
       },
@@ -167,7 +168,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
           await acceptTokens(await authService.verifyTwoFactor(tempToken, code, recovery));
           setTempToken(null);
         } catch (reason) {
-          setError(reason instanceof Error ? reason.message : 'Verification failed');
+          setError(
+            userErrorMessage(reason, 'Verification could not be completed. Please try again.'),
+          );
           throw reason;
         }
       },
@@ -176,7 +179,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         try {
           await authService.register(input);
         } catch (reason) {
-          setError(reason instanceof Error ? reason.message : 'Registration failed');
+          setError(
+            userErrorMessage(reason, 'Your account could not be created. Please try again.'),
+          );
           throw reason;
         }
       },

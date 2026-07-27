@@ -1,7 +1,5 @@
 import type { Document } from 'mongoose';
 import type {
-  CookingSessionEvent,
-  CookingSessionStatus,
   CookingDraftStatus,
   CookingDocumentType,
   StructuredRecipe,
@@ -27,36 +25,6 @@ export interface ICookingDraft extends Document {
   updatedAt?: Date;
 }
 
-export interface ICookingSession extends Document {
-  user: string;
-  status: CookingSessionStatus;
-  currentStepIndex: number;
-  draftId?: string;
-  recipeSnapshot: StructuredRecipe;
-  summary: {
-    notes: string[];
-    substitutions: Array<{ ingredientId?: string; text: string }>;
-    problems: string[];
-    rating?: number;
-    reviewNote?: string;
-  };
-  startedAt: Date;
-  completedAt?: Date;
-  tenantId?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-export interface ICookingSessionEvent extends Document {
-  user: string;
-  sessionId: string;
-  stepIndex?: number;
-  event: CookingSessionEvent;
-  tenantId?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
 export interface ISavedRecipe extends Document {
   user: string;
   title: string;
@@ -68,13 +36,22 @@ export interface ISavedRecipe extends Document {
   illustrationThumbnail?: Buffer;
   illustrationStatus?: SavedRecipe['illustrationStatus'];
   illustrationModel?: string;
+  illustrationSource?: 'imported' | 'generated';
+  illustrationSourceVersion?: number;
   documentMarkdown: string;
   saveList: SavedRecipe['saveList'];
+  collections: string[];
+  favorite: boolean;
+  pinned: boolean;
+  personalNotes?: string;
+  lastCookedAt?: Date;
   recipe?: StructuredRecipe;
   sourceConversationId?: string;
   sourceDraftId?: string;
+  sourceUrl?: string;
   categorization?: SavedRecipe['categorization'];
   categorizationStatus: RecipeCategorizationStatus;
+  categorizationAttempts?: number;
   categorizationVersion: number;
   tenantId?: string;
   createdAt?: Date;
@@ -91,6 +68,11 @@ export interface ISocialImport extends Document {
   creatorUrl?: string;
   title?: string;
   thumbnailUrl?: string;
+  thumbnailData?: Buffer;
+  thumbnailContentType?: string;
+  thumbnailThumbnail?: Buffer;
+  thumbnailIngestedAt?: Date;
+  thumbnailIngestError?: string;
   userSuppliedText?: string;
   extractedText?: string;
   extractedAt?: Date;

@@ -8,6 +8,7 @@ import {
   createSocialPlaylistSubscription,
   deleteSocialPlaylistSubscription,
   deleteSocialImport,
+  getSocialImportThumbnail,
   listSocialImportJobs,
   listSocialImports,
   listSocialPlaylistSubscriptions,
@@ -18,7 +19,16 @@ import {
   updateSocialPlaylistSubscription,
   updateSocialImport,
 } from './service';
+import { createIllustrationThumbnail, fetchRemoteImage } from '../illustrations/media';
 import { setExperimentalYouTubeTranscriptFetcherForTest } from './transcript';
+
+jest.mock('../illustrations/media', () => ({
+  fetchRemoteImage: jest.fn(),
+  createIllustrationThumbnail: jest.fn(async () => ({
+    buffer: Buffer.from('persisted-thumbnail'),
+    contentType: 'image/webp',
+  })),
+}));
 
 jest.setTimeout(60000);
 
@@ -278,6 +288,10 @@ describe('social import service', () => {
         headers: { 'content-type': 'text/html' },
       }),
     );
+    jest.mocked(fetchRemoteImage).mockResolvedValue({
+      buffer: Buffer.from('persisted-source-image'),
+      contentType: 'image/jpeg',
+    });
 
     const socialImport = await createSocialImport('user-a', {
       sourceUrl: 'https://example.com/lemon-rice',
@@ -300,11 +314,24 @@ describe('social import service', () => {
       provenance: 'source_exact',
       title: 'Lemon Rice',
       thumbnailUrl: 'https://images.example/lemon-rice.jpg',
+      thumbnailAssetAvailable: true,
     });
     expect(processedImport.imports[0].extractedText).toContain('2 cups rice');
     expect(processedJob).toMatchObject({
       status: 'succeeded',
       stage: 'extracted_source_text',
+    });
+    expect(fetchRemoteImage).toHaveBeenCalledWith('https://images.example/lemon-rice.jpg', {
+      maxBytes: 5 * 1024 * 1024,
+      timeoutMs: 5000,
+    });
+    expect(createIllustrationThumbnail).toHaveBeenCalledWith({
+      buffer: Buffer.from('persisted-source-image'),
+      contentType: 'image/jpeg',
+    });
+    await expect(getSocialImportThumbnail('user-a', socialImport._id)).resolves.toEqual({
+      buffer: Buffer.from('persisted-thumbnail'),
+      contentType: 'image/webp',
     });
   });
 

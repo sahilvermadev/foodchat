@@ -225,16 +225,10 @@ export const cookingDocument = (documentId: string) =>
   `${cookingRoot}/documents/${encodeURIComponent(documentId)}`;
 export const selectCookingDocument = (documentId: string) =>
   `${cookingDocument(documentId)}/select`;
-export const cookingSessions = () => `${cookingRoot}/sessions`;
-export const cookingSession = (sessionId: string) =>
-  `${cookingRoot}/sessions/${encodeURIComponent(sessionId)}`;
-export const cookingSessionEvents = (sessionId: string) =>
-  `${cookingRoot}/sessions/${encodeURIComponent(sessionId)}/events`;
-export const cookingSessionComplete = (sessionId: string) =>
-  `${cookingRoot}/sessions/${encodeURIComponent(sessionId)}/complete`;
 export const cookingVoiceConfig = () => `${cookingRoot}/voice/config`;
 export const cookingVoiceTurns = () => `${cookingRoot}/voice/turns`;
 export const recipes = (query = '') => `${recipesRoot}${query ? `?${query}` : ''}`;
+export const recipeFacets = (query = '') => `${recipesRoot}/facets${query ? `?${query}` : ''}`;
 export const recipe = (recipeId: string) => `${recipesRoot}/${encodeURIComponent(recipeId)}`;
 export const recipeByDraft = (draftId: string) =>
   `${recipesRoot}/by-draft/${encodeURIComponent(draftId)}`;

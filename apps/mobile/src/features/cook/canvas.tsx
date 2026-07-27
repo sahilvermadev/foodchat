@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
@@ -6,23 +6,29 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
   CookingDocument,
-  CookingTimer,
   SavedRecipe,
   SavedRecipeList,
   SaveRecipeRequest,
 } from 'librechat-data-provider';
-import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
+import type { ActiveTimerState } from '@/features/recipes/workspace';
 
 import { ActionSheet } from '@/components/actionsheet';
 import { fonts, radius, space } from '@/constants/theme';
 import { ApiError, apiFetch } from '@/lib/api/client';
+import { userErrorMessage } from '@/lib/errors';
 import { recipeKeys } from '@/features/recipes/queries';
 import { useOfflineLibrary } from '@/features/offline/provider';
-import { RecipeVoiceMode } from '@/features/voice/mode';
 import { useTheme } from '@/features/theme/provider';
 import { createThemeStyles } from '@/features/theme/styles';
+import { RecipeVoiceMode } from '@/features/voice/mode';
 import { useTranslation } from '@/lib/i18n';
 import { RecipeMarkdown } from '@/features/recipes/markdown';
+import { RecipeMetrics } from '@/features/recipes/metrics';
+import {
+  recipeSupplementFromMarkdown,
+  structuredRecipeFromMarkdown,
+} from '@/features/recipes/content';
+import { ActiveTimerDock, RecipeWorkspace } from '@/features/recipes/workspace';
 import { shouldRenderCanonicalMarkdown } from './document';
 
 const documentLabel = (type: CookingDocument['documentType']) => {
@@ -56,92 +62,6 @@ const documentMarkdown = (document: CookingDocument) => {
     .join('\n\n');
 };
 
-const timerText = (seconds: number) => {
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${minutes}:${remainder.toString().padStart(2, '0')}`;
-};
-
-function KitchenTimer({ timer }: { timer: CookingTimer }) {
-  const { t } = useTranslation();
-  const { colors } = useTheme();
-  const styles = useStyles();
-  const [remaining, setRemaining] = useState(timer.durationSeconds);
-  const [running, setRunning] = useState(false);
-  const endsAt = useRef<number | undefined>(undefined);
-
-  useEffect(() => {
-    if (!running) return;
-    const tick = () => {
-      const next = Math.max(0, Math.ceil(((endsAt.current ?? Date.now()) - Date.now()) / 1000));
-      setRemaining(next);
-      if (next > 0) return;
-      setRunning(false);
-      endsAt.current = undefined;
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    };
-    const interval = setInterval(tick, 500);
-    tick();
-    return () => clearInterval(interval);
-  }, [running]);
-
-  const toggle = () => {
-    void Haptics.selectionAsync();
-    if (running) {
-      const next = Math.max(0, Math.ceil(((endsAt.current ?? Date.now()) - Date.now()) / 1000));
-      setRemaining(next);
-      endsAt.current = undefined;
-      setRunning(false);
-      return;
-    }
-    const next = remaining || timer.durationSeconds;
-    setRemaining(next);
-    endsAt.current = Date.now() + next * 1000;
-    setRunning(true);
-  };
-
-  const reset = () => {
-    setRunning(false);
-    endsAt.current = undefined;
-    setRemaining(timer.durationSeconds);
-  };
-
-  let androidTimerIcon: AndroidSymbol = 'play_arrow';
-  let iosTimerIcon: SFSymbol = 'play.fill';
-  if (running) {
-    androidTimerIcon = 'pause';
-    iosTimerIcon = 'pause.fill';
-  } else if (remaining === 0) {
-    androidTimerIcon = 'replay';
-    iosTimerIcon = 'arrow.clockwise';
-  }
-
-  return (
-    <View
-      style={[styles.timer, running && styles.timerRunning, remaining === 0 && styles.timerDone]}
-    >
-      <Pressable accessibilityRole="button" onPress={toggle} style={styles.timerPrimary}>
-        <SymbolView
-          name={{ android: androidTimerIcon, ios: iosTimerIcon }}
-          size={14}
-          tintColor={running ? colors.saffron : colors.ink}
-        />
-        <Text style={styles.timerLabel}>{timer.label || t('canvas.timer')}</Text>
-        <Text style={styles.timerValue}>{timerText(remaining)}</Text>
-      </Pressable>
-      {remaining !== timer.durationSeconds ? (
-        <Pressable accessibilityLabel={t('canvas.resetTimer')} hitSlop={8} onPress={reset}>
-          <SymbolView
-            name={{ android: 'refresh', ios: 'arrow.counterclockwise' }}
-            size={14}
-            tintColor={colors.inkMuted}
-          />
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
 function useSavedDocument(document: CookingDocument) {
   const queryClient = useQueryClient();
   const { syncNow } = useOfflineLibrary();
@@ -160,6 +80,10 @@ function useSavedDocument(document: CookingDocument) {
       }
     },
     retry: false,
+    refetchInterval: (query) => {
+      const status = query.state.data?.categorizationStatus;
+      return status === 'pending' || status === 'processing' ? 1500 : false;
+    },
   });
   const markdown = documentMarkdown(document);
   const saved = savedQuery.data;
@@ -190,7 +114,7 @@ function useSavedDocument(document: CookingDocument) {
       void syncNow().catch(() => undefined);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'The recipe could not be saved.');
+      setError(userErrorMessage(caught, 'The recipe could not be saved. Please try again.'));
     } finally {
       setSaving(false);
     }
@@ -205,30 +129,40 @@ export function RecipeCanvas({
   busy,
   onDelete,
   onSelect,
-  onStart,
 }: {
   document: CookingDocument;
   documents: CookingDocument[];
   busy: boolean;
   onDelete: (documentId: string) => void;
   onSelect: (documentId: string) => void;
-  onStart: () => void;
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useStyles();
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CookingDocument>();
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const [activeTimers, setActiveTimers] = useState<Record<string, ActiveTimerState>>({});
   const saved = useSavedDocument(document);
   const recipe = document.recipe;
   const markdown = documentMarkdown(document);
-  const renderCanonicalMarkdown = shouldRenderCanonicalMarkdown(document);
+  const supplement = recipeSupplementFromMarkdown(markdown);
+  const workspaceRecipe = shouldRenderCanonicalMarkdown(document)
+    ? structuredRecipeFromMarkdown(markdown, recipe)
+    : recipe;
+  const handleTimerChange = useCallback((timerId: string, state?: ActiveTimerState) => {
+    setActiveTimers((current) => {
+      if (state) return { ...current, [timerId]: state };
+      if (!current[timerId]) return current;
+      const next = { ...current };
+      delete next[timerId];
+      return next;
+    });
+  }, []);
   let saveLabel = t('canvas.save');
   if (saved.saved) saveLabel = saved.changed ? t('canvas.update') : t('canvas.saved');
 
   useEffect(() => {
-    setChecked({});
     setSaveSheetOpen(false);
     setDeleteTarget(undefined);
   }, [document._id]);
@@ -284,7 +218,12 @@ export function RecipeCanvas({
           })}
         </ScrollView>
       ) : null}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        onScroll={(event) => setHeaderCollapsed(event.nativeEvent.contentOffset.y > 180)}
+        scrollEventThrottle={32}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.canvasHeader}>
           <View style={styles.canvasKickerRow}>
             <Text style={styles.canvasKicker}>{documentLabel(document.documentType)}</Text>
@@ -338,102 +277,34 @@ export function RecipeCanvas({
               tone="compact"
               voiceId={`canvas:${document._id}`}
             />
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              onPress={onStart}
-              style={({ pressed }) => [styles.startButton, pressed && styles.pressed]}
-            >
-              {busy ? <ActivityIndicator color={colors.white} size="small" /> : null}
-              <Text style={styles.startButtonText}>{t('cook.startCooking')}</Text>
-            </Pressable>
           </View>
           {saved.error ? <Text style={styles.error}>{saved.error}</Text> : null}
         </View>
 
-        {document.documentType === 'recipe' && !renderCanonicalMarkdown ? (
+        {document.documentType === 'recipe' && workspaceRecipe ? (
           <View style={styles.recipeBody}>
-            <View style={styles.metrics}>
-              <View style={styles.metric}>
-                <Text style={styles.metricValue}>{recipe.servings || '—'}</Text>
-                <Text style={styles.metricLabel}>{t('canvas.servings')}</Text>
-              </View>
-              <View style={styles.metric}>
-                <Text style={styles.metricValue}>{recipe.timing.prepMinutes || '—'}</Text>
-                <Text style={styles.metricLabel}>{t('canvas.prepMinutes')}</Text>
-              </View>
-              <View style={styles.metric}>
-                <Text style={styles.metricValue}>{recipe.timing.totalMinutes || '—'}</Text>
-                <Text style={styles.metricLabel}>{t('canvas.totalMinutes')}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.heading}>{t('recipe.ingredients')}</Text>
-            <View style={styles.ingredients}>
-              {recipe.ingredients.map((ingredient) => {
-                const selected = Boolean(checked[ingredient.id]);
-                return (
-                  <Pressable
-                    key={ingredient.id}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: selected }}
-                    onPress={() =>
-                      setChecked((current) => ({ ...current, [ingredient.id]: !selected }))
-                    }
-                    style={styles.ingredient}
-                  >
-                    <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
-                      {selected ? (
-                        <SymbolView
-                          name={{ android: 'check', ios: 'checkmark' }}
-                          size={13}
-                          tintColor={colors.white}
-                        />
-                      ) : null}
-                    </View>
-                    <Text style={[styles.ingredientText, selected && styles.ingredientChecked]}>
-                      {ingredient.originalText}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Text style={styles.heading}>{t('recipe.steps')}</Text>
-            <View style={styles.steps}>
-              {recipe.steps.map((step, index) => (
-                <View key={step.id} style={styles.step}>
-                  <Text style={styles.stepNumber}>{index + 1}</Text>
-                  <View style={styles.stepCopy}>
-                    <Text style={styles.stepText}>{step.text}</Text>
-                    {step.timers.map((timer) => (
-                      <KitchenTimer key={timer.id} timer={timer} />
-                    ))}
-                    {step.tips.map((tip) => (
-                      <View key={tip} style={styles.tip}>
-                        <Text style={styles.tipLabel}>{t('canvas.tip')}</Text>
-                        <Text style={styles.tipText}>{tip}</Text>
-                      </View>
-                    ))}
-                    {step.warnings.map((warning) => (
-                      <View key={warning} style={styles.warning}>
-                        <Text style={styles.warningText}>{warning}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              ))}
-            </View>
-            {recipe.notes.length ? (
-              <View style={styles.notes}>
-                <Text style={styles.heading}>{t('canvas.notes')}</Text>
-                {recipe.notes.map((note) => (
-                  <Text key={note} style={styles.note}>
-                    • {note}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
+            <RecipeMetrics
+              metrics={[
+                {
+                  label: t('recipe.prepTime'),
+                  value: t('recipe.minutes', { count: workspaceRecipe.timing.prepMinutes }),
+                },
+                {
+                  label: t('recipe.cookTime'),
+                  value: t('recipe.minutes', { count: workspaceRecipe.timing.cookMinutes }),
+                },
+                {
+                  label: t('recipe.totalTime'),
+                  value: t('recipe.minutes', { count: workspaceRecipe.timing.totalMinutes }),
+                },
+              ]}
+            />
+            <RecipeWorkspace
+              onTimerChange={handleTimerChange}
+              recipe={workspaceRecipe}
+              supplement={supplement}
+              workspaceId={`draft:${document._id}`}
+            />
           </View>
         ) : (
           <View style={styles.guideBody}>
@@ -441,6 +312,23 @@ export function RecipeCanvas({
           </View>
         )}
       </ScrollView>
+      {headerCollapsed ? (
+        <View
+          style={[styles.collapsedHeader, documents.length > 1 && styles.collapsedHeaderWithTabs]}
+        >
+          <Text numberOfLines={1} style={styles.collapsedTitle}>
+            {recipe.title}
+          </Text>
+          <RecipeVoiceMode
+            conversationId={document.conversationId}
+            recipeMarkdown={markdown}
+            recipeTitle={recipe.title}
+            tone="compact"
+            voiceId={`canvas-header:${document._id}`}
+          />
+        </View>
+      ) : null}
+      <ActiveTimerDock timers={Object.values(activeTimers)} />
       <ActionSheet
         actions={[
           {
@@ -529,6 +417,28 @@ const useStyles = createThemeStyles((palette) => ({
   },
   documentTabTextSelected: { color: palette.ink },
   content: { paddingBottom: 130 },
+  collapsedHeader: {
+    alignItems: 'center',
+    backgroundColor: palette.canvas,
+    borderBottomColor: palette.line,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: space.sm,
+    left: 0,
+    minHeight: 54,
+    paddingHorizontal: space.xl,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 10,
+  },
+  collapsedHeaderWithTabs: { top: 59 },
+  collapsedTitle: {
+    color: palette.ink,
+    flex: 1,
+    fontFamily: fonts.sansSemibold,
+    fontSize: 13,
+  },
   canvasHeader: {
     borderBottomColor: palette.line,
     borderBottomWidth: 1,
@@ -577,17 +487,6 @@ const useStyles = createThemeStyles((palette) => ({
     justifyContent: 'center',
     width: 42,
   },
-  startButton: {
-    alignItems: 'center',
-    backgroundColor: palette.ember,
-    borderRadius: radius.pill,
-    flexDirection: 'row',
-    gap: space.sm,
-    marginLeft: 'auto',
-    minHeight: 42,
-    paddingHorizontal: space.lg,
-  },
-  startButtonText: { color: palette.white, fontFamily: fonts.sansSemibold, fontSize: 12 },
   error: { color: palette.danger, fontFamily: fonts.sans, fontSize: 12 },
   recipeBody: { gap: space.xl, padding: space.xl },
   metrics: { flexDirection: 'row', gap: space.sm },

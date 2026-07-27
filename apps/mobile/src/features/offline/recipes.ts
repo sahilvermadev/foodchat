@@ -13,23 +13,48 @@ const summaryFromDetail = (detail: RecipeDetail): RecipeSummary => ({
       ? `${detail.illustrationUrl}${detail.illustrationUrl.includes('?') ? '&' : '?'}variant=thumbnail`
       : detail.illustrationUrl,
   saveList: detail.saveList,
+  collections: detail.collections ?? [],
+  favorite: detail.favorite ?? false,
+  pinned: detail.pinned ?? false,
+  lastCookedAt: detail.lastCookedAt,
+  sourceUrl: detail.sourceUrl,
+  totalMinutes: detail.recipe?.timing.totalMinutes ?? detail.totalMinutes,
+  yield: detail.yield,
   servings: detail.recipe?.servings ?? detail.servings,
   shortDescription: detail.shortDescription,
   title: detail.title,
   updatedAt: detail.updatedAt,
 });
 
-const includes = (values: string[] | undefined, expected: string | undefined) =>
-  !expected || values?.some((value) => value.toLowerCase() === expected.toLowerCase());
+const includes = (values: string[] | undefined, expected: string | undefined) => {
+  const terms =
+    expected
+      ?.split(',')
+      .map((value) => value.toLowerCase())
+      .filter(Boolean) ?? [];
+  return (
+    !terms.length || terms.every((term) => values?.some((value) => value.toLowerCase() === term))
+  );
+};
 
 const matchesFilters = (recipe: RecipeSummary, filters: RecipeFilters) => {
   if (filters.documentType && recipe.documentType !== filters.documentType) return false;
   if (filters.saveList && recipe.saveList !== filters.saveList) return false;
+  if (!includes(recipe.collections, filters.collection)) return false;
+  if (filters.favorite === 'true' && !recipe.favorite) return false;
+  if (filters.pinned === 'true' && !recipe.pinned) return false;
   if (!includes(recipe.categorization?.cuisine, filters.cuisine)) return false;
   if (!includes(recipe.categorization?.diet, filters.diet)) return false;
   if (!includes(recipe.categorization?.mealType, filters.mealType)) return false;
   if (!includes(recipe.categorization?.mainIngredients, filters.mainIngredient)) return false;
   if (!includes(recipe.categorization?.equipment, filters.equipment)) return false;
+  if (
+    !includes(
+      recipe.categorization?.difficulty ? [recipe.categorization.difficulty] : [],
+      filters.difficulty,
+    )
+  )
+    return false;
   if (filters.timeBucket && recipe.categorization?.timeBucket !== filters.timeBucket) return false;
   const query = filters.q?.trim().toLowerCase();
   if (!query) return true;
@@ -105,6 +130,15 @@ export async function cacheOfflineRecipeSummaries(userId: string, recipes: Recip
       );
     }
   });
+}
+
+export async function deleteOfflineRecipe(userId: string, recipeId: string) {
+  const db = await offlineDatabase();
+  await db.runAsync(
+    'DELETE FROM offline_recipes WHERE user_id = ? AND recipe_id = ?',
+    userId,
+    recipeId,
+  );
 }
 
 export async function listOfflineRecipes(

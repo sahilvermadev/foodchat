@@ -1,8 +1,6 @@
 import { Schema } from 'mongoose';
 import type {
   ICookingDraft,
-  ICookingSession,
-  ICookingSessionEvent,
   ISavedRecipe,
   ISocialImport,
   ISocialImportJob,
@@ -37,6 +35,8 @@ const ingredientSchema = new Schema(
     unit: { type: String },
     item: { type: String, required: true },
     preparation: { type: String },
+    group: { type: String },
+    optional: { type: Boolean, default: false },
     quantityType: {
       type: String,
       enum: ['measured', 'estimated', 'to_taste'],
@@ -71,6 +71,8 @@ export const structuredRecipeSchema = new Schema(
       cookMinutes: { type: Number, required: true, min: 0 },
       totalMinutes: { type: Number, required: true, min: 0 },
     },
+    difficulty: { type: String, enum: ['beginner', 'intermediate', 'advanced'] },
+    equipment: { type: [String], default: [] },
     ingredients: { type: [ingredientSchema], required: true },
     steps: { type: [recipeStepSchema], required: true },
     notes: { type: [String], default: [] },
@@ -113,53 +115,6 @@ cookingDraftSchema.index(
   },
 );
 
-export const cookingSessionSchema = new Schema<ICookingSession>(
-  {
-    user: { type: String, required: true, index: true },
-    status: { type: String, enum: ['active', 'completed'], default: 'active', required: true },
-    currentStepIndex: { type: Number, default: 0, min: 0 },
-    draftId: { type: String, index: true },
-    recipeSnapshot: { type: structuredRecipeSchema, required: true },
-    summary: {
-      notes: { type: [String], default: [] },
-      substitutions: {
-        type: [
-          new Schema(
-            {
-              ingredientId: { type: String },
-              text: { type: String, required: true },
-            },
-            { _id: false },
-          ),
-        ],
-        default: [],
-      },
-      problems: { type: [String], default: [] },
-      rating: { type: Number, min: 1, max: 5 },
-      reviewNote: { type: String },
-    },
-    startedAt: { type: Date, required: true },
-    completedAt: { type: Date },
-    tenantId: { type: String, index: true },
-  },
-  { timestamps: true },
-);
-
-cookingSessionSchema.index({ user: 1, updatedAt: -1, tenantId: 1 });
-
-export const cookingSessionEventSchema = new Schema<ICookingSessionEvent>(
-  {
-    user: { type: String, required: true, index: true },
-    sessionId: { type: String, required: true, index: true },
-    stepIndex: { type: Number },
-    event: { type: Schema.Types.Mixed, required: true },
-    tenantId: { type: String, index: true },
-  },
-  { timestamps: true },
-);
-
-cookingSessionEventSchema.index({ sessionId: 1, createdAt: 1, tenantId: 1 });
-
 const recipeCategorizationSchema = new Schema(
   {
     cuisine: { type: [String], default: [] },
@@ -170,11 +125,30 @@ const recipeCategorizationSchema = new Schema(
     timeBucket: { type: String, enum: ['under_15', 'under_30', 'under_60', 'long_cook'] },
     occasion: { type: [String], default: [] },
     equipment: { type: [String], default: [] },
+    potentialAllergens: { type: [String], default: [] },
+    evidence: {
+      type: [
+        new Schema(
+          {
+            value: { type: String, required: true },
+            kind: { type: String, enum: ['diet', 'equipment', 'allergen'] },
+            source: {
+              type: String,
+              enum: ['source', 'llm', 'ingredient_rules', 'instruction_rules'],
+              required: true,
+            },
+            confidence: { type: Number, min: 0, max: 1, required: true },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     mainIngredients: { type: [String], default: [] },
     techniques: { type: [String], default: [] },
     flavorProfile: { type: [String], default: [] },
     confidence: { type: Number, min: 0, max: 1 },
-    source: { type: String, enum: ['llm'], required: true },
+    source: { type: String, enum: ['llm', 'hybrid'], required: true },
     model: { type: String },
     updatedAt: { type: Date, required: true },
   },
@@ -203,6 +177,8 @@ export const savedRecipeSchema = new Schema<ISavedRecipe>(
       required: true,
     },
     illustrationModel: { type: String },
+    illustrationSource: { type: String, enum: ['imported', 'generated'] },
+    illustrationSourceVersion: { type: Number },
     documentMarkdown: { type: String, required: true },
     saveList: {
       type: String,
@@ -210,9 +186,15 @@ export const savedRecipeSchema = new Schema<ISavedRecipe>(
       default: 'want_to_cook',
       required: true,
     },
+    collections: { type: [String], default: [] },
+    favorite: { type: Boolean, default: false, required: true },
+    pinned: { type: Boolean, default: false, required: true },
+    personalNotes: { type: String, default: '' },
+    lastCookedAt: { type: Date },
     recipe: { type: structuredRecipeSchema },
     sourceConversationId: { type: String, index: true },
     sourceDraftId: { type: String, index: true },
+    sourceUrl: { type: String },
     categorization: { type: recipeCategorizationSchema },
     categorizationStatus: {
       type: String,
@@ -220,6 +202,7 @@ export const savedRecipeSchema = new Schema<ISavedRecipe>(
       default: 'pending',
       required: true,
     },
+    categorizationAttempts: { type: Number, default: 0, min: 0 },
     categorizationVersion: { type: Number, default: 1, required: true },
     tenantId: { type: String, index: true },
   },
@@ -227,12 +210,19 @@ export const savedRecipeSchema = new Schema<ISavedRecipe>(
 );
 
 savedRecipeSchema.index({ user: 1, updatedAt: -1, tenantId: 1 });
+savedRecipeSchema.index({ user: 1, pinned: -1, createdAt: -1, tenantId: 1 });
+savedRecipeSchema.index({ user: 1, pinned: -1, lastCookedAt: -1, tenantId: 1 });
+savedRecipeSchema.index({ user: 1, pinned: -1, 'recipe.timing.totalMinutes': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, title: 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, saveList: 1, tenantId: 1 });
+savedRecipeSchema.index({ user: 1, collections: 1, tenantId: 1 });
+savedRecipeSchema.index({ user: 1, favorite: 1, tenantId: 1 });
+savedRecipeSchema.index({ user: 1, pinned: 1, updatedAt: -1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, sourceDraftId: 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.cuisine': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.mealType': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.diet': 1, tenantId: 1 });
+savedRecipeSchema.index({ user: 1, 'categorization.difficulty': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.timeBucket': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.mainIngredients': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.equipment': 1, tenantId: 1 });
@@ -253,6 +243,11 @@ export const socialImportSchema = new Schema<ISocialImport>(
     creatorUrl: { type: String },
     title: { type: String },
     thumbnailUrl: { type: String },
+    thumbnailData: { type: Buffer },
+    thumbnailContentType: { type: String },
+    thumbnailThumbnail: { type: Buffer },
+    thumbnailIngestedAt: { type: Date },
+    thumbnailIngestError: { type: String },
     userSuppliedText: { type: String, default: '' },
     extractedText: { type: String, default: '' },
     extractedAt: { type: Date },

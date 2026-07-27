@@ -5,6 +5,11 @@ import type {
   SavedRecipe,
   StructuredRecipe,
 } from 'librechat-data-provider';
+import {
+  canonicalEquipmentName,
+  deriveRecipeFacts,
+  verifiedDietClaims,
+} from 'librechat-data-provider';
 
 const arrayLimit = 8;
 const requestTimeoutMs = 20000;
@@ -137,6 +142,8 @@ export function normalizeCategorization(
     ...(timeBucket ? { timeBucket } : {}),
     occasion: normalizeArray(value.occasion),
     equipment: normalizeArray(value.equipment),
+    potentialAllergens: [],
+    evidence: [],
     mainIngredients: normalizeArray(value.mainIngredients),
     techniques: normalizeArray(value.techniques),
     flavorProfile: normalizeArray(value.flavorProfile),
@@ -219,8 +226,41 @@ export async function categorizeRecipe(
   }
 
   const parsed = parseJson(content);
+  const normalized = normalizeCategorization(parsed, { model, recipe: recipe.recipe });
+  const facts = recipe.recipe
+    ? deriveRecipeFacts(recipe.recipe, recipe.documentMarkdown)
+    : undefined;
+  const diet = recipe.recipe ? verifiedDietClaims(normalized.diet, recipe.recipe) : normalized.diet;
+  const equipment = [
+    ...normalized.equipment.map(canonicalEquipmentName),
+    ...(facts?.equipment.map((item) => item.value) ?? []),
+  ].filter((value, index, all) => all.indexOf(value) === index);
+  const potentialAllergens = facts?.potentialAllergens.map((item) => item.value) ?? [];
   return {
-    categorization: normalizeCategorization(parsed, { model, recipe: recipe.recipe }),
+    categorization: {
+      ...normalized,
+      diet,
+      equipment,
+      potentialAllergens,
+      evidence: [
+        ...diet.map((value) => ({
+          confidence: 0.7,
+          kind: 'diet' as const,
+          source: 'llm' as const,
+          value,
+        })),
+        ...normalized.equipment.map((value) => ({
+          confidence: normalized.confidence ?? 0.65,
+          kind: 'equipment' as const,
+          source: 'llm' as const,
+          value: canonicalEquipmentName(value),
+        })),
+        ...(facts?.equipment.map((item) => ({ ...item, kind: 'equipment' as const })) ?? []),
+        ...(facts?.potentialAllergens.map((item) => ({ ...item, kind: 'allergen' as const })) ??
+          []),
+      ],
+      source: 'hybrid',
+    },
     shortDescription: normalizeShortDescription(parsed.shortDescription),
   };
 }

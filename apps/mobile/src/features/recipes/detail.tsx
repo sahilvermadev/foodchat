@@ -1,18 +1,38 @@
+import { useCallback, useState } from 'react';
 import { SymbolView } from 'expo-symbols';
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { RecipeMetric } from './content';
-import type { StructuredRecipe } from './types';
+import type { RecipeDetail, StructuredRecipe } from './types';
+import type { ActiveTimerState } from './workspace';
+import { ActionSheet } from '@/components/actionsheet';
 import { fonts, radius, space } from '@/constants/theme';
 import { useTheme } from '@/features/theme/provider';
 import { createThemeStyles } from '@/features/theme/styles';
 import { useTranslation } from '@/lib/i18n';
 import { shouldRenderRecipeMarkdown } from '@/features/cook/document';
-import { recipeReaderContent } from './content';
+import {
+  recipeReaderContent,
+  recipeSupplementFromMarkdown,
+  structuredRecipeFromMarkdown,
+} from './content';
 import { AuthenticatedImage } from './authenticated-image';
 import { RecipeMarkdown } from './markdown';
-import { usePublicRecipe, useRecipe } from './queries';
+import { RecipeMetrics } from './metrics';
+import { ActiveTimerDock, RecipeWorkspace } from './workspace';
+import { useDeleteRecipe, usePublicRecipe, useRecipe, useUpdateRecipe } from './queries';
 import { RecipeVoiceMode } from '@/features/voice/mode';
 
 const structuredRecipeMarkdown = (title: string, recipe?: StructuredRecipe) => {
@@ -30,28 +50,13 @@ const structuredRecipeMarkdown = (title: string, recipe?: StructuredRecipe) => {
     .join('\n\n');
 };
 
-function RecipeMetrics({ metrics }: { metrics: RecipeMetric[] }) {
-  const { t } = useTranslation();
-  const styles = useStyles();
-  if (!metrics.length) return null;
-  return (
-    <View style={styles.metricsSection}>
-      <View style={styles.sectionHeadingRow}>
-        <Text style={styles.heading}>{t('recipe.atAGlance')}</Text>
-        <View style={styles.headingRule} />
-      </View>
-      <View style={styles.metricsGrid}>
-        {metrics.map((metric) => (
-          <View key={`${metric.label}:${metric.value}`} style={styles.metricCard}>
-            <View style={styles.metricAccent} />
-            <Text style={styles.metricLabel}>{metric.label}</Text>
-            <Text style={styles.metricValue}>{metric.value}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
+const sourceName = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+};
 
 function RecipeDetailView({
   recipeId,
@@ -68,10 +73,28 @@ function RecipeDetailView({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useStyles();
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const [activeTimers, setActiveTimers] = useState<Record<string, ActiveTimerState>>({});
+  const [editTitle, setEditTitle] = useState('');
+  const [editCollections, setEditCollections] = useState('');
+  const updateRecipe = useUpdateRecipe();
+  const deleteRecipe = useDeleteRecipe();
+  const handleTimerChange = useCallback((timerId: string, state?: ActiveTimerState) => {
+    setActiveTimers((current) => {
+      if (state) return { ...current, [timerId]: state };
+      if (!current[timerId]) return current;
+      const next = { ...current };
+      delete next[timerId];
+      return next;
+    });
+  }, []);
   const privateQuery = useRecipe(source === 'private' ? recipeId : null);
   const publicQuery = usePublicRecipe(source === 'public' ? recipeId : null);
   const query = source === 'public' ? publicQuery : privateQuery;
   const detail = query.data;
+  const privateDetail = source === 'private' ? (detail as RecipeDetail | undefined) : undefined;
   const recipe = detail?.recipe;
   const canonicalMarkdown = detail?.documentMarkdown.trim();
   const renderCanonicalMarkdown = shouldRenderRecipeMarkdown({
@@ -79,6 +102,35 @@ function RecipeDetailView({
     recipe,
   });
   const readerContent = canonicalMarkdown ? recipeReaderContent(canonicalMarkdown) : undefined;
+  const supplement = canonicalMarkdown
+    ? recipeSupplementFromMarkdown(canonicalMarkdown)
+    : undefined;
+  const workspaceRecipe =
+    recipe && renderCanonicalMarkdown && canonicalMarkdown
+      ? (structuredRecipeFromMarkdown(canonicalMarkdown, recipe) ?? undefined)
+      : recipe;
+  let workspaceMetrics: RecipeMetric[] = [];
+  if (renderCanonicalMarkdown && readerContent?.metrics.length) {
+    workspaceMetrics = readerContent.metrics;
+  } else if (workspaceRecipe) {
+    workspaceMetrics = [
+      {
+        label: t('recipe.yield'),
+        value: t('recipe.servings', { count: workspaceRecipe.servings }),
+      },
+      {
+        label: t('recipe.prepTime'),
+        value: t('recipe.minutes', { count: workspaceRecipe.timing.prepMinutes }),
+      },
+      {
+        label: t('recipe.cookTime'),
+        value: t('recipe.minutes', { count: workspaceRecipe.timing.cookMinutes }),
+      },
+    ];
+  }
+  const workspaceYieldText =
+    privateDetail?.yield ??
+    workspaceMetrics.find((metric) => /^(servings?|yield)$/i.test(metric.label.trim()))?.value;
   const voiceMarkdown = detail
     ? canonicalMarkdown || structuredRecipeMarkdown(detail.title, recipe)
     : '';
@@ -86,8 +138,75 @@ function RecipeDetailView({
     detail && 'sourceConversationId' in detail && typeof detail.sourceConversationId === 'string'
       ? detail.sourceConversationId
       : undefined;
+  const openEditor = () => {
+    if (!privateDetail) return;
+    setEditTitle(privateDetail.title);
+    setEditCollections(privateDetail.collections.join(', '));
+    setActionsOpen(false);
+    setEditOpen(true);
+  };
+  const saveEditor = () => {
+    if (!privateDetail || !editTitle.trim()) return;
+    const title = editTitle.trim();
+    const markdown = privateDetail.documentMarkdown.replace(/^#\s+.*$/m, `# ${title}`);
+    updateRecipe.mutate({
+      id: privateDetail._id,
+      patch: {
+        title,
+        documentMarkdown: markdown,
+        collections: editCollections
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
+      },
+    });
+    setEditOpen(false);
+  };
+  const confirmDelete = () => {
+    if (!privateDetail) return;
+    setActionsOpen(false);
+    Alert.alert(t('library.deleteTitle'), t('library.deleteBody', { title: privateDetail.title }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('library.delete'),
+        style: 'destructive',
+        onPress: () => deleteRecipe.mutate(privateDetail._id, { onSuccess: onClose }),
+      },
+    ]);
+  };
   let recipeContent = <Text style={styles.body}>{t('recipe.noDetails')}</Text>;
-  if (renderCanonicalMarkdown && canonicalMarkdown && readerContent) {
+  if (workspaceRecipe && detail?.documentType === 'recipe') {
+    recipeContent = (
+      <>
+        <RecipeMetrics metrics={workspaceMetrics} />
+        <RecipeWorkspace
+          initialNotes={privateDetail?.personalNotes}
+          isCooked={privateDetail?.saveList === 'cooked_already'}
+          metadata={detail?.categorization}
+          onMarkCooked={
+            privateDetail
+              ? () =>
+                  updateRecipe.mutate({
+                    id: privateDetail._id,
+                    patch: { saveList: 'cooked_already' },
+                  })
+              : undefined
+          }
+          onNotesChange={
+            privateDetail
+              ? (personalNotes) =>
+                  updateRecipe.mutate({ id: privateDetail._id, patch: { personalNotes } })
+              : undefined
+          }
+          onTimerChange={handleTimerChange}
+          recipe={workspaceRecipe}
+          supplement={supplement}
+          workspaceId={`saved:${recipeId}`}
+          yieldText={workspaceYieldText}
+        />
+      </>
+    );
+  } else if (renderCanonicalMarkdown && canonicalMarkdown && readerContent) {
     recipeContent = (
       <>
         {readerContent.beforeMetrics ? (
@@ -95,37 +214,6 @@ function RecipeDetailView({
         ) : null}
         <RecipeMetrics metrics={readerContent.metrics} />
         {readerContent.afterMetrics ? <RecipeMarkdown value={readerContent.afterMetrics} /> : null}
-      </>
-    );
-  } else if (recipe) {
-    recipeContent = (
-      <>
-        <RecipeMetrics
-          metrics={[
-            { label: t('recipe.yield'), value: t('recipe.servings', { count: recipe.servings }) },
-            {
-              label: t('recipe.prepTime'),
-              value: t('recipe.minutes', { count: recipe.timing.prepMinutes }),
-            },
-            {
-              label: t('recipe.cookTime'),
-              value: t('recipe.minutes', { count: recipe.timing.cookMinutes }),
-            },
-          ]}
-        />
-        <Text style={styles.heading}>{t('recipe.ingredients')}</Text>
-        {recipe.ingredients.map((ingredient) => (
-          <Text key={ingredient.id} style={styles.listItem}>
-            • {ingredient.originalText}
-          </Text>
-        ))}
-        <Text style={styles.heading}>{t('recipe.steps')}</Text>
-        {recipe.steps.map((step, index) => (
-          <View key={step.id} style={styles.step}>
-            <Text style={styles.stepNumber}>{index + 1}</Text>
-            <Text style={styles.stepText}>{step.text}</Text>
-          </View>
-        ))}
       </>
     );
   }
@@ -146,7 +234,11 @@ function RecipeDetailView({
     );
   } else if (!query.isError && detail) {
     content = (
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        onScroll={(event) => setHeaderCollapsed(event.nativeEvent.contentOffset.y > 250)}
+        scrollEventThrottle={32}
+      >
         {detail.illustrationUrl ? (
           <AuthenticatedImage
             cachePolicy="memory-disk"
@@ -159,12 +251,51 @@ function RecipeDetailView({
         <View
           style={[styles.copy, detail.illustrationUrl ? styles.copyWithImage : styles.copyAlone]}
         >
-          <Text style={styles.title}>{detail.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{detail.title}</Text>
+            {privateDetail?.sourceUrl ? (
+              <Pressable
+                accessibilityLabel={t('recipe.openOriginalFrom', {
+                  source: sourceName(privateDetail.sourceUrl),
+                })}
+                accessibilityRole="link"
+                hitSlop={6}
+                onPress={() => void Linking.openURL(privateDetail.sourceUrl ?? '')}
+                style={styles.titleSourceLink}
+              >
+                <SymbolView
+                  name={{ android: 'open_in_new', ios: 'arrow.up.right' }}
+                  size={17}
+                  tintColor={colors.ember}
+                />
+              </Pressable>
+            ) : null}
+          </View>
           {'author' in detail ? (
             <Text style={styles.author}>{t('explore.by', { name: detail.author.name })}</Text>
           ) : null}
           {detail.shortDescription ? (
             <Text style={styles.description}>{detail.shortDescription}</Text>
+          ) : null}
+          {privateDetail?.categorizationStatus === 'pending' ||
+          privateDetail?.categorizationStatus === 'processing' ? (
+            <Text accessibilityLiveRegion="polite" style={styles.enrichmentStatus}>
+              {t('recipe.analyzingDetails')}
+            </Text>
+          ) : null}
+          {privateDetail?.categorizationStatus === 'failed' ? (
+            <Text accessibilityLiveRegion="polite" style={styles.enrichmentWarning}>
+              {t('recipe.detailsUnavailable')}
+            </Text>
+          ) : null}
+          {privateDetail?.collections.length ? (
+            <View style={styles.recipeMetaRow}>
+              {privateDetail.collections.map((collection) => (
+                <Text key={collection} style={styles.collectionBadge}>
+                  {collection}
+                </Text>
+              ))}
+            </View>
           ) : null}
           {recipeContent}
         </View>
@@ -175,18 +306,14 @@ function RecipeDetailView({
   return (
     <SafeAreaView edges={['bottom']} style={styles.screen}>
       <View
-        style={[styles.toolbar, standalone && styles.toolbarStart, { top: insets.top + space.sm }]}
-        pointerEvents="box-none"
-      >
-        {detail ? (
-          <RecipeVoiceMode
-            conversationId={voiceConversationId}
-            recipeMarkdown={voiceMarkdown}
-            recipeTitle={detail.title}
-            tone="overlay"
-            voiceId={`recipe:${recipeId}`}
-          />
-        ) : null}
+        pointerEvents="none"
+        style={[
+          styles.statusScrim,
+          headerCollapsed && styles.statusScrimCollapsed,
+          { height: insets.top + 62 },
+        ]}
+      />
+      <View style={[styles.toolbar, { top: insets.top + space.sm }]} pointerEvents="box-none">
         <Pressable
           accessibilityLabel={standalone ? t('recipe.back') : t('recipe.close')}
           accessibilityRole="button"
@@ -203,8 +330,159 @@ function RecipeDetailView({
             tintColor={colors.white}
           />
         </Pressable>
+        {headerCollapsed && detail ? (
+          <Text numberOfLines={1} style={styles.collapsedTitle}>
+            {detail.title}
+          </Text>
+        ) : (
+          <View style={styles.toolbarSpacer} />
+        )}
+        {detail ? (
+          <RecipeVoiceMode
+            conversationId={voiceConversationId}
+            recipeMarkdown={voiceMarkdown}
+            recipeTitle={detail.title}
+            tone={headerCollapsed ? 'compact' : 'overlay'}
+            voiceId={`recipe:${recipeId}`}
+          />
+        ) : null}
+        {privateDetail ? (
+          <Pressable
+            accessibilityLabel={t('recipe.manage')}
+            accessibilityRole="button"
+            onPress={() => setActionsOpen(true)}
+            style={styles.close}
+          >
+            <SymbolView
+              name={{ android: 'more_vert', ios: 'ellipsis' }}
+              size={20}
+              tintColor={colors.white}
+            />
+          </Pressable>
+        ) : null}
       </View>
       {content}
+      <ActiveTimerDock timers={Object.values(activeTimers)} />
+      <ActionSheet
+        actions={
+          privateDetail
+            ? [
+                {
+                  icon: { android: 'edit', ios: 'pencil' },
+                  label: t('recipe.editDetails'),
+                  onPress: openEditor,
+                  tone: 'accent',
+                },
+                {
+                  icon: { android: 'star', ios: 'star' },
+                  label: t(
+                    privateDetail.favorite ? 'library.removeFavorite' : 'library.addFavorite',
+                  ),
+                  onPress: () => {
+                    updateRecipe.mutate({
+                      id: privateDetail._id,
+                      patch: { favorite: !privateDetail.favorite },
+                    });
+                    setActionsOpen(false);
+                  },
+                },
+                {
+                  icon: { android: 'push_pin', ios: 'pin' },
+                  label: t(privateDetail.pinned ? 'library.unpin' : 'library.pin'),
+                  onPress: () => {
+                    updateRecipe.mutate({
+                      id: privateDetail._id,
+                      patch: { pinned: !privateDetail.pinned },
+                    });
+                    setActionsOpen(false);
+                  },
+                },
+                {
+                  icon: { android: 'done', ios: 'checkmark.circle' },
+                  label: t(
+                    privateDetail.saveList === 'cooked_already'
+                      ? 'library.markWantToCook'
+                      : 'library.markCooked',
+                  ),
+                  onPress: () => {
+                    updateRecipe.mutate({
+                      id: privateDetail._id,
+                      patch: {
+                        saveList:
+                          privateDetail.saveList === 'cooked_already'
+                            ? 'want_to_cook'
+                            : 'cooked_already',
+                      },
+                    });
+                    setActionsOpen(false);
+                  },
+                },
+                {
+                  icon: { android: 'share', ios: 'square.and.arrow.up' },
+                  label: t('recipe.share'),
+                  onPress: () => {
+                    void Share.share({
+                      title: privateDetail.title,
+                      message: privateDetail.sourceUrl ?? privateDetail.documentMarkdown,
+                    });
+                    setActionsOpen(false);
+                  },
+                },
+                ...(privateDetail.sourceUrl
+                  ? [
+                      {
+                        icon: { android: 'open_in_new' as const, ios: 'safari' as const },
+                        label: t('recipe.openOriginal'),
+                        onPress: () => {
+                          void Linking.openURL(privateDetail.sourceUrl ?? '');
+                          setActionsOpen(false);
+                        },
+                      },
+                    ]
+                  : []),
+                {
+                  icon: { android: 'delete', ios: 'trash' },
+                  label: t('library.delete'),
+                  onPress: confirmDelete,
+                  tone: 'danger',
+                },
+              ]
+            : []
+        }
+        closeLabel={t('common.close')}
+        onClose={() => setActionsOpen(false)}
+        title={privateDetail?.title ?? ''}
+        visible={actionsOpen}
+      />
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setEditOpen(false)}
+        presentationStyle="pageSheet"
+        visible={editOpen}
+      >
+        <SafeAreaView style={styles.editor}>
+          <View style={styles.editorHeader}>
+            <Pressable onPress={() => setEditOpen(false)}>
+              <Text style={styles.editorCancel}>{t('common.cancel')}</Text>
+            </Pressable>
+            <Text style={styles.editorTitle}>{t('recipe.editDetails')}</Text>
+            <Pressable disabled={!editTitle.trim() || updateRecipe.isPending} onPress={saveEditor}>
+              <Text style={styles.editorSave}>{t('recipe.saveChanges')}</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.fieldLabel}>{t('recipe.titleField')}</Text>
+          <TextInput onChangeText={setEditTitle} style={styles.fieldInput} value={editTitle} />
+          <Text style={styles.fieldLabel}>{t('recipe.collectionsField')}</Text>
+          <TextInput
+            onChangeText={setEditCollections}
+            placeholder={t('recipe.collectionsPlaceholder')}
+            placeholderTextColor={colors.inkMuted}
+            style={styles.fieldInput}
+            value={editCollections}
+          />
+          <Text style={styles.fieldHint}>{t('recipe.collectionsHint')}</Text>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -244,17 +522,36 @@ export function RecipeDetailModal({
 
 const useStyles = createThemeStyles((palette) => ({
   screen: { backgroundColor: palette.canvas, flex: 1 },
+  statusScrim: {
+    backgroundColor: 'rgba(9,8,6,0.88)',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 2,
+  },
+  statusScrimCollapsed: {
+    backgroundColor: palette.canvas,
+    borderBottomColor: palette.line,
+    borderBottomWidth: 1,
+  },
   toolbar: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    gap: space.sm,
     left: 0,
     paddingHorizontal: space.lg,
     position: 'absolute',
     right: 0,
     zIndex: 3,
   },
-  toolbarStart: { justifyContent: 'space-between' },
+  toolbarSpacer: { flex: 1 },
+  collapsedTitle: {
+    color: palette.ink,
+    flex: 1,
+    fontFamily: fonts.sansSemibold,
+    fontSize: 13,
+  },
   close: {
     alignItems: 'center',
     backgroundColor: 'rgba(18,14,16,0.76)',
@@ -270,7 +567,7 @@ const useStyles = createThemeStyles((palette) => ({
     justifyContent: 'center',
     padding: space.xl,
   },
-  content: { paddingBottom: space.hero },
+  content: { paddingBottom: 100 },
   image: { height: 310, width: '100%' },
   copy: {
     backgroundColor: palette.canvas,
@@ -287,10 +584,19 @@ const useStyles = createThemeStyles((palette) => ({
   copyAlone: { paddingTop: 90 },
   title: {
     color: palette.ink,
+    flexShrink: 1,
     fontFamily: fonts.recipeHeading,
     fontSize: 36,
     letterSpacing: -1,
     lineHeight: 41,
+  },
+  titleRow: { alignItems: 'flex-start', flexDirection: 'row', gap: space.xs },
+  titleSourceLink: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+    minHeight: 36,
+    minWidth: 36,
   },
   description: {
     color: palette.inkMuted,
@@ -298,52 +604,52 @@ const useStyles = createThemeStyles((palette) => ({
     fontSize: 16,
     lineHeight: 26,
   },
+  enrichmentStatus: { color: palette.inkMuted, fontFamily: fonts.sansMedium, fontSize: 11 },
+  enrichmentWarning: { color: palette.saffron, fontFamily: fonts.sansMedium, fontSize: 11 },
+  recipeMetaRow: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  collectionBadge: {
+    backgroundColor: palette.herbSoft,
+    borderRadius: radius.pill,
+    color: palette.herb,
+    fontFamily: fonts.sansSemibold,
+    fontSize: 11,
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  editor: { backgroundColor: palette.canvas, flex: 1, gap: space.md, padding: space.lg },
+  editorHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: space.lg,
+  },
+  editorTitle: { color: palette.ink, fontFamily: fonts.recipeHeading, fontSize: 20 },
+  editorCancel: { color: palette.inkMuted, fontFamily: fonts.sansMedium, fontSize: 14 },
+  editorSave: { color: palette.ember, fontFamily: fonts.sansSemibold, fontSize: 14 },
+  fieldLabel: {
+    color: palette.ink,
+    fontFamily: fonts.sansSemibold,
+    fontSize: 13,
+    marginTop: space.md,
+  },
+  fieldInput: {
+    backgroundColor: palette.canvasRaised,
+    borderColor: palette.line,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    color: palette.ink,
+    fontFamily: fonts.sans,
+    fontSize: 15,
+    minHeight: 52,
+    paddingHorizontal: space.md,
+  },
+  fieldHint: { color: palette.inkMuted, fontFamily: fonts.sans, fontSize: 12, lineHeight: 18 },
   author: {
     color: palette.ember,
     fontFamily: fonts.sansSemibold,
     fontSize: 12,
     marginTop: space.xs,
-  },
-  heading: {
-    color: palette.ink,
-    fontFamily: fonts.recipeHeading,
-    fontSize: 24,
-  },
-  metricsSection: { gap: space.md, marginBottom: space.sm, marginTop: space.sm },
-  sectionHeadingRow: { alignItems: 'center', flexDirection: 'row', gap: space.md },
-  headingRule: { backgroundColor: palette.line, flex: 1, height: 1 },
-  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  metricCard: {
-    backgroundColor: palette.canvasRaised,
-    borderColor: palette.line,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flexBasis: '47%',
-    flexGrow: 1,
-    gap: 5,
-    minHeight: 98,
-    overflow: 'hidden',
-    padding: space.md,
-  },
-  metricAccent: {
-    backgroundColor: palette.ember,
-    borderRadius: radius.pill,
-    height: 3,
-    marginBottom: 3,
-    width: 22,
-  },
-  metricLabel: {
-    color: palette.inkMuted,
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  metricValue: {
-    color: palette.ink,
-    fontFamily: fonts.recipeBodyBold,
-    fontSize: 14,
-    lineHeight: 20,
   },
   listItem: { color: palette.ink, fontFamily: fonts.recipeBody, fontSize: 16, lineHeight: 26 },
   step: { alignItems: 'flex-start', flexDirection: 'row', gap: space.md },

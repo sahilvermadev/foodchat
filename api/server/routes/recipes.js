@@ -7,6 +7,7 @@ const {
   getRecipe,
   getRecipeByDraft,
   getRecipeIllustration,
+  getRecipeFacets,
   listOfflineRecipes,
   listRecipes,
   listPublicRecipes,
@@ -81,6 +82,19 @@ function assertPatchBody(body) {
   assertOptionalText(payload.title, 'Recipe title is malformed.');
   assertDocumentType(payload.documentType);
   assertSaveList(payload.saveList);
+  if (payload.collections != null && !Array.isArray(payload.collections)) {
+    throw new CookingValidationError('Recipe collections are malformed.');
+  }
+  if (payload.collections?.some((value) => typeof value !== 'string')) {
+    throw new CookingValidationError('Recipe collections are malformed.');
+  }
+  if (payload.favorite != null && typeof payload.favorite !== 'boolean') {
+    throw new CookingValidationError('Recipe favorite is malformed.');
+  }
+  if (payload.pinned != null && typeof payload.pinned !== 'boolean') {
+    throw new CookingValidationError('Recipe pin is malformed.');
+  }
+  assertOptionalText(payload.personalNotes, 'Recipe notes are malformed.');
   if (payload.documentMarkdown != null) {
     assertDocumentMarkdown(payload.documentMarkdown);
   }
@@ -91,7 +105,11 @@ function assertPatchBody(body) {
     payload.title == null &&
     payload.documentMarkdown == null &&
     payload.recipe == null &&
-    payload.saveList == null
+    payload.saveList == null &&
+    payload.collections == null &&
+    payload.favorite == null &&
+    payload.pinned == null &&
+    payload.personalNotes == null
   ) {
     throw new CookingValidationError('Recipe update is empty.');
   }
@@ -131,6 +149,15 @@ router.get('/', async (req, res) => {
     assertSaveList(req.query.saveList);
     const recipes = await listRecipes(userId(req), req.query);
     res.json(recipes);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.get('/facets', async (req, res) => {
+  try {
+    assertSaveList(req.query.saveList);
+    res.json(await getRecipeFacets(userId(req), req.query));
   } catch (error) {
     handleError(res, error);
   }

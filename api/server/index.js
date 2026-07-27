@@ -209,6 +209,7 @@ const startServer = async () => {
   app.use('/api/categories', routes.categories);
   app.use('/api/cooking', routes.cooking);
   app.use('/api/recipes', routes.recipes);
+  app.use('/api/shopping-list', routes.shopping);
   app.use('/api/social-imports', routes.social);
   app.use('/api/endpoints', routes.endpoints);
   app.use('/api/balance', routes.balance);

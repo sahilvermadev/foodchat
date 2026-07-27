@@ -4,13 +4,12 @@ import { initialCookingChatState } from 'librechat-data-provider/mobile';
 import type {
   ConversationCookingDocuments,
   CookingChatMessage,
-  CookingSession,
-  CookingSessionEvent,
   TFile,
 } from 'librechat-data-provider';
 
 import { apiFetch } from '@/lib/api/client';
-import { cookKeys, useCookingDocuments, useCookingMessages, useCookingSession } from './queries';
+import { userErrorMessage } from '@/lib/errors';
+import { cookKeys, useCookingDocuments, useCookingMessages } from './queries';
 import { streamCookingChat } from './service';
 
 const NO_PARENT = '00000000-0000-0000-0000-000000000000';
@@ -21,25 +20,20 @@ const createId = () =>
 
 export function useCookState({
   initialConversationId,
-  initialSessionId,
   onConversation,
 }: {
   initialConversationId?: string;
-  initialSessionId?: string;
   onConversation: (conversationId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [chat, setChat] = useState(() => initialCookingChatState());
-  const [sessionId, setSessionId] = useState(initialSessionId);
   const [error, setError] = useState<string>();
-  const [sessionBusy, setSessionBusy] = useState(false);
   const [documentBusy, setDocumentBusy] = useState(false);
   const abortRef = useRef<AbortController | undefined>(undefined);
   const hydratedConversationRef = useRef<string | undefined>(undefined);
   const conversationId = chat.conversation?.conversationId ?? initialConversationId;
   const messagesQuery = useCookingMessages(initialConversationId);
   const documentsQuery = useCookingDocuments(conversationId);
-  const sessionQuery = useCookingSession(sessionId);
 
   useEffect(() => {
     if (!initialConversationId || !messagesQuery.data || chat.isStreaming) return;
@@ -47,8 +41,6 @@ export function useCookState({
     hydratedConversationRef.current = initialConversationId;
     setChat(initialCookingChatState(messagesQuery.data));
   }, [chat.isStreaming, initialConversationId, messagesQuery.data]);
-
-  useEffect(() => setSessionId(initialSessionId), [initialSessionId]);
 
   useEffect(
     () => () => {
@@ -102,7 +94,7 @@ export function useCookState({
           return;
         }
         setChat((current) => ({ ...current, isStreaming: false, activeStep: undefined }));
-        const message = caught instanceof Error ? caught.message : 'Rekky could not respond.';
+        const message = userErrorMessage(caught, 'Rekky could not respond. Please try again.');
         setError(message);
         throw caught;
       }
@@ -131,7 +123,7 @@ export function useCookState({
         );
         queryClient.setQueryData(cookKeys.documents(conversationId), collection);
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'The document could not be opened.');
+        setError(userErrorMessage(caught, 'The document could not be opened. Please try again.'));
       } finally {
         setDocumentBusy(false);
       }
@@ -151,7 +143,7 @@ export function useCookState({
         );
         queryClient.setQueryData(cookKeys.documents(conversationId), collection);
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'The document could not be deleted.');
+        setError(userErrorMessage(caught, 'The document could not be deleted. Please try again.'));
       } finally {
         setDocumentBusy(false);
       }
@@ -159,81 +151,10 @@ export function useCookState({
     [conversationId, documentBusy, queryClient],
   );
 
-  const updateSession = useCallback(
-    (session: CookingSession) => {
-      setSessionId(session._id);
-      queryClient.setQueryData(cookKeys.session(session._id), session);
-      void queryClient.invalidateQueries({ queryKey: ['cooking-sessions', 'active'] });
-    },
-    [queryClient],
-  );
-
-  const startSession = useCallback(async () => {
-    if (!selectedDocument || sessionBusy) return;
-    setSessionBusy(true);
-    setError(undefined);
-    try {
-      const session = await apiFetch<CookingSession>('/api/cooking/sessions', {
-        method: 'POST',
-        body: { draftId: selectedDocument._id },
-      });
-      updateSession(session);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Cooking mode could not start.');
-    } finally {
-      setSessionBusy(false);
-    }
-  }, [selectedDocument, sessionBusy, updateSession]);
-
-  const addSessionEvent = useCallback(
-    async (event: CookingSessionEvent) => {
-      if (!sessionId || sessionBusy) return;
-      setSessionBusy(true);
-      setError(undefined);
-      try {
-        const session = await apiFetch<CookingSession>(
-          `/api/cooking/sessions/${encodeURIComponent(sessionId)}/events`,
-          { method: 'POST', body: { event } },
-        );
-        updateSession(session);
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'The cooking step could not update.');
-      } finally {
-        setSessionBusy(false);
-      }
-    },
-    [sessionBusy, sessionId, updateSession],
-  );
-
-  const completeSession = useCallback(
-    async (rating: number, note: string) => {
-      if (!sessionId || sessionBusy) return false;
-      setSessionBusy(true);
-      setError(undefined);
-      try {
-        const session = await apiFetch<CookingSession>(
-          `/api/cooking/sessions/${encodeURIComponent(sessionId)}/complete`,
-          { method: 'POST', body: { rating, note } },
-        );
-        updateSession(session);
-        return true;
-      } catch (caught) {
-        setError(
-          caught instanceof Error ? caught.message : 'The cooking session could not finish.',
-        );
-        return false;
-      } finally {
-        setSessionBusy(false);
-      }
-    },
-    [sessionBusy, sessionId, updateSession],
-  );
-
   const reset = useCallback(() => {
     abortRef.current?.abort();
     hydratedConversationRef.current = undefined;
     setChat(initialCookingChatState());
-    setSessionId(undefined);
     setError(undefined);
   }, []);
 
@@ -257,17 +178,11 @@ export function useCookState({
     selectedDocumentId: documentsQuery.data?.selectedDocumentId,
     documentBusy,
     selectedDocument,
-    session: sessionQuery.data,
-    sessionLoading: sessionQuery.isLoading,
-    sessionBusy,
     suggestions,
     send,
     stop,
     selectDocument,
     deleteDocument,
-    startSession,
-    addSessionEvent,
-    completeSession,
     reset,
   };
 }

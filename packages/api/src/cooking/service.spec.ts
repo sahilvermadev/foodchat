@@ -1,19 +1,14 @@
 import mongoose from 'mongoose';
 import { createModels, migrateCookingDocuments } from '@librechat/data-schemas';
-import type { CookingSessionEvent, StructuredRecipe } from 'librechat-data-provider';
+import type { StructuredRecipe } from 'librechat-data-provider';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import {
   CookingValidationError,
   deleteCookingDocument,
-  getCookingSession,
-  listCookingSessions,
   listCookingDocuments,
   selectCookingDocument,
   updateCookingDraft,
   generateCookingDraft,
-  completeCookingSession,
-  startCookingSession,
-  appendCookingSessionEvent,
 } from './service';
 
 jest.setTimeout(60000);
@@ -49,15 +44,6 @@ function editedRecipe(recipe: StructuredRecipe): StructuredRecipe {
   };
 }
 
-async function createStartedSession(user = userA) {
-  const draft = await generateCookingDraft(user, 'lentil soup with rice');
-  const session = await startCookingSession({ user, draftId: draft._id });
-  if (!session) {
-    throw new Error('Expected cooking session to start.');
-  }
-  return { draft, session };
-}
-
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   createModels(mongoose);
@@ -77,21 +63,6 @@ afterAll(async () => {
 });
 
 describe('cooking service', () => {
-  test('lists only the requesting user active cooking sessions newest first', async () => {
-    const older = await createStartedSession(userA);
-    await mongoose.models.CookingSession.updateOne(
-      { _id: older.session._id },
-      { $set: { updatedAt: new Date('2026-01-01') } },
-    );
-    const newer = await createStartedSession(userA);
-    await createStartedSession(userB);
-
-    const result = await listCookingSessions(userA, { status: 'active', limit: 1 });
-
-    expect(result.sessions).toHaveLength(1);
-    expect(result.sessions[0]?._id).toBe(newer.session._id);
-  });
-
   test('generate document persists durable selected recipe content', async () => {
     const draft = await generateCookingDraft(userA, '  chickpea curry  ');
 
@@ -304,6 +275,40 @@ describe('cooking service', () => {
     expect(draft.recipe.title).toBe('Thai Iced Tea');
   });
 
+  test('repairs legacy zero timing from generated markdown when drafts are read', async () => {
+    const markdown = `# Tomato Soup
+
+## Recipe Data
+- **Servings:** 2
+- **Prep time:** 10 minutes
+- **Cook time:** 25 minutes
+- **Total time:** 35 minutes
+
+## Ingredients
+- 4 tomatoes
+
+## Instructions
+1. Simmer the tomatoes until tender.`;
+    const draft = await generateCookingDraft(
+      userA,
+      'tomato soup',
+      'timing-conversation',
+      markdown,
+    );
+    await mongoose.models.CookingDraft.updateOne(
+      { _id: draft._id },
+      { $set: { 'recipe.timing': { prepMinutes: 0, cookMinutes: 0, totalMinutes: 0 } } },
+    );
+
+    const collection = await listCookingDocuments(userA, 'timing-conversation');
+
+    expect(collection.documents[0].recipe.timing).toEqual({
+      prepMinutes: 10,
+      cookMinutes: 25,
+      totalMinutes: 35,
+    });
+  });
+
   test('does not use a wrapper-only markdown heading as a recipe title', async () => {
     const draft = await generateCookingDraft(
       userA,
@@ -356,154 +361,11 @@ describe('cooking service', () => {
     expect(updated?.recipe.title).toBe('Corrected Recipe Title');
   });
 
-  test('user isolation protects drafts and sessions', async () => {
-    const { draft, session } = await createStartedSession(userA);
+  test('user isolation protects drafts', async () => {
+    const draft = await generateCookingDraft(userA, 'lentil soup with rice');
 
     await expect(
       updateCookingDraft(userB, draft._id, editedRecipe(draft.recipe)),
     ).resolves.toBeNull();
-    await expect(getCookingSession(userB, session._id)).resolves.toBeNull();
-    await expect(
-      appendCookingSessionEvent({
-        user: userB,
-        sessionId: session._id,
-        event: { type: 'note', text: 'Should not attach' },
-      }),
-    ).resolves.toBeNull();
-  });
-
-  test('start session from draft stores a snapshot without mutating the draft', async () => {
-    const draft = await generateCookingDraft(userA, 'tomato pasta');
-    const originalTitle = draft.recipe.title;
-    const session = await startCookingSession({ user: userA, draftId: draft._id });
-
-    expect(session).toMatchObject({
-      user: userA,
-      draftId: draft._id,
-      status: 'active',
-      currentStepIndex: 0,
-      recipeSnapshot: draft.recipe,
-      summary: { notes: [], substitutions: [], problems: [] },
-    });
-
-    await updateCookingDraft(userA, draft._id, {
-      ...draft.recipe,
-      title: 'Changed after session start',
-    });
-    const refetchedSession = await getCookingSession(userA, session?._id ?? '');
-    const refetchedDraft = await mongoose.models.CookingDraft.findById(draft._id).lean<{
-      recipe: StructuredRecipe;
-    }>();
-
-    expect(refetchedSession?.recipeSnapshot.title).toBe(originalTitle);
-    expect(refetchedDraft?.recipe.title).toBe('Changed after session start');
-  });
-
-  test('append events persist event docs and atomically update derived session state', async () => {
-    const draft = await generateCookingDraft(userA, 'lentil soup with rice');
-    const recipe = editedRecipe(draft.recipe);
-    recipe.steps = [
-      ...recipe.steps,
-      {
-        ...recipe.steps[0],
-        id: 'step-2',
-        order: 2,
-        text: 'Serve with rice.',
-        ingredientIds: ['ingredient-1'],
-      },
-    ];
-    await updateCookingDraft(userA, draft._id, recipe);
-    const session = await startCookingSession({ user: userA, draftId: draft._id });
-    if (!session) {
-      throw new Error('Expected cooking session to start.');
-    }
-    const events: CookingSessionEvent[] = [
-      { type: 'navigation', action: 'next' },
-      { type: 'note', stepIndex: 1, text: 'Add lemon at the end' },
-      { type: 'substitution', ingredientId: 'ingredient-1', text: 'Used barley' },
-      { type: 'timer', timerId: 'timer-1', action: 'started', durationSeconds: 300 },
-      { type: 'problem', text: 'Needed a wider pot' },
-    ];
-
-    let current = session;
-    for (const event of events) {
-      const next = await appendCookingSessionEvent({
-        user: userA,
-        sessionId: session._id,
-        event,
-      });
-      if (!next) {
-        throw new Error('Expected event append to return a session.');
-      }
-      current = next;
-    }
-
-    expect(current.currentStepIndex).toBe(1);
-    expect(current.summary.notes).toEqual(['Add lemon at the end']);
-    expect(current.summary.substitutions).toEqual([
-      { ingredientId: 'ingredient-1', text: 'Used barley' },
-    ]);
-    expect(current.summary.problems).toEqual(['Needed a wider pot']);
-
-    const persisted = await mongoose.models.CookingSessionEvent.find({ sessionId: session._id })
-      .sort({ createdAt: 1 })
-      .lean();
-    expect(persisted).toHaveLength(events.length);
-    expect(persisted.map((eventDoc) => eventDoc.event.type)).toEqual([
-      'navigation',
-      'note',
-      'substitution',
-      'timer',
-      'problem',
-    ]);
-    expect(persisted[1].stepIndex).toBe(1);
-  });
-
-  test('concurrent session events do not overwrite one another', async () => {
-    const { session } = await createStartedSession(userA);
-
-    await Promise.all([
-      appendCookingSessionEvent({
-        user: userA,
-        sessionId: session._id,
-        event: { type: 'note', text: 'First note' },
-      }),
-      appendCookingSessionEvent({
-        user: userA,
-        sessionId: session._id,
-        event: { type: 'note', text: 'Second note' },
-      }),
-      appendCookingSessionEvent({
-        user: userA,
-        sessionId: session._id,
-        event: { type: 'problem', text: 'Pan was too small' },
-      }),
-    ]);
-
-    const current = await getCookingSession(userA, session._id);
-    expect(current?.summary.notes).toEqual(expect.arrayContaining(['First note', 'Second note']));
-    expect(current?.summary.notes).toHaveLength(2);
-    expect(current?.summary.problems).toEqual(['Pan was too small']);
-  });
-
-  test('complete session stores review summary and completion timestamp', async () => {
-    const { session } = await createStartedSession(userA);
-    const completed = await completeCookingSession({
-      user: userA,
-      sessionId: session._id,
-      rating: 5,
-      note: 'Keeping this one.',
-    });
-
-    expect(completed?.status).toBe('completed');
-    expect(completed?.completedAt).toBeDefined();
-    expect(completed?.summary.rating).toBe(5);
-    expect(completed?.summary.reviewNote).toBe('Keeping this one.');
-
-    const reviewEvents = await mongoose.models.CookingSessionEvent.find({
-      sessionId: session._id,
-      'event.type': 'review',
-    });
-    expect(reviewEvents).toHaveLength(1);
   });
 });

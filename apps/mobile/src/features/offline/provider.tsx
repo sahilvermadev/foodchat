@@ -10,6 +10,7 @@ import {
 import type { PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
 import type {
+  ShoppingList,
   SocialImport,
   SocialImportsResponse,
   SocialPlaylistSubscriptionsResponse,
@@ -24,6 +25,8 @@ import { readLastSync } from './database';
 import { replaceOfflineImports, replaceOfflinePlaylists } from './imports';
 import { cacheOfflineMedia } from './media';
 import { replaceOfflineRecipes } from './recipes';
+import { cacheOfflineShoppingList } from './shopping';
+import { syncPendingShoppingMutations } from '@/features/shopping/queries';
 
 type OfflineRecipesPayload = { recipes: RecipeDetail[]; syncedAt: string; nextCursor?: string };
 
@@ -78,6 +81,9 @@ async function syncOfflineLibrary(userId: string) {
     apiFetch<SocialPlaylistSubscriptionsResponse>('/api/social-imports/playlists').then((payload) =>
       replaceOfflinePlaylists(userId, payload.subscriptions, fallbackSyncTime),
     ),
+    syncPendingShoppingMutations(userId)
+      .then(() => apiFetch<ShoppingList>('/api/shopping-list'))
+      .then((list) => cacheOfflineShoppingList(userId, list)),
   ]);
   if (results.every((result) => result.status === 'rejected')) {
     const failed = results.find((result) => result.status === 'rejected');
@@ -112,6 +118,7 @@ export function OfflineProvider({ children }: PropsWithChildren) {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ['recipes'], refetchType: 'active' }),
           queryClient.invalidateQueries({ queryKey: ['social-imports'], refetchType: 'active' }),
+          queryClient.invalidateQueries({ queryKey: ['shopping-list'], refetchType: 'active' }),
         ]);
       } finally {
         setIsSyncing(false);

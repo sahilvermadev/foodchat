@@ -1,8 +1,7 @@
-import type { PropsWithChildren } from 'react';
+import { forwardRef, useState } from 'react';
+import type { ComponentProps, PropsWithChildren } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,8 +10,10 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { KeyboardView } from '@/components/keyboard';
 import { fonts, radius, shadow, space } from '@/constants/theme';
 import { useTheme } from '@/features/theme/provider';
 import { createThemeStyles } from '@/features/theme/styles';
@@ -27,10 +28,7 @@ export function AuthShell({
   const { colors } = useTheme();
   const styles = useStyles();
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.screen}
-    >
+    <KeyboardView style={styles.screen}>
       <LinearGradient
         colors={[colors.canvas, colors.softClay, colors.herbSoft]}
         style={StyleSheet.absoluteFill}
@@ -50,26 +48,63 @@ export function AuthShell({
           <View style={styles.card}>{children}</View>
         </SafeAreaView>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardView>
   );
 }
 
-export function AuthField(props: React.ComponentProps<typeof TextInput> & { label: string }) {
-  const { label, ...inputProps } = props;
+export const AuthField = forwardRef<
+  TextInput,
+  ComponentProps<typeof TextInput> & { error?: string; hint?: string; label: string }
+>(function AuthField({ error, hint, label, secureTextEntry, ...inputProps }, ref) {
   const { colors } = useTheme();
   const styles = useStyles();
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  let supportingText = null;
+  if (error) {
+    supportingText = (
+      <Text accessibilityRole="alert" style={styles.fieldError}>
+        {error}
+      </Text>
+    );
+  } else if (hint) {
+    supportingText = <Text style={styles.fieldHint}>{hint}</Text>;
+  }
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        autoCapitalize="none"
-        placeholderTextColor={colors.inkMuted}
-        style={styles.input}
-        {...inputProps}
-      />
+      <View style={[styles.inputWrap, error && styles.inputError]}>
+        <TextInput
+          accessibilityLabel={label}
+          autoCapitalize="none"
+          placeholderTextColor={colors.inkMuted}
+          ref={ref}
+          secureTextEntry={secureTextEntry && !passwordVisible}
+          style={styles.input}
+          {...inputProps}
+        />
+        {secureTextEntry ? (
+          <Pressable
+            accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => setPasswordVisible((visible) => !visible)}
+            style={styles.passwordToggle}
+          >
+            <SymbolView
+              name={{
+                android: passwordVisible ? 'visibility_off' : 'visibility',
+                ios: passwordVisible ? 'eye.slash' : 'eye',
+              }}
+              size={19}
+              tintColor={colors.inkMuted}
+            />
+          </Pressable>
+        ) : null}
+      </View>
+      {supportingText}
     </View>
   );
-}
+});
 
 export function AuthButton({
   label,
@@ -131,6 +166,24 @@ export function AuthError({ message }: { message: string | null }) {
   ) : null;
 }
 
+export function AuthLegal({ onPrivacy, onTerms }: { onPrivacy(): void; onTerms(): void }) {
+  const { t } = useTranslation();
+  const styles = useStyles();
+  return (
+    <Text style={styles.legal}>
+      {t('auth.legalPrefix')}{' '}
+      <Text accessibilityRole="link" onPress={onTerms} style={styles.link}>
+        {t('auth.terms')}
+      </Text>{' '}
+      {t('auth.legalAnd')}{' '}
+      <Text accessibilityRole="link" onPress={onPrivacy} style={styles.link}>
+        {t('auth.privacy')}
+      </Text>
+      .
+    </Text>
+  );
+}
+
 const useStyles = createThemeStyles((palette) => ({
   screen: { backgroundColor: palette.canvas, flex: 1 },
   scroll: { flexGrow: 1 },
@@ -170,17 +223,27 @@ const useStyles = createThemeStyles((palette) => ({
   },
   field: { gap: space.sm },
   label: { color: palette.ink, fontFamily: fonts.sans, fontSize: 13, fontWeight: '700' },
-  input: {
+  inputWrap: {
+    alignItems: 'center',
     backgroundColor: palette.canvas,
     borderColor: palette.line,
     borderRadius: radius.md,
     borderWidth: 1,
+    flexDirection: 'row',
+    minHeight: 54,
+  },
+  inputError: { borderColor: palette.danger },
+  input: {
     color: palette.ink,
+    flex: 1,
     fontFamily: fonts.sans,
     fontSize: 16,
-    minHeight: 54,
+    minHeight: 52,
     paddingHorizontal: space.lg,
   },
+  passwordToggle: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
+  fieldError: { color: palette.danger, fontFamily: fonts.sansMedium, fontSize: 12 },
+  fieldHint: { color: palette.inkMuted, fontFamily: fonts.sans, fontSize: 11, lineHeight: 16 },
   button: {
     alignItems: 'center',
     backgroundColor: palette.ember,
@@ -209,5 +272,12 @@ const useStyles = createThemeStyles((palette) => ({
     fontSize: 14,
     lineHeight: 20,
     padding: space.md,
+  },
+  legal: {
+    color: palette.inkMuted,
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
   },
 }));

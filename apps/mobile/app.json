@@ -33,6 +33,7 @@
       ],
       "expo-secure-store",
       "expo-localization",
+      "expo-notifications",
       [
         "expo-image-picker",
         {
@@ -44,14 +45,8 @@
         {
           "android": {
             "enabled": true,
-            "multipleShareMimeTypes": [
-              "text/plain",
-              "text/*"
-            ],
-            "singleShareMimeTypes": [
-              "text/plain",
-              "text/*"
-            ]
+            "multipleShareMimeTypes": ["text/plain", "text/*"],
+            "singleShareMimeTypes": ["text/plain", "text/*"]
           },
           "ios": {
             "enabled": true,

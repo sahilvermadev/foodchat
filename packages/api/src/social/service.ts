@@ -36,6 +36,8 @@ import {
   isYouTubeTranscriptAdapterEnabled,
   youtubeTranscriptUserDailyLimit,
 } from './transcript';
+import { createIllustrationThumbnail, fetchRemoteImage } from '../illustrations/media';
+import type { IllustrationMedia } from '../illustrations/media';
 import { createCookingDocument } from '../cooking/service';
 
 const maxLimit = 1000;
@@ -43,6 +45,8 @@ const webExtractionEnabledInTest = 'SOCIAL_IMPORT_ENABLE_WEB_EXTRACTION_IN_TEST'
 const jobsEnabledInTest = 'SOCIAL_IMPORT_ENABLE_JOBS_IN_TEST';
 const autoRunJobsEnabledInTest = 'SOCIAL_IMPORT_AUTO_RUN_JOBS_IN_TEST';
 const socialImportJobLeaseMs = 10 * 60 * 1000;
+const socialThumbnailFetchTimeoutMs = 5_000;
+const maxSocialThumbnailBytes = 5 * 1024 * 1024;
 let playlistSyncInterval: NodeJS.Timeout | undefined;
 let socialImportJobInterval: NodeJS.Timeout | undefined;
 const trackingParams = new Set([
@@ -538,6 +542,7 @@ function serializeSocialImport(doc: ISocialImport): SocialImport {
     creatorUrl: doc.creatorUrl,
     title: doc.title,
     thumbnailUrl: doc.thumbnailUrl,
+    thumbnailAssetAvailable: Boolean(doc.thumbnailData?.length),
     userSuppliedText: doc.userSuppliedText,
     extractedText: doc.extractedText,
     extractedAt: doc.extractedAt ? iso(doc.extractedAt) : undefined,
@@ -551,6 +556,64 @@ function serializeSocialImport(doc: ISocialImport): SocialImport {
     provenance: doc.provenance,
     createdAt: iso(doc.createdAt),
     updatedAt: iso(doc.updatedAt),
+  };
+}
+
+type SocialThumbnailUpdate = {
+  set: {
+    thumbnailData?: Buffer;
+    thumbnailContentType?: string;
+    thumbnailThumbnail?: Buffer;
+    thumbnailIngestedAt?: Date;
+    thumbnailIngestError?: string;
+  };
+  unset?: { thumbnailIngestError: 1 };
+};
+
+async function ingestSocialThumbnail(url?: string): Promise<SocialThumbnailUpdate> {
+  if (!url) {
+    return { set: {} };
+  }
+  try {
+    const image = await fetchRemoteImage(url, {
+      maxBytes: maxSocialThumbnailBytes,
+      timeoutMs: socialThumbnailFetchTimeoutMs,
+    });
+    const thumbnail = await createIllustrationThumbnail(image);
+    return {
+      set: {
+        thumbnailData: image.buffer,
+        thumbnailContentType: image.contentType,
+        thumbnailThumbnail: thumbnail.buffer,
+        thumbnailIngestedAt: new Date(),
+      },
+      unset: { thumbnailIngestError: 1 },
+    };
+  } catch (error) {
+    return {
+      set: {
+        thumbnailIngestError: jobErrorMessage(error),
+      },
+    };
+  }
+}
+
+export async function getSocialImportThumbnail(
+  user: string,
+  importId: string,
+): Promise<IllustrationMedia | null> {
+  const socialImport = await model()
+    .findOne({ _id: importId, user })
+    .select('thumbnailData thumbnailContentType thumbnailThumbnail');
+  if (!socialImport?.thumbnailData?.length) {
+    return null;
+  }
+  if (socialImport.thumbnailThumbnail?.length) {
+    return { buffer: Buffer.from(socialImport.thumbnailThumbnail), contentType: 'image/webp' };
+  }
+  return {
+    buffer: Buffer.from(socialImport.thumbnailData),
+    contentType: socialImport.thumbnailContentType ?? 'image/jpeg',
   };
 }
 
@@ -839,6 +902,10 @@ export async function processSocialImportJob(jobId: string): Promise<void> {
     }
 
     const extracted = await extractSourceText(normalizedSourceFromImport(socialImport));
+    const metadata = extractedMetadataUpdate(extracted);
+    const thumbnail = await ingestSocialThumbnail(
+      metadata.thumbnailUrl ?? socialImport.thumbnailUrl,
+    );
     if (!extracted.extractedText?.trim()) {
       await Promise.all([
         model().updateOne(
@@ -852,8 +919,10 @@ export async function processSocialImportJob(jobId: string): Promise<void> {
                   ? 'No usable recipe text was found from YouTube.'
                   : 'No structured recipe text was found on the source page.',
               provenance: 'unknown',
-              ...extractedMetadataUpdate(extracted),
+              ...metadata,
+              ...thumbnail.set,
             },
+            ...(thumbnail.unset ? { $unset: thumbnail.unset } : {}),
           },
         ),
         job.updateOne({
@@ -869,7 +938,8 @@ export async function processSocialImportJob(jobId: string): Promise<void> {
         { _id: socialImport._id, user: socialImport.user },
         {
           $set: {
-            ...extractedMetadataUpdate(extracted),
+            ...metadata,
+            ...thumbnail.set,
             extractedText: extracted.extractedText,
             extractedAt: new Date(),
             status: 'draft_ready',
@@ -882,6 +952,7 @@ export async function processSocialImportJob(jobId: string): Promise<void> {
               ),
             provenance: 'source_exact',
           },
+          ...(thumbnail.unset ? { $unset: thumbnail.unset } : {}),
         },
       ),
       job.updateOne({

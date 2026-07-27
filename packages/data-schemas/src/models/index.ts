@@ -32,11 +32,10 @@ import { createGroupModel } from './group';
 import { createConfigModel } from './config';
 import { createPreferencesModel } from './preferences';
 import { createSpecialtyIngredientModel } from './ingredient';
+import { createShoppingListModel } from './shopping';
 import {
   createSavedRecipeModel,
   createCookingDraftModel,
-  createCookingSessionModel,
-  createCookingSessionEventModel,
   createSocialImportModel,
   createSocialImportJobModel,
   createSocialPlaylistSubscriptionModel,
@@ -83,10 +82,9 @@ export function createModels(mongoose: typeof import('mongoose')) {
     Config: createConfigModel(mongoose),
     Preferences: createPreferencesModel(mongoose),
     SpecialtyIngredient: createSpecialtyIngredientModel(mongoose),
+    ShoppingList: createShoppingListModel(mongoose),
     SavedRecipe: createSavedRecipeModel(mongoose),
     CookingDraft: createCookingDraftModel(mongoose),
-    CookingSession: createCookingSessionModel(mongoose),
-    CookingSessionEvent: createCookingSessionEventModel(mongoose),
     SocialImport: createSocialImportModel(mongoose),
     SocialImportJob: createSocialImportJobModel(mongoose),
     SocialPlaylistSubscription: createSocialPlaylistSubscriptionModel(mongoose),

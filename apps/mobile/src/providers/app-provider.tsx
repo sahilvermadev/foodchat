@@ -12,9 +12,9 @@ import { RecipeVoiceProvider } from '@/features/voice/provider';
 const persistedQueryRoots = new Set([
   'user',
   'recipes',
+  'shopping-list',
   'social-imports',
   'conversations',
-  'cooking-sessions',
 ]);
 
 export function AppProvider({ children }: PropsWithChildren) {

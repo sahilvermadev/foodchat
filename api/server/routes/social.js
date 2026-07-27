@@ -11,6 +11,7 @@ const {
   deleteSocialImport,
   getExistingPreferences,
   fetchRemoteImage,
+  getSocialImportThumbnail,
   limiterCache,
   listSocialImportJobs,
   listSocialImports,
@@ -256,6 +257,22 @@ router.get('/', async (req, res) => {
     res.json(imports);
   } catch (error) {
     handleError(res, error);
+  }
+});
+
+router.get('/:id/thumbnail', async (req, res) => {
+  try {
+    const image = await getSocialImportThumbnail(userId(req), req.params.id);
+    if (!image) {
+      return res.sendStatus(404);
+    }
+    res.set({
+      'Content-Type': image.contentType,
+      'Cache-Control': 'private, max-age=3600',
+    });
+    return res.send(image.buffer);
+  } catch (error) {
+    return handleError(res, error);
   }
 });
 

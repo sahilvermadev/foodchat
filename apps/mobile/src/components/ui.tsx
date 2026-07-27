@@ -192,30 +192,39 @@ export type RecipePreview = {
   title: string;
   meta: string;
   imageUrl?: string;
+  badges?: string[];
+  status?: string;
 };
 
 export function RecipeTile({
   recipe,
   compact = false,
   onPress,
+  onLongPress,
+  variant = 'grid',
 }: {
   recipe: RecipePreview;
   compact?: boolean;
   onPress?: () => void;
+  onLongPress?: () => void;
+  variant?: 'grid' | 'list';
 }) {
   const styles = useStyles();
   return (
     <Pressable
-      accessibilityLabel={recipe.title}
+      accessibilityHint={onLongPress ? 'Long press for recipe actions' : undefined}
+      accessibilityLabel={[recipe.title, recipe.meta, recipe.status].filter(Boolean).join('. ')}
       accessibilityRole="button"
+      onLongPress={onLongPress}
       onPress={onPress}
       style={({ pressed }) => [
         styles.recipeTile,
         compact && styles.recipeTileCompact,
+        variant === 'list' && styles.recipeTileList,
         pressed && styles.recipeTilePressed,
       ]}
     >
-      <View style={styles.recipeImage}>
+      <View style={[styles.recipeImage, variant === 'list' && styles.recipeImageList]}>
         {recipe.imageUrl ? (
           <AuthenticatedImage
             cachePolicy="memory-disk"
@@ -231,6 +240,15 @@ export function RecipeTile({
         )}
       </View>
       <View style={styles.recipeCopy}>
+        {recipe.badges?.length ? (
+          <View style={styles.recipeBadges}>
+            {recipe.badges.map((badge) => (
+              <Text key={badge} numberOfLines={1} style={styles.recipeBadge}>
+                {badge}
+              </Text>
+            ))}
+          </View>
+        ) : null}
         <Text numberOfLines={2} style={styles.recipeTitle}>
           {recipe.title}
         </Text>
@@ -476,6 +494,7 @@ const useStyles = createThemeStyles((palette) => ({
   },
   recipeTile: { gap: space.sm, width: 196 },
   recipeTileCompact: { flex: 1, width: 'auto' },
+  recipeTileList: { alignItems: 'center', flexDirection: 'row', width: '100%' },
   recipeTilePressed: { opacity: 0.84, transform: [{ scale: 0.985 }] },
   recipeImage: {
     aspectRatio: 4 / 3,
@@ -486,13 +505,25 @@ const useStyles = createThemeStyles((palette) => ({
     overflow: 'hidden',
     width: '100%',
   },
+  recipeImageList: { aspectRatio: 4 / 3, flexShrink: 0, width: 116 },
   recipeFallback: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   recipeFallbackText: {
     color: palette.herb,
     fontFamily: fonts.recipeHeading,
     fontSize: 38,
   },
-  recipeCopy: { gap: 2 },
+  recipeCopy: { flex: 1, gap: 2 },
+  recipeBadges: { flexDirection: 'row', gap: 5, overflow: 'hidden' },
+  recipeBadge: {
+    backgroundColor: palette.herbSoft,
+    borderRadius: radius.pill,
+    color: palette.herb,
+    fontFamily: fonts.sansSemibold,
+    fontSize: 9,
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
   recipeTitle: {
     color: palette.ink,
     fontFamily: fonts.recipeHeading,
