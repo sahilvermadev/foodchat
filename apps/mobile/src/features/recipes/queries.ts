@@ -1,15 +1,28 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  publicRecipe,
+  publicRecipes,
+  recipe,
+  recipeFacets,
+  recipes,
+} from 'librechat-data-provider/mobile';
 
 import { useAuth } from '@/features/auth/provider';
 import { isOnlineNow } from '@/features/connectivity/provider';
 import {
   cacheOfflineRecipe,
   cacheOfflineRecipeSummaries,
+  deleteOfflineRecipeMutation,
   deleteOfflineRecipe,
+  failOfflineRecipeMutation,
   getOfflineRecipe,
+  getOfflineRecipeFacets,
   listOfflineRecipes,
+  listOfflineRecipeMutations,
+  queueOfflineRecipeMutation,
 } from '@/features/offline/recipes';
-import { apiFetch } from '@/lib/api/client';
+import { mutationFailureDisposition } from '@/features/offline/conflict';
+import { ApiError, apiFetch } from '@/lib/api/client';
 import type {
   PublicRecipeDetail,
   PublicRecipesResponse,
@@ -17,6 +30,7 @@ import type {
   RecipeFilters,
   RecipeFacets,
   RecipesResponse,
+  RecipeUpdate,
 } from './types';
 
 const queryString = (filters: RecipeFilters, cursor?: string, limit = 20) => {
@@ -37,15 +51,73 @@ export const recipeKeys = {
   facets: (query: { q?: string; saveList?: string }) => ['recipes', 'facets', query] as const,
 };
 
+const mutationId = () =>
+  `recipe-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+
+async function executeRecipeMutation(
+  mutation: import('@/features/offline/recipes').OfflineRecipeMutation,
+) {
+  if (mutation.type === 'delete') {
+    await apiFetch<void>(recipe(mutation.recipeId), {
+      method: 'DELETE',
+    });
+    return null;
+  }
+  return apiFetch<RecipeDetail>(recipe(mutation.recipeId), {
+    body: mutation.patch,
+    method: 'PATCH',
+  });
+}
+
+export async function syncPendingRecipeMutations(userId: string) {
+  const pending = await listOfflineRecipeMutations(userId);
+  for (const mutation of pending) {
+    try {
+      const recipe = await executeRecipeMutation(mutation);
+      if (recipe) await cacheOfflineRecipe(userId, recipe);
+      else await deleteOfflineRecipe(userId, mutation.recipeId);
+      await deleteOfflineRecipeMutation(mutation.id);
+    } catch (error) {
+      await failOfflineRecipeMutation(
+        mutation.id,
+        error instanceof Error ? error.message : 'Recipe synchronization failed',
+      );
+      const disposition = mutationFailureDisposition(
+        error instanceof ApiError ? error.status : undefined,
+        mutation.type === 'delete',
+      );
+      if (disposition !== 'resolved') throw error;
+      await deleteOfflineRecipe(userId, mutation.recipeId);
+      await deleteOfflineRecipeMutation(mutation.id);
+    }
+  }
+}
+
 export function useRecipeFacets(query: { q?: string; saveList?: string }) {
+  const { user } = useAuth();
   return useQuery({
     queryKey: recipeKeys.facets(query),
-    queryFn: () => {
+    queryFn: async () => {
+      if (!isOnlineNow() && user) {
+        return getOfflineRecipeFacets(user.id, {
+          q: query.q,
+          saveList: query.saveList as RecipeFilters['saveList'],
+        });
+      }
       const params = new URLSearchParams();
       if (query.q) params.set('q', query.q);
       if (query.saveList) params.set('saveList', query.saveList);
-      return apiFetch<RecipeFacets>(`/api/recipes/facets?${params.toString()}`);
+      try {
+        return await apiFetch<RecipeFacets>(recipeFacets(params.toString()));
+      } catch (error) {
+        if (!user) throw error;
+        return getOfflineRecipeFacets(user.id, {
+          q: query.q,
+          saveList: query.saveList as RecipeFilters['saveList'],
+        });
+      }
     },
+    networkMode: 'always',
   });
 }
 
@@ -53,11 +125,30 @@ export function useUpdateRecipe() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<RecipeDetail> }) =>
-      apiFetch<RecipeDetail>(`/api/recipes/${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        body: patch,
-      }),
+    mutationFn: async ({ id, patch }: { id: string; patch: RecipeUpdate }) => {
+      const mutation = { id: mutationId(), patch, recipeId: id, type: 'update' as const };
+      if (isOnlineNow()) {
+        try {
+          return (await executeRecipeMutation(mutation)) as RecipeDetail;
+        } catch (error) {
+          if (error instanceof ApiError && error.status < 500) throw error;
+        }
+      }
+      const current = user ? await getOfflineRecipe(user.id, id) : null;
+      if (!user || !current)
+        throw new Error('Open this recipe online once before editing offline.');
+      const updatedAt = new Date().toISOString();
+      const { workspaceState: workspacePatch, ...recipePatch } = patch;
+      const recipe: RecipeDetail = {
+        ...current,
+        ...recipePatch,
+        ...(workspacePatch ? { workspaceState: { ...workspacePatch, updatedAt } } : {}),
+        updatedAt,
+      };
+      await cacheOfflineRecipe(user.id, recipe);
+      await queueOfflineRecipeMutation(user.id, mutation);
+      return recipe;
+    },
     onSuccess: async (recipe) => {
       queryClient.setQueryData(recipeKeys.detail(recipe._id), recipe);
       if (user) await cacheOfflineRecipe(user.id, recipe);
@@ -70,8 +161,20 @@ export function useDeleteRecipe() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<void>(`/api/recipes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    mutationFn: async (id: string) => {
+      const mutation = { id: mutationId(), recipeId: id, type: 'delete' as const };
+      if (isOnlineNow()) {
+        try {
+          await executeRecipeMutation(mutation);
+          return;
+        } catch (error) {
+          if (error instanceof ApiError && error.status < 500) throw error;
+        }
+      }
+      if (!user) throw new Error('Sign in to delete this recipe.');
+      await deleteOfflineRecipe(user.id, id);
+      await queueOfflineRecipeMutation(user.id, mutation);
+    },
     onSuccess: async (_, id) => {
       if (user) await deleteOfflineRecipe(user.id, id);
       queryClient.removeQueries({ queryKey: recipeKeys.detail(id) });
@@ -88,7 +191,7 @@ export function useRecipes(filters: RecipeFilters, limit = 20) {
       if (!isOnlineNow() && user) return listOfflineRecipes(user.id, filters);
       try {
         const response = await apiFetch<RecipesResponse>(
-          `/api/recipes?${queryString(filters, pageParam, limit)}`,
+          recipes(queryString(filters, pageParam, limit)),
         );
         if (user) await cacheOfflineRecipeSummaries(user.id, response.recipes);
         return response;
@@ -115,7 +218,7 @@ export function useRecentRecipes(limit = 6) {
         return { ...local, recipes: local.recipes.slice(0, limit), total: local.total };
       }
       try {
-        const response = await apiFetch<RecipesResponse>(`/api/recipes?limit=${limit}`);
+        const response = await apiFetch<RecipesResponse>(recipes(`limit=${limit}`));
         if (user) await cacheOfflineRecipeSummaries(user.id, response.recipes);
         return response;
       } catch (error) {
@@ -134,7 +237,7 @@ export function useRecentRecipes(limit = 6) {
 export function usePublicRecipes(limit = 8) {
   return useQuery({
     queryKey: recipeKeys.public(limit),
-    queryFn: () => apiFetch<PublicRecipesResponse>(`/api/recipes/explore?limit=${limit}`),
+    queryFn: () => apiFetch<PublicRecipesResponse>(publicRecipes(`limit=${limit}`)),
   });
 }
 
@@ -150,9 +253,9 @@ export function useRecipe(id: string | null) {
         throw new Error('This recipe has not been saved for offline use yet.');
       }
       try {
-        const recipe = await apiFetch<RecipeDetail>(`/api/recipes/${encodeURIComponent(recipeId)}`);
-        if (user) await cacheOfflineRecipe(user.id, recipe);
-        return recipe;
+        const detail = await apiFetch<RecipeDetail>(recipe(recipeId));
+        if (user) await cacheOfflineRecipe(user.id, detail);
+        return detail;
       } catch (error) {
         if (!user) throw error;
         const local = await getOfflineRecipe(user.id, recipeId);
@@ -172,8 +275,7 @@ export function useRecipe(id: string | null) {
 export function usePublicRecipe(id: string | null) {
   return useQuery({
     queryKey: recipeKeys.publicDetail(id ?? ''),
-    queryFn: () =>
-      apiFetch<PublicRecipeDetail>(`/api/recipes/explore/${encodeURIComponent(id ?? '')}`),
+    queryFn: () => apiFetch<PublicRecipeDetail>(publicRecipe(id ?? '')),
     enabled: Boolean(id),
   });
 }

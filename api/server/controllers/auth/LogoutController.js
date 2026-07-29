@@ -65,7 +65,8 @@ const logoutController = async (req, res) => {
         if (endSessionEndpoint) {
           const endSessionUrl = new URL(endSessionEndpoint);
           const postLogoutRedirectUri =
-            process.env.OPENID_POST_LOGOUT_REDIRECT_URI || `${process.env.DOMAIN_CLIENT}/login`;
+            process.env.OPENID_POST_LOGOUT_REDIRECT_URI ||
+            new URL('/', process.env.DOMAIN_CLIENT).toString();
           endSessionUrl.searchParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
 
           /**

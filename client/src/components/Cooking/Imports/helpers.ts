@@ -23,11 +23,15 @@ export const viewFilters: ViewFilter[] = ['all', 'ready', 'needs_help', 'process
 export const sourceFilters: SourceFilter[] = ['all', 'youtube', 'instagram', 'tiktok', 'web'];
 
 export const recipeCategories = [
-  { id: 'all', label: 'All Categories' },
-  { id: 'chicken', label: 'Chicken', keywords: ['chicken'] },
+  { id: 'all', labelKey: 'com_social_imports_filter_all_categories' as const },
+  {
+    id: 'chicken',
+    labelKey: 'com_social_imports_category_chicken' as const,
+    keywords: ['chicken'],
+  },
   {
     id: 'dessert',
-    label: 'Desserts & Baking',
+    labelKey: 'com_social_imports_category_dessert' as const,
     keywords: [
       'cake',
       'dessert',
@@ -45,20 +49,24 @@ export const recipeCategories = [
       'pie',
     ],
   },
-  { id: 'pizza', label: 'Pizza', keywords: ['pizza'] },
+  {
+    id: 'pizza',
+    labelKey: 'com_social_imports_category_pizza' as const,
+    keywords: ['pizza'],
+  },
   {
     id: 'pasta',
-    label: 'Pasta & Noodles',
+    labelKey: 'com_social_imports_category_pasta' as const,
     keywords: ['pasta', 'noodle', 'spaghetti', 'lasagna', 'pad thai', 'macaroni'],
   },
   {
     id: 'bread',
-    label: 'Bread & Dough',
+    labelKey: 'com_social_imports_category_bread' as const,
     keywords: ['bread', 'pita', 'dough', 'bun', 'croissant', 'bagel'],
   },
   {
     id: 'sauce',
-    label: 'Sauces & Dips',
+    labelKey: 'com_social_imports_category_sauce' as const,
     keywords: [
       'sauce',
       'dip',
@@ -75,15 +83,19 @@ export const recipeCategories = [
   },
   {
     id: 'sandwich',
-    label: 'Sandwiches & Burgers',
+    labelKey: 'com_social_imports_category_sandwich' as const,
     keywords: ['sandwich', 'burger', 'sub', 'hoagie', 'panini'],
   },
   {
     id: 'breakfast',
-    label: 'Breakfast & Eggs',
+    labelKey: 'com_social_imports_category_breakfast' as const,
     keywords: ['breakfast', 'egg', 'toast', 'pancake', 'omelette', 'omurice', 'french toast'],
   },
-  { id: 'soup', label: 'Soups & Stews', keywords: ['soup', 'broth', 'stew', 'ramen'] },
+  {
+    id: 'soup',
+    labelKey: 'com_social_imports_category_soup' as const,
+    keywords: ['soup', 'broth', 'stew', 'ramen'],
+  },
 ];
 
 export const viewLabelKeys: Record<ViewFilter, TranslationKeys> = {

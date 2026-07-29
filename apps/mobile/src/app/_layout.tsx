@@ -35,6 +35,10 @@ function Navigation() {
   useEffect(() => {
     if (status === 'restoring' || !ready) return;
     void SplashScreen.hideAsync();
+    if (status === 'signingOut' && pathname !== '/sign-in') {
+      router.replace('/sign-in');
+      return;
+    }
     if (
       status === 'signedIn' &&
       ['/', '/sign-in', '/register', '/two-factor', '/check-email', '/forgot-password'].includes(

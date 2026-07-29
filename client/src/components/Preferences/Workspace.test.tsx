@@ -134,8 +134,8 @@ describe('PreferencesWorkspace', () => {
     render(<PreferencesWorkspace />);
 
     expect(screen.getByRole('heading', { name: 'Your cooking profile' })).toHaveClass(
-      'text-[2.55rem]',
-      'sm:text-6xl',
+      'text-[1.9rem]',
+      'sm:text-[2.5rem]',
     );
     expect(screen.queryByText('At a glance')).not.toBeInTheDocument();
     expect(

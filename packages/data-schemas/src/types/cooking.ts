@@ -44,6 +44,7 @@ export interface ISavedRecipe extends Document {
   favorite: boolean;
   pinned: boolean;
   personalNotes?: string;
+  workspaceState?: SavedRecipe['workspaceState'];
   lastCookedAt?: Date;
   recipe?: StructuredRecipe;
   sourceConversationId?: string;
@@ -56,6 +57,22 @@ export interface ISavedRecipe extends Document {
   tenantId?: string;
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+export interface IRecipeTombstone extends Document {
+  deletedAt: Date;
+  recipeId: string;
+  state: 'pending' | 'committed';
+  tenantId?: string;
+  user: string;
+}
+
+export interface ISocialImportTombstone extends Document {
+  deletedAt: Date;
+  importId: string;
+  state: 'pending' | 'committed';
+  tenantId?: string;
+  user: string;
 }
 
 export interface ISocialImport extends Document {

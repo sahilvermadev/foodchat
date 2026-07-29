@@ -1,10 +1,12 @@
 import React from 'react';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/extend-expect';
 import type { CookingDraft } from 'librechat-data-provider';
 import RecipeCanvas, { KitchenTimer } from './RecipeCanvas';
 
 const mockSaveRecipe = jest.fn();
+const mockSaveRecipeAsync = jest.fn();
+const mockAddShoppingItems = jest.fn();
 const mockUseRecipeQuery = jest.fn();
 const mockUseSavedRecipeByDraftQuery = jest.fn();
 
@@ -53,7 +55,12 @@ jest.mock('~/components/Web', () => ({
 }));
 
 jest.mock('~/data-provider', () => ({
-  useSaveRecipeMutation: () => ({ isLoading: false, mutate: mockSaveRecipe }),
+  useAddShoppingItemsMutation: () => ({ isLoading: false, mutate: mockAddShoppingItems }),
+  useSaveRecipeMutation: () => ({
+    isLoading: false,
+    mutate: mockSaveRecipe,
+    mutateAsync: mockSaveRecipeAsync,
+  }),
   useRecipeQuery: (...args: unknown[]) => mockUseRecipeQuery(...args),
   useSavedRecipeByDraftQuery: (...args: unknown[]) => mockUseSavedRecipeByDraftQuery(...args),
   useUpdateSavedRecipeMutation: () => ({ isLoading: false, mutate: jest.fn() }),
@@ -136,6 +143,9 @@ function draftWithIngredients(ingredients: CookingDraft['recipe']['ingredients']
 describe('RecipeCanvas recipe data display', () => {
   beforeEach(() => {
     mockSaveRecipe.mockClear();
+    mockSaveRecipeAsync.mockReset();
+    mockSaveRecipeAsync.mockResolvedValue({ _id: 'recipe-1' });
+    mockAddShoppingItems.mockReset();
     mockUseRecipeQuery.mockReset();
     mockUseRecipeQuery.mockReturnValue({ data: null });
     mockUseSavedRecipeByDraftQuery.mockReset();
@@ -271,7 +281,7 @@ describe('RecipeCanvas recipe data display', () => {
 
     expect(screen.getByTestId('structured-ingredients')).toHaveTextContent('chicken');
     expect(screen.getByLabelText('500g chicken').closest('label')).toHaveClass(
-      'grid-cols-[minmax(3.75rem,auto)_minmax(0,1fr)]',
+      'grid-cols-[auto_minmax(4.5rem,auto)_minmax(0,1fr)]',
     );
     expect(screen.getByTestId('markdown-body')).not.toHaveTextContent('stale markdown chicken');
     expect(screen.getByTestId('markdown-body')).toHaveTextContent('## Instructions');
@@ -296,12 +306,12 @@ describe('RecipeCanvas recipe data display', () => {
     const saveButton = screen.getByRole('button', { name: 'com_recipes_save_recipe' });
     const copyButton = screen.getByRole('button', { name: 'com_cooking_copy_markdown' });
 
-    expect(saveButton).toHaveClass('size-11', 'bg-transparent', 'text-surface-submit');
-    expect(within(saveButton).getByText('com_recipes_save_recipe')).toHaveClass(
-      'hidden',
-      'sm:inline',
-    );
+    expect(saveButton).toHaveClass('min-h-11', 'bg-surface-submit', 'text-text-submit');
+    expect(within(saveButton).getByText('com_recipes_save_recipe')).toBeVisible();
     expect(copyButton).toHaveClass('size-11');
+    expect(screen.getByTestId('recipe-document')).toContainElement(
+      screen.getByRole('heading', { name: 'Changezi Chicken' }),
+    );
     expect(
       screen
         .getByRole('heading', { name: 'Changezi Chicken' })
@@ -315,6 +325,50 @@ describe('RecipeCanvas recipe data display', () => {
         sourceDraftId: 'draft-1',
         saveList: 'cooked_already',
       }),
+    );
+  });
+
+  test('saves an unsaved canvas recipe before adding its ingredients to shopping', async () => {
+    const draft = draftWithIngredients([
+      {
+        id: 'ingredient-1',
+        originalText: '500g chicken',
+        quantity: 500,
+        unit: 'g',
+        item: 'chicken',
+        quantityType: 'measured',
+      },
+    ]);
+
+    render(
+      <RecipeCanvas
+        markdown="# Changezi Chicken"
+        conversationId="convo-1"
+        isPreparingDraft={false}
+        draft={draft}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'com_recipe_add_to_shopping' }));
+    expect(screen.getByText('com_recipe_shopping_saves_recipe')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'com_recipe_add_selected' }));
+
+    await waitFor(() =>
+      expect(mockSaveRecipeAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ saveList: 'want_to_cook', sourceDraftId: 'draft-1' }),
+      ),
+    );
+    expect(mockAddShoppingItems).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          displayName: 'chicken',
+          recipeReference: expect.objectContaining({
+            recipeId: 'recipe-1',
+            recipeTitle: 'Changezi Chicken',
+          }),
+        }),
+      ],
+      expect.any(Object),
     );
   });
 

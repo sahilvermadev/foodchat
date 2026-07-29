@@ -226,20 +226,21 @@ function SuggestionLink({
         }
       }}
       className={cn(
-        'group inline-flex min-h-8 shrink-0 items-center whitespace-nowrap rounded-full border border-black/10 bg-black/[0.02] px-2.5 py-1.5 text-left transition-colors duration-150 dark:border-white/10 dark:bg-white/[0.025]',
+        'bg-surface-secondary/60 group inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border border-border-light px-3 py-2 text-left transition-colors duration-150',
         'min-[769px]:mx-auto min-[769px]:block min-[769px]:min-h-0 min-[769px]:w-full min-[769px]:max-w-xl min-[769px]:whitespace-normal min-[769px]:rounded-none min-[769px]:border-0 min-[769px]:bg-transparent min-[769px]:px-0 min-[769px]:py-0 dark:min-[769px]:bg-transparent',
-        'hover:border-[#c1121f]/20 hover:bg-[#c1121f]/[0.04] hover:text-text-primary dark:hover:border-[#c1121f]/25 dark:hover:bg-[#c1121f]/[0.07] dark:hover:text-gray-50 min-[769px]:hover:bg-transparent min-[769px]:hover:underline min-[769px]:hover:decoration-[#c1121f]/35 min-[769px]:hover:underline-offset-4 dark:min-[769px]:hover:bg-transparent dark:min-[769px]:hover:decoration-[#c1121f]/45',
-        'focus-visible:border-[#c1121f]/25 focus-visible:bg-[#c1121f]/[0.05] focus-visible:text-text-primary focus-visible:outline-none dark:focus-visible:border-[#c1121f]/35 dark:focus-visible:bg-[#c1121f]/[0.08] dark:focus-visible:text-gray-50 min-[769px]:focus-visible:bg-transparent min-[769px]:focus-visible:underline min-[769px]:focus-visible:decoration-[#c1121f]/40 min-[769px]:focus-visible:underline-offset-4 dark:min-[769px]:focus-visible:bg-transparent',
+        'hover:bg-surface-hover min-[769px]:hover:bg-transparent min-[769px]:hover:underline min-[769px]:hover:decoration-surface-submit min-[769px]:hover:underline-offset-4',
+        'focus-visible:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary min-[769px]:focus-visible:bg-transparent',
+        'active:bg-surface-active min-[769px]:active:bg-transparent',
         disabled && 'cursor-not-allowed opacity-50 hover:no-underline',
       )}
     >
-      <span className="hidden text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary transition-colors duration-150 group-hover:text-[#c1121f] dark:text-gray-500 dark:group-hover:text-[#e63946] min-[769px]:mb-1 min-[769px]:block">
+      <span className="hidden text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary min-[769px]:mb-1 min-[769px]:block">
         {useTitleLabel ? title : slotLabels[element.props.slot]}
       </span>
-      <span className="block text-[11px] font-medium leading-4 text-text-secondary transition-colors duration-150 group-hover:text-text-primary dark:text-gray-200/90 dark:group-hover:text-gray-50 min-[769px]:hidden">
+      <span className="block text-[11px] font-medium leading-4 text-text-secondary transition-colors duration-150 group-hover:text-text-primary min-[769px]:hidden">
         {title}
       </span>
-      <span className="mt-1 hidden min-w-0 text-[14px] leading-6 text-text-secondary transition-colors duration-150 group-hover:text-text-primary dark:text-gray-300/75 dark:group-hover:text-gray-50 min-[769px]:block">
+      <span className="mt-1 hidden min-w-0 text-[14px] leading-6 text-text-secondary transition-colors duration-150 group-hover:text-text-primary min-[769px]:block">
         {text}
       </span>
     </button>

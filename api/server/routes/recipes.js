@@ -64,6 +64,41 @@ function assertSaveList(value) {
   }
 }
 
+function assertWorkspaceState(value) {
+  if (value == null) return;
+  if (!isObject(value)) {
+    throw new CookingValidationError('Recipe workspace state is malformed.');
+  }
+  if (!Number.isFinite(value.servings) || value.servings < 1) {
+    throw new CookingValidationError('Recipe workspace servings are malformed.');
+  }
+  if (!['original', 'metric', 'imperial'].includes(value.unitMode)) {
+    throw new CookingValidationError('Recipe workspace units are malformed.');
+  }
+  if (
+    !Array.isArray(value.checkedIngredientIds) ||
+    value.checkedIngredientIds.some((id) => typeof id !== 'string')
+  ) {
+    throw new CookingValidationError('Recipe workspace ingredient checks are malformed.');
+  }
+  if (!Array.isArray(value.timers)) {
+    throw new CookingValidationError('Recipe workspace timers are malformed.');
+  }
+  const invalidTimer = value.timers.some(
+    (timer) =>
+      !isObject(timer) ||
+      typeof timer.id !== 'string' ||
+      typeof timer.label !== 'string' ||
+      !Number.isFinite(timer.remaining) ||
+      timer.remaining < 0 ||
+      typeof timer.running !== 'boolean' ||
+      (timer.endsAt != null && !Number.isFinite(timer.endsAt)),
+  );
+  if (invalidTimer) {
+    throw new CookingValidationError('Recipe workspace timers are malformed.');
+  }
+}
+
 function assertSaveBody(body) {
   const payload = isObject(body) ? body : {};
   assertDocumentMarkdown(payload.documentMarkdown);
@@ -95,6 +130,7 @@ function assertPatchBody(body) {
     throw new CookingValidationError('Recipe pin is malformed.');
   }
   assertOptionalText(payload.personalNotes, 'Recipe notes are malformed.');
+  assertWorkspaceState(payload.workspaceState);
   if (payload.documentMarkdown != null) {
     assertDocumentMarkdown(payload.documentMarkdown);
   }
@@ -109,7 +145,8 @@ function assertPatchBody(body) {
     payload.collections == null &&
     payload.favorite == null &&
     payload.pinned == null &&
-    payload.personalNotes == null
+    payload.personalNotes == null &&
+    payload.workspaceState == null
   ) {
     throw new CookingValidationError('Recipe update is empty.');
   }

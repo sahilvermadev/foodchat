@@ -412,9 +412,10 @@ export type TAuthContext = {
   token: string | undefined;
   isAuthenticated: boolean;
   isAuthResolved: boolean;
+  isLoggingOut: boolean;
   error: string | undefined;
   login: (data: t.TLoginUser) => void;
-  logout: (redirect?: string) => void;
+  logout: () => void;
   setError: React.Dispatch<React.SetStateAction<string | undefined>>;
   roles?: Record<string, t.TRole | null | undefined>;
 };

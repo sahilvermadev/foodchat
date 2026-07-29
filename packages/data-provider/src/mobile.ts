@@ -1,6 +1,40 @@
 export * from './sse';
 export * from './cooking-stream';
 export * from './shopping';
+export {
+  cookingDocument,
+  cookingDocumentsByConversation,
+  cookingVoiceConfig,
+  cookingVoiceTurns,
+  offlineRecipes,
+  preferences,
+  publicRecipe,
+  publicRecipes,
+  recipe,
+  recipeByDraft,
+  recipeFacets,
+  recipes,
+  selectCookingDocument,
+  shoppingClearPurchased,
+  shoppingContribution,
+  shoppingItem,
+  shoppingItems,
+  shoppingList,
+  shoppingMerge,
+  socialImport,
+  socialImportDraft,
+  socialImportRetry,
+  socialImports,
+  socialPlaylist,
+  socialPlaylists,
+  socialPlaylistSync,
+} from './api-endpoints';
+export {
+  formatRecipeQuantity,
+  recipeIngredientParts,
+  recipeIngredientText,
+  scaledYieldText,
+} from './recipe-format';
 export type {
   AddShoppingItemInput,
   AddShoppingItemsRequest,

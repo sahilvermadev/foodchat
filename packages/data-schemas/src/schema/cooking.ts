@@ -1,6 +1,8 @@
 import { Schema } from 'mongoose';
 import type {
   ICookingDraft,
+  IRecipeTombstone,
+  ISocialImportTombstone,
   ISavedRecipe,
   ISocialImport,
   ISocialImportJob,
@@ -43,6 +45,32 @@ const ingredientSchema = new Schema(
       required: true,
       default: 'measured',
     },
+  },
+  { _id: false },
+);
+
+const workspaceTimerSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    label: { type: String, required: true },
+    remaining: { type: Number, required: true, min: 0 },
+    running: { type: Boolean, required: true },
+    endsAt: { type: Number },
+  },
+  { _id: false },
+);
+
+const recipeWorkspaceStateSchema = new Schema(
+  {
+    servings: { type: Number, required: true, min: 1 },
+    unitMode: {
+      type: String,
+      enum: ['original', 'metric', 'imperial'],
+      required: true,
+    },
+    checkedIngredientIds: { type: [String], default: [] },
+    timers: { type: [workspaceTimerSchema], default: [] },
+    updatedAt: { type: Date, required: true },
   },
   { _id: false },
 );
@@ -190,6 +218,7 @@ export const savedRecipeSchema = new Schema<ISavedRecipe>(
     favorite: { type: Boolean, default: false, required: true },
     pinned: { type: Boolean, default: false, required: true },
     personalNotes: { type: String, default: '' },
+    workspaceState: { type: recipeWorkspaceStateSchema },
     lastCookedAt: { type: Date },
     recipe: { type: structuredRecipeSchema },
     sourceConversationId: { type: String, index: true },
@@ -226,6 +255,36 @@ savedRecipeSchema.index({ user: 1, 'categorization.difficulty': 1, tenantId: 1 }
 savedRecipeSchema.index({ user: 1, 'categorization.timeBucket': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.mainIngredients': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.equipment': 1, tenantId: 1 });
+
+export const recipeTombstoneSchema = new Schema<IRecipeTombstone>(
+  {
+    deletedAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 90, required: true },
+    recipeId: { type: String, required: true },
+    state: { type: String, enum: ['pending', 'committed'], default: 'pending', required: true },
+    tenantId: { type: String, index: true },
+    user: { type: String, index: true, required: true },
+  },
+  { timestamps: false },
+);
+
+recipeTombstoneSchema.index({ user: 1, deletedAt: 1, tenantId: 1 });
+recipeTombstoneSchema.index({ user: 1, state: 1, tenantId: 1 });
+recipeTombstoneSchema.index({ user: 1, recipeId: 1, tenantId: 1 }, { unique: true });
+
+export const socialImportTombstoneSchema = new Schema<ISocialImportTombstone>(
+  {
+    deletedAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 90, required: true },
+    importId: { type: String, required: true },
+    state: { type: String, enum: ['pending', 'committed'], default: 'pending', required: true },
+    tenantId: { type: String, index: true },
+    user: { type: String, index: true, required: true },
+  },
+  { timestamps: false },
+);
+
+socialImportTombstoneSchema.index({ user: 1, deletedAt: 1, tenantId: 1 });
+socialImportTombstoneSchema.index({ user: 1, state: 1, tenantId: 1 });
+socialImportTombstoneSchema.index({ user: 1, importId: 1, tenantId: 1 }, { unique: true });
 
 export const socialImportSchema = new Schema<ISocialImport>(
   {

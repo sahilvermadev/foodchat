@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import type { FilterQuery } from 'mongoose';
 import type {
   OfflineRecipesResponse,
   RecipeCategorization,
@@ -32,6 +33,7 @@ import {
 } from '../illustrations/media';
 import type { IllustrationMedia } from '../illustrations/media';
 import { CookingValidationError, normalizeRecipe } from '../cooking/validation';
+import { encodeTimestampCursor, parseTimestampCursor } from '../pagination';
 
 const maxLimit = 50;
 const pendingTimeoutMs = 1000 * 60 * 2;
@@ -52,7 +54,7 @@ type RecipeListFilter = {
   collections?: string | RegExp | { $in: Array<string | RegExp> };
   favorite?: boolean;
   pinned?: boolean;
-  updatedAt?: { $lt: Date };
+  updatedAt?: { $gt?: Date; $lt?: Date; $lte?: Date };
   $or?: Array<{ title?: RegExp; shortDescription?: RegExp; documentMarkdown?: RegExp }>;
   'categorization.cuisine'?: string | RegExp | { $in: Array<string | RegExp> };
   'categorization.mealType'?: string | RegExp | { $in: Array<string | RegExp> };
@@ -67,8 +69,8 @@ function idOf(doc: { _id: unknown }): string {
   return String(doc._id);
 }
 
-function iso(date?: Date): string {
-  return (date ?? new Date()).toISOString();
+function iso(date?: Date | string): string {
+  return typeof date === 'string' ? date : (date ?? new Date()).toISOString();
 }
 
 function model() {
@@ -81,6 +83,21 @@ function userModel() {
 
 function socialImportModel() {
   return mongoose.model<ISocialImport>('SocialImport');
+}
+
+async function reconcileRecipeDeletions(user: string): Promise<void> {
+  const tombstones = await mongoose.models.RecipeTombstone.find({ state: 'pending', user }).select(
+    '_id recipeId',
+  );
+  if (!tombstones.length) return;
+  await model().deleteMany({
+    _id: { $in: tombstones.map((tombstone) => tombstone.recipeId) },
+    user,
+  });
+  await mongoose.models.RecipeTombstone.updateMany(
+    { _id: { $in: tombstones.map((tombstone) => tombstone._id) }, user },
+    { $set: { deletedAt: new Date(), state: 'committed' } },
+  );
 }
 
 async function fetchExternalImage(url: string): Promise<IllustrationMedia | null> {
@@ -518,10 +535,6 @@ export function parseYieldFromMarkdown(markdown?: string): string | undefined {
   return undefined;
 }
 
-function serializeRecipe(recipe?: StructuredRecipe): StructuredRecipe | undefined {
-  return recipe ? normalizeRecipe(recipe) : undefined;
-}
-
 function canonicalRecipe(
   recipe: StructuredRecipe | undefined,
   documentMarkdown: string,
@@ -647,6 +660,30 @@ function serializeSavedRecipe(recipe: ISavedRecipe, thumbnail = false): SavedRec
     favorite: recipe.favorite ?? false,
     pinned: recipe.pinned ?? false,
     ...(recipe.personalNotes ? { personalNotes: recipe.personalNotes } : {}),
+    ...(recipe.workspaceState
+      ? {
+          workspaceState: {
+            servings: recipe.workspaceState.servings,
+            unitMode: recipe.workspaceState.unitMode,
+            checkedIngredientIds: [...recipe.workspaceState.checkedIngredientIds],
+            timers: recipe.workspaceState.timers.map((timer) => {
+              const remaining =
+                timer.running && timer.endsAt != null
+                  ? Math.max(0, Math.ceil((timer.endsAt - Date.now()) / 1000))
+                  : timer.remaining;
+              const running = timer.running && remaining > 0;
+              return {
+                id: timer.id,
+                label: timer.label,
+                remaining,
+                running,
+                ...(running && timer.endsAt != null ? { endsAt: timer.endsAt } : {}),
+              };
+            }),
+            updatedAt: iso(recipe.workspaceState.updatedAt),
+          },
+        }
+      : {}),
     ...(recipe.lastCookedAt ? { lastCookedAt: iso(recipe.lastCookedAt) } : {}),
     ...(structuredRecipe ? { recipe: structuredRecipe } : {}),
     ...(recipeYield ? { yield: recipeYield } : {}),
@@ -1532,6 +1569,7 @@ export async function listRecipes(
   user: string,
   query: SavedRecipesQuery,
 ): Promise<SavedRecipesResponse> {
+  await reconcileRecipeDeletions(user);
   await repairLegacyWrapperTitles(user);
   await repairLegacySaveLists(user);
   await repairLegacyImportedIllustrations(user);
@@ -1610,8 +1648,9 @@ export async function listRecipes(
 
 export async function listOfflineRecipes(
   user: string,
-  query: Pick<SavedRecipesQuery, 'cursor' | 'limit'> = {},
+  query: Pick<SavedRecipesQuery, 'cursor' | 'limit'> & { since?: string; until?: string } = {},
 ): Promise<OfflineRecipesResponse> {
+  await reconcileRecipeDeletions(user);
   await repairLegacyWrapperTitles(user);
   await repairLegacySaveLists(user);
   await repairLegacyImportedIllustrations(user);
@@ -1619,23 +1658,58 @@ export async function listOfflineRecipes(
   await failStalePending(user);
   const limit = Math.min(Math.max(Number(query.limit) || maxLimit, 1), 100);
   const filter: RecipeListFilter = { user };
-  if (query.cursor) {
-    const cursor = new Date(query.cursor);
-    if (!Number.isNaN(cursor.getTime())) filter.updatedAt = { $lt: cursor };
+  const sinceValue = typeof query.since === 'string' ? query.since : undefined;
+  const since = sinceValue ? new Date(sinceValue) : undefined;
+  const requestedUntil = query.until ? new Date(query.until) : undefined;
+  const until =
+    requestedUntil && !Number.isNaN(requestedUntil.getTime()) ? requestedUntil : new Date();
+  filter.updatedAt = { $lte: until };
+  if (since && !Number.isNaN(since.getTime())) filter.updatedAt.$gt = since;
+  const cursor = parseTimestampCursor(query.cursor);
+  let pageFilter: FilterQuery<ISavedRecipe> = filter;
+  if (cursor?.id && mongoose.isValidObjectId(cursor.id)) {
+    pageFilter = {
+      $and: [
+        filter,
+        {
+          $or: [
+            { updatedAt: { $lt: cursor.timestamp } },
+            {
+              _id: { $lt: new mongoose.Types.ObjectId(cursor.id) },
+              updatedAt: cursor.timestamp,
+            },
+          ],
+        },
+      ],
+    };
+  } else if (cursor) {
+    pageFilter = { ...filter, updatedAt: { ...filter.updatedAt, $lt: cursor.timestamp } };
   }
   const recipes = await model()
-    .find(filter)
+    .find(pageFilter)
     .select('-illustrationData')
-    .sort({ updatedAt: -1 })
+    .sort({ updatedAt: -1, _id: -1 })
     .limit(limit + 1);
   scheduleMissingIllustrations(recipes);
   scheduleMissingCategorizations(recipes);
   const page = recipes.slice(0, limit);
   const next = recipes.length > limit ? recipes[limit - 1] : undefined;
+  const nextCursor = next?.updatedAt
+    ? encodeTimestampCursor(next.updatedAt, idOf(next))
+    : undefined;
+  const deletedIds =
+    since && !Number.isNaN(since.getTime())
+      ? ((await mongoose.models.RecipeTombstone.find({
+          user,
+          state: { $ne: 'pending' },
+          deletedAt: { $gt: since, $lte: until },
+        }).distinct('recipeId')) as string[])
+      : [];
   return {
+    deletedIds,
     recipes: page.map((recipe) => serializeSavedRecipe(recipe)),
-    syncedAt: iso(new Date()),
-    ...(next?.updatedAt ? { nextCursor: next.updatedAt.toISOString() } : {}),
+    syncedAt: iso(until),
+    ...(nextCursor ? { nextCursor } : {}),
   };
 }
 
@@ -1689,6 +1763,21 @@ export async function updateSavedRecipe(
   if (payload.personalNotes != null) {
     existing.personalNotes = payload.personalNotes.trim().slice(0, 5000);
   }
+  if (payload.workspaceState) {
+    existing.workspaceState = {
+      servings: Math.max(1, Math.round(payload.workspaceState.servings)),
+      unitMode: payload.workspaceState.unitMode,
+      checkedIngredientIds: [...new Set(payload.workspaceState.checkedIngredientIds)].slice(0, 500),
+      timers: payload.workspaceState.timers.slice(0, 20).map((timer) => ({
+        id: timer.id.trim().slice(0, 200),
+        label: timer.label.trim().slice(0, 200),
+        remaining: Math.max(0, Math.round(timer.remaining)),
+        running: timer.running,
+        ...(timer.endsAt != null ? { endsAt: timer.endsAt } : {}),
+      })),
+      updatedAt: new Date().toISOString(),
+    };
+  }
   if (existing.saveList === 'cooked_already' && previousSaveList !== 'cooked_already') {
     existing.lastCookedAt = new Date();
   }
@@ -1730,8 +1819,15 @@ export async function updateSavedRecipe(
 }
 
 export async function deleteSavedRecipe(user: string, recipeId: string): Promise<boolean> {
-  const result = await model().deleteOne({ _id: recipeId, user });
-  return result.deletedCount === 1;
+  const exists = await model().exists({ _id: recipeId, user });
+  if (!exists) return false;
+  await mongoose.models.RecipeTombstone.updateOne(
+    { recipeId, user },
+    { $set: { deletedAt: new Date(), state: 'pending' } },
+    { upsert: true },
+  );
+  await reconcileRecipeDeletions(user);
+  return true;
 }
 
 export { CookingValidationError };

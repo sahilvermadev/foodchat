@@ -1,4 +1,4 @@
-import type { StructuredRecipe } from 'librechat-data-provider';
+import type { RecipeWorkspaceState, StructuredRecipe } from 'librechat-data-provider';
 
 export type { StructuredRecipe } from 'librechat-data-provider';
 
@@ -35,15 +35,21 @@ export type RecipeSummary = {
   favorite: boolean;
   pinned: boolean;
   personalNotes?: string;
+  workspaceState?: RecipeWorkspaceState;
   lastCookedAt?: string;
   sourceUrl?: string;
   updatedAt: string;
+  createdAt?: string;
 };
 
 export type RecipeDetail = RecipeSummary & {
   documentMarkdown: string;
   recipe?: StructuredRecipe;
   sourceConversationId?: string;
+};
+
+export type RecipeUpdate = Omit<Partial<RecipeDetail>, 'workspaceState'> & {
+  workspaceState?: Omit<RecipeWorkspaceState, 'updatedAt'>;
 };
 
 export type RecipeSort =
@@ -83,13 +89,7 @@ export type PublicRecipeAuthor = {
 
 export type PublicRecipeSummary = Omit<
   RecipeSummary,
-  | 'saveList'
-  | 'collections'
-  | 'favorite'
-  | 'pinned'
-  | 'lastCookedAt'
-  | 'sourceUrl'
-  | 'totalMinutes'
+  'saveList' | 'collections' | 'favorite' | 'pinned' | 'lastCookedAt' | 'sourceUrl' | 'totalMinutes'
 > & {
   author: PublicRecipeAuthor;
 };

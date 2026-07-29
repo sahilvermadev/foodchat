@@ -35,6 +35,8 @@ import { createSpecialtyIngredientModel } from './ingredient';
 import { createShoppingListModel } from './shopping';
 import {
   createSavedRecipeModel,
+  createRecipeTombstoneModel,
+  createSocialImportTombstoneModel,
   createCookingDraftModel,
   createSocialImportModel,
   createSocialImportJobModel,
@@ -84,6 +86,8 @@ export function createModels(mongoose: typeof import('mongoose')) {
     SpecialtyIngredient: createSpecialtyIngredientModel(mongoose),
     ShoppingList: createShoppingListModel(mongoose),
     SavedRecipe: createSavedRecipeModel(mongoose),
+    RecipeTombstone: createRecipeTombstoneModel(mongoose),
+    SocialImportTombstone: createSocialImportTombstoneModel(mongoose),
     CookingDraft: createCookingDraftModel(mongoose),
     SocialImport: createSocialImportModel(mongoose),
     SocialImportJob: createSocialImportJobModel(mongoose),

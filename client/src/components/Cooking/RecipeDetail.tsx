@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Edit3, MessageSquare } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Edit3,
+  Heart,
+  MessageSquare,
+  MoreHorizontal,
+  Pin,
+} from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Button, Input, TextareaAutosize } from '@librechat/client';
 import { EModelEndpoint } from 'librechat-data-provider';
@@ -11,74 +19,22 @@ import {
 } from '~/data-provider';
 import { useLocalize, useNewConvo } from '~/hooks';
 import RecipeMetrics from './Metrics';
+import RecipeDocument, { RecipeDetailsDisclosure } from './RecipeDocument';
 import RecipeHeaderAction from './RecipeHeaderAction';
+import RecipeInstructions, { hasDisplayableInstructions } from './RecipeInstructions';
 import StructuredIngredients, { hasDisplayableIngredients } from './StructuredIngredients';
 import {
   recipeBodyMarkdown,
   recipeDisplayTitle,
   recipeMarkdownDisplay,
-  stripIngredientsSection,
+  structuredRecipeMarkdownSections,
 } from './recipe';
-
-function arrayChips(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string')
-    : [];
-}
-
-function categoryChips(recipe: ReturnType<typeof useRecipeQuery>['data']): string[] {
-  const categorization = recipe?.categorization;
-  if (!categorization) {
-    return [];
-  }
-  return [
-    ...arrayChips(categorization.cuisine),
-    ...arrayChips(categorization.mealType),
-    ...arrayChips(categorization.dishType),
-    ...arrayChips(categorization.diet),
-    categorization.difficulty ?? '',
-    categorization.timeBucket ?? '',
-    ...arrayChips(categorization.occasion),
-    ...arrayChips(categorization.equipment),
-    ...arrayChips(categorization.mainIngredients),
-    ...arrayChips(categorization.techniques),
-    ...arrayChips(categorization.flavorProfile),
-  ].filter(Boolean);
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values.filter(Boolean))];
-}
-
-function displayTag(value: string): string {
-  return value.replace(/_/g, ' ');
-}
-
-function metadataTags(recipe: ReturnType<typeof useRecipeQuery>['data']): string[] {
-  const categorization = recipe?.categorization;
-  if (!categorization) {
-    return [];
-  }
-  return unique([
-    ...arrayChips(categorization.cuisine),
-    ...arrayChips(categorization.mealType),
-    categorization.timeBucket ?? '',
-    ...arrayChips(categorization.diet),
-  ]).slice(0, 6);
-}
-
-function compactMetadataTags(recipe: ReturnType<typeof useRecipeQuery>['data']): string[] {
-  const categorization = recipe?.categorization;
-  if (!categorization) {
-    return [];
-  }
-  return unique([
-    ...arrayChips(categorization.cuisine),
-    ...arrayChips(categorization.mealType),
-    ...arrayChips(categorization.dishType),
-    ...arrayChips(categorization.diet),
-  ]).slice(0, 4);
-}
+import {
+  recipeSourceLabel,
+  savedRecipePresentation,
+  uniqueRecipeValues,
+} from './recipePresentation';
+import useRecipeWorkspace from './useRecipeWorkspace';
 
 function documentTypeLabel(
   localize: ReturnType<typeof useLocalize>,
@@ -110,31 +66,6 @@ function formatRecipeDate(value?: string): string {
   }).format(date);
 }
 
-function getSourceLabel(url: string): string {
-  try {
-    const parsed = new URL(url);
-    const hostname = parsed.hostname.toLowerCase().replace('www.', '');
-    if (hostname === 'youtube.com' || hostname === 'youtu.be') {
-      return 'YouTube';
-    }
-    if (hostname === 'cooking.nytimes.com') {
-      return 'NYT Cooking';
-    }
-    if (hostname === 'nytimes.com') {
-      return 'New York Times';
-    }
-    if (hostname === 'instagram.com') {
-      return 'Instagram';
-    }
-    if (hostname === 'tiktok.com') {
-      return 'TikTok';
-    }
-    return hostname;
-  } catch {
-    return 'Source';
-  }
-}
-
 export default function RecipeDetail() {
   const localize = useLocalize();
   const { recipeId } = useParams();
@@ -144,6 +75,8 @@ export default function RecipeDetail() {
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftMarkdown, setDraftMarkdown] = useState('');
+  const [draftCollections, setDraftCollections] = useState('');
+  const [personalNotes, setPersonalNotes] = useState('');
   const recipeQuery = useRecipeQuery(recipeId, {
     refetchInterval: (recipe) =>
       recipe?.categorizationStatus === 'pending' ||
@@ -153,6 +86,12 @@ export default function RecipeDetail() {
         : false,
   });
   const recipe = recipeQuery.data;
+  const [workspaceState, updateWorkspaceState] = useRecipeWorkspace(
+    recipe?.workspaceState,
+    recipe
+      ? (next) => updateRecipe.mutate({ recipeId: recipe._id, payload: { workspaceState: next } })
+      : undefined,
+  );
 
   useEffect(() => {
     if (!recipe || isEditing) {
@@ -160,6 +99,8 @@ export default function RecipeDetail() {
     }
     setDraftTitle(recipeDisplayTitle(recipe));
     setDraftMarkdown(recipeBodyMarkdown(recipe));
+    setDraftCollections(recipe.collections.join(', '));
+    setPersonalNotes(recipe.personalNotes ?? '');
   }, [isEditing, recipe]);
 
   if (recipeQuery.isLoading) {
@@ -178,31 +119,37 @@ export default function RecipeDetail() {
     );
   }
 
-  const metadata = metadataTags(recipe);
-  const compactMetadata = compactMetadataTags(recipe);
-  const metadataSet = new Set(metadata);
-  const secondaryChips = categoryChips(recipe).filter((chip) => !metadataSet.has(chip));
+  const presentation = savedRecipePresentation(recipe);
+  const documentTags = uniqueRecipeValues([
+    ...recipe.collections,
+    ...presentation.primaryTags,
+    ...presentation.diets,
+  ]);
   const updatedAt = formatRecipeDate(recipe.updatedAt);
   const markdown = recipeBodyMarkdown(recipe);
   const markdownDisplay = recipeMarkdownDisplay(markdown);
   const hasStructuredIngredients = recipe.recipe
     ? hasDisplayableIngredients(recipe.recipe.ingredients)
     : false;
-  const recipeBody = hasStructuredIngredients
-    ? stripIngredientsSection(markdownDisplay.body)
-    : markdownDisplay.body;
+  const hasStructuredSteps = hasDisplayableInstructions(recipe.recipe);
+  const recipeSections = structuredRecipeMarkdownSections(markdownDisplay.body, {
+    ingredients: hasStructuredIngredients,
+    instructions: hasStructuredSteps,
+  });
   const saveDisabled =
     updateRecipe.isLoading || draftTitle.trim().length === 0 || draftMarkdown.trim().length === 0;
 
   const startEditing = () => {
     setDraftTitle(recipeDisplayTitle(recipe));
     setDraftMarkdown(markdown);
+    setDraftCollections(recipe.collections.join(', '));
     setIsEditing(true);
   };
 
   const cancelEditing = () => {
     setDraftTitle(recipeDisplayTitle(recipe));
     setDraftMarkdown(markdown);
+    setDraftCollections(recipe.collections.join(', '));
     setIsEditing(false);
   };
 
@@ -216,6 +163,10 @@ export default function RecipeDetail() {
         recipeId,
         payload: {
           title: draftTitle.trim(),
+          collections: draftCollections
+            .split(',')
+            .map((collection) => collection.trim())
+            .filter(Boolean),
           documentMarkdown: `# ${draftTitle.trim()}\n\n${draftMarkdown.trim()}`,
           ...(recipe.recipe ? { recipe: { ...recipe.recipe, title: draftTitle.trim() } } : {}),
         },
@@ -264,12 +215,12 @@ export default function RecipeDetail() {
   };
 
   return (
-    <main className="rekky-ui rekky-recipe-surface h-full overflow-y-auto bg-surface-primary-alt px-0 py-0 text-text-primary sm:px-7 sm:py-7 lg:px-10">
+    <main className="rekky-ui rekky-recipe-surface h-full overflow-y-auto bg-surface-primary-alt text-text-primary sm:px-7 sm:py-7 lg:px-10">
       <div className="mx-auto max-w-[68rem] pt-10 sm:pt-0">
-        <div className="flex min-h-10 items-center justify-between px-4 sm:px-0">
+        <div className="flex min-h-11 items-center justify-between px-4 sm:px-0">
           <Link
             to="/recipes"
-            className="inline-flex min-h-10 items-center gap-2 text-sm font-medium text-text-secondary hover:text-text-primary"
+            className="inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-control text-sm font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
             <span>{localize('com_recipes_back_to_library')}</span>
@@ -280,16 +231,41 @@ export default function RecipeDetail() {
             </span>
           ) : null}
         </div>
-        <article className="bg-surface-primary px-4 py-6 shadow-none sm:mt-4 sm:rounded-lg sm:border sm:border-border-light sm:px-8 sm:py-9 lg:px-12 lg:py-10">
-          <header className="mb-7 border-b border-border-light pb-6 sm:mb-8 sm:pb-7">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <h1 className="rekky-title min-w-0">
-                {isEditing ? localize('com_recipes_edit_recipe') : recipeDisplayTitle(recipe)}
-              </h1>
-              {!isEditing ? (
-                <div className="flex w-full shrink-0 items-center gap-2 sm:mt-0.5 sm:w-auto sm:justify-end">
+        <div className="mt-4">
+          <RecipeDocument
+            title={isEditing ? localize('com_recipes_edit_recipe') : recipeDisplayTitle(recipe)}
+            imageUrl={!isEditing ? recipe.illustrationUrl : undefined}
+            sourceUrl={!isEditing ? recipe.sourceUrl : undefined}
+            sourceLabel={recipe.sourceUrl ? recipeSourceLabel(recipe.sourceUrl) : undefined}
+            metadata={
+              !isEditing ? (
+                <>
+                  <span>{documentTypeLabel(localize, recipe.documentType)}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    {localize(
+                      recipe.saveList === 'cooked_already'
+                        ? 'com_recipes_save_list_cooked_already'
+                        : 'com_recipes_save_list_want_to_cook',
+                    )}
+                  </span>
+                  {updatedAt ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{localize('com_recipes_updated_date', { date: updatedAt })}</span>
+                    </>
+                  ) : null}
+                </>
+              ) : null
+            }
+            tags={!isEditing ? documentTags : []}
+            warnings={!isEditing ? presentation.allergens : []}
+            actions={
+              !isEditing ? (
+                <div className="flex items-center gap-2">
                   <RecipeHeaderAction
                     type="button"
+                    variant="primary"
                     disabled={createCookingDocument.isLoading}
                     onClick={discussWithAI}
                     aria-label={localize('com_recipes_discuss_ai')}
@@ -299,127 +275,200 @@ export default function RecipeDetail() {
                   </RecipeHeaderAction>
                   <RecipeHeaderAction
                     type="button"
-                    onClick={startEditing}
-                    aria-label={localize('com_recipes_edit_markdown_btn')}
-                    icon={<Edit3 className="size-4" aria-hidden="true" />}
+                    aria-pressed={recipe.favorite}
+                    onClick={() =>
+                      updateRecipe.mutate({
+                        recipeId: recipe._id,
+                        payload: { favorite: !recipe.favorite },
+                      })
+                    }
+                    aria-label={localize(
+                      recipe.favorite ? 'com_recipes_remove_favorite' : 'com_recipes_add_favorite',
+                    )}
+                    icon={<Heart className={`size-4 ${recipe.favorite ? 'fill-current' : ''}`} />}
+                    labelClassName="sr-only"
+                    className={recipe.favorite ? 'border-border-medium text-text-primary' : ''}
                   >
-                    {localize('com_ui_edit')}
+                    {localize('com_recipes_favorites')}
                   </RecipeHeaderAction>
-                </div>
-              ) : null}
-            </div>
-            {!isEditing ? (
-              <div className="rekky-meta mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-text-secondary sm:mt-3">
-                <span>{documentTypeLabel(localize, recipe.documentType)}</span>
-                {recipe.sourceUrl ? (
-                  <>
-                    <span>·</span>
-                    <a
-                      href={recipe.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 font-medium text-surface-submit underline decoration-dotted underline-offset-4 hover:text-surface-submit-hover"
+                  <details className="group/actions relative">
+                    <summary
+                      className="inline-flex size-11 list-none items-center justify-center rounded-control border border-border-light text-text-secondary transition-colors marker:content-none hover:border-border-medium hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
+                      aria-label={localize('com_recipes_recipe_actions', { 0: recipe.title })}
                     >
-                      <span>{getSourceLabel(recipe.sourceUrl)}</span>
-                      <svg
-                        className="size-3 shrink-0"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+                      <MoreHorizontal className="size-4" aria-hidden="true" />
+                    </summary>
+                    <div className="absolute right-0 top-12 z-dropdown min-w-52 rounded-card border border-border-light bg-surface-primary p-1.5 shadow-floating">
+                      <button
+                        type="button"
+                        aria-pressed={recipe.pinned}
+                        className="flex min-h-11 w-full items-center gap-2 whitespace-nowrap rounded-control px-3 text-left text-sm text-text-primary transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
+                        onClick={() =>
+                          updateRecipe.mutate({
+                            recipeId: recipe._id,
+                            payload: { pinned: !recipe.pinned },
+                          })
+                        }
                       >
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                        <polyline points="15 3 21 3 21 9" />
-                        <line x1="10" y1="14" x2="21" y2="3" />
-                      </svg>
-                    </a>
-                  </>
-                ) : null}
-                {updatedAt ? (
-                  <>
-                    <span>·</span>
-                    <span>{localize('com_recipes_updated_date', { date: updatedAt })}</span>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-            {!isEditing && compactMetadata.length > 0 ? (
-              <p className="rekky-meta mt-4 max-w-3xl text-balance capitalize text-text-secondary">
-                {compactMetadata.map(displayTag).join(' · ')}
-              </p>
-            ) : null}
-            {!isEditing && secondaryChips.length > 0 ? (
-              <details className="group mt-3 hidden sm:block">
-                <summary className="cursor-pointer list-none text-xs text-text-secondary hover:text-text-primary">
-                  {localize('com_recipes_view_tags', { count: secondaryChips.length })}
-                </summary>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {secondaryChips.map((chip) => (
-                    <span
-                      key={chip}
-                      className="rounded-md border border-border-light px-2 py-1 text-xs text-text-secondary"
-                    >
-                      {displayTag(chip)}
-                    </span>
-                  ))}
+                        <Pin className={`size-4 ${recipe.pinned ? 'fill-current' : ''}`} />
+                        {localize(recipe.pinned ? 'com_recipes_unpin' : 'com_recipes_pin')}
+                      </button>
+                      <button
+                        type="button"
+                        className="flex min-h-11 w-full items-center gap-2 whitespace-nowrap rounded-control px-3 text-left text-sm text-text-primary transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
+                        onClick={() =>
+                          updateRecipe.mutate({
+                            recipeId: recipe._id,
+                            payload: {
+                              saveList:
+                                recipe.saveList === 'cooked_already'
+                                  ? 'want_to_cook'
+                                  : 'cooked_already',
+                            },
+                          })
+                        }
+                      >
+                        <CheckCircle2 className="size-4" aria-hidden="true" />
+                        {localize(
+                          recipe.saveList === 'cooked_already'
+                            ? 'com_recipe_mark_want_to_cook'
+                            : 'com_recipe_mark_cooked',
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={localize('com_recipes_edit_markdown_btn')}
+                        className="flex min-h-11 w-full items-center gap-2 whitespace-nowrap rounded-control px-3 text-left text-sm text-text-primary transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
+                        onClick={startEditing}
+                      >
+                        <Edit3 className="size-4" aria-hidden="true" />
+                        {localize('com_ui_edit')}
+                      </button>
+                    </div>
+                  </details>
                 </div>
-              </details>
-            ) : null}
-          </header>
-          {isEditing ? (
-            <div className="flex flex-col gap-5">
-              <label className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-text-secondary">
-                  {localize('com_recipes_edit_title')}
-                </span>
-                <Input
-                  value={draftTitle}
-                  onChange={(event) => setDraftTitle(event.target.value)}
-                  className="min-h-11 bg-surface-primary-alt"
-                />
-              </label>
-              <label className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-text-secondary">
-                  {localize('com_recipes_edit_markdown')}
-                </span>
-                <TextareaAutosize
-                  aria-label={localize('com_recipes_edit_markdown')}
-                  value={draftMarkdown}
-                  onChange={(event) => setDraftMarkdown(event.target.value)}
-                  minRows={18}
-                  className="w-full resize-y rounded-lg border border-border-light bg-surface-primary-alt p-4 font-mono text-sm leading-6 text-text-primary placeholder:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
-                />
-              </label>
-              <div className="flex items-center justify-end gap-2 pb-[env(safe-area-inset-bottom)]">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={updateRecipe.isLoading}
-                  onClick={cancelEditing}
-                >
-                  {localize('com_ui_cancel')}
-                </Button>
-                <Button type="button" disabled={saveDisabled} onClick={saveEdits}>
-                  {updateRecipe.isLoading
-                    ? localize('com_recipes_saving')
-                    : localize('com_ui_save')}
-                </Button>
+              ) : null
+            }
+          >
+            {isEditing ? (
+              <div className="flex flex-col gap-5">
+                <label className="flex flex-col gap-2">
+                  <span className="text-sm font-medium text-text-secondary">
+                    {localize('com_recipes_edit_title')}
+                  </span>
+                  <Input
+                    value={draftTitle}
+                    onChange={(event) => setDraftTitle(event.target.value)}
+                    className="min-h-11 bg-surface-primary-alt"
+                  />
+                </label>
+                <label className="flex flex-col gap-2">
+                  <span className="text-sm font-medium text-text-secondary">
+                    {localize('com_recipes_collections_field')}
+                  </span>
+                  <Input
+                    value={draftCollections}
+                    onChange={(event) => setDraftCollections(event.target.value)}
+                    placeholder={localize('com_recipes_collections_placeholder')}
+                    className="min-h-11 bg-surface-primary-alt"
+                  />
+                  <span className="text-xs text-text-secondary">
+                    {localize('com_recipes_collections_hint')}
+                  </span>
+                </label>
+                <label className="flex flex-col gap-2">
+                  <span className="text-sm font-medium text-text-secondary">
+                    {localize('com_recipes_edit_markdown')}
+                  </span>
+                  <TextareaAutosize
+                    aria-label={localize('com_recipes_edit_markdown')}
+                    value={draftMarkdown}
+                    onChange={(event) => setDraftMarkdown(event.target.value)}
+                    rows={18}
+                    className="w-full resize-y rounded-lg border border-border-light bg-surface-primary-alt p-4 font-mono text-sm leading-6 text-text-primary placeholder:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+                  />
+                </label>
+                <div className="flex items-center justify-end gap-2 pb-[env(safe-area-inset-bottom)]">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={updateRecipe.isLoading}
+                    onClick={cancelEditing}
+                  >
+                    {localize('com_ui_cancel')}
+                  </Button>
+                  <Button type="button" disabled={saveDisabled} onClick={saveEdits}>
+                    {updateRecipe.isLoading
+                      ? localize('com_recipes_saving')
+                      : localize('com_ui_save')}
+                  </Button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <>
-              <RecipeMetrics metrics={markdownDisplay.metrics} />
-              {hasStructuredIngredients ? (
-                <StructuredIngredients ingredients={recipe.recipe?.ingredients ?? []} />
-              ) : null}
-              <div className="cooking-recipe-markdown markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
-                <Markdown content={recipeBody} isLatestMessage={false} />
-              </div>
-            </>
-          )}
-        </article>
+            ) : (
+              <>
+                {recipeSections.preamble ? (
+                  <div className="cooking-recipe-markdown markdown prose light dark:prose-invert mb-7 max-w-none break-words text-text-primary">
+                    <Markdown content={recipeSections.preamble} isLatestMessage={false} />
+                  </div>
+                ) : null}
+                <RecipeMetrics metrics={markdownDisplay.metrics} />
+                <RecipeDetailsDisclosure
+                  label={localize('com_recipe_equipment_details')}
+                  groups={[
+                    {
+                      label: localize('com_recipe_equipment'),
+                      items: presentation.equipment,
+                    },
+                    { label: localize('com_ui_details'), items: presentation.detailTags },
+                  ]}
+                />
+                {hasStructuredIngredients ? (
+                  <StructuredIngredients
+                    ingredients={recipe.recipe?.ingredients ?? []}
+                    onWorkspaceChange={updateWorkspaceState}
+                    recipeId={recipe._id}
+                    recipeTitle={recipe.title}
+                    servings={recipe.recipe?.servings}
+                    workspaceState={workspaceState}
+                  />
+                ) : null}
+                {recipe.recipe && hasStructuredSteps ? (
+                  <RecipeInstructions
+                    onWorkspaceChange={updateWorkspaceState}
+                    recipe={recipe.recipe}
+                    workspaceState={workspaceState}
+                  />
+                ) : null}
+                {recipeSections.remainder ? (
+                  <div className="cooking-recipe-markdown markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
+                    <Markdown content={recipeSections.remainder} isLatestMessage={false} />
+                  </div>
+                ) : null}
+                <section className="mt-9 border-t border-border-light pt-7">
+                  <h2 className="rekky-section-title text-text-primary">
+                    {localize('com_recipe_personal_notes')}
+                  </h2>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    {localize('com_recipe_personal_notes_hint')}
+                  </p>
+                  <textarea
+                    rows={4}
+                    value={personalNotes}
+                    onChange={(event) => setPersonalNotes(event.target.value)}
+                    onBlur={() =>
+                      updateRecipe.mutate({
+                        recipeId: recipe._id,
+                        payload: { personalNotes },
+                      })
+                    }
+                    placeholder={localize('com_recipe_notes_placeholder')}
+                    className="mt-4 w-full resize-y rounded-lg border border-border-light bg-surface-primary-alt p-3 text-sm leading-6 text-text-primary placeholder:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+                  />
+                </section>
+              </>
+            )}
+          </RecipeDocument>
+        </div>
       </div>
     </main>
   );

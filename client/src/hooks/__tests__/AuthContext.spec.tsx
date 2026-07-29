@@ -10,7 +10,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { TAuthConfig } from '~/common';
 
 import { AuthContextProvider, useAuthContext } from '../AuthContext';
-import { SESSION_KEY } from '~/utils';
+import { EXPLICIT_LOGOUT_KEY, SESSION_KEY, markExplicitLogout } from '~/utils';
 
 const mockNavigate = jest.fn();
 jest.mock('react-router-dom', () => ({
@@ -37,6 +37,7 @@ let mockCapturedLogoutOptions: {
 };
 
 const mockRefreshMutate = jest.fn();
+const mockLogoutMutate = jest.fn();
 
 jest.mock('~/data-provider', () => ({
   useLoginUserMutation: jest.fn(
@@ -54,7 +55,7 @@ jest.mock('~/data-provider', () => ({
       onError: (...args: unknown[]) => void;
     }) => {
       mockCapturedLogoutOptions = options;
-      return { mutate: jest.fn() };
+      return { mutate: mockLogoutMutate };
     },
   ),
   useRefreshTokenMutation: jest.fn(() => ({ mutate: mockRefreshMutate })),
@@ -76,8 +77,11 @@ function TestConsumer() {
       data-testid="consumer"
       data-authenticated={ctx.isAuthenticated}
       data-auth-resolved={ctx.isAuthResolved}
+      data-logging-out={ctx.isLoggingOut}
       data-roles={JSON.stringify(ctx.roles ?? {})}
-    />
+    >
+      <button data-testid="logout" type="button" onClick={() => ctx.logout()} />
+    </div>
   );
 }
 
@@ -242,11 +246,77 @@ describe('AuthContextProvider — logout onSuccess/onError handling', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
     window.history.replaceState({}, '', '/c/some-chat');
   });
 
   afterEach(() => {
+    jest.useRealTimers();
+    localStorage.clear();
     window.history.replaceState({}, '', '/');
+  });
+
+  it('immediately leaves the protected route while server revocation is pending', () => {
+    jest.useFakeTimers();
+    const { getByTestId } = renderProvider();
+
+    act(() => {
+      mockCapturedLoginOptions.onSuccess({
+        user: { id: '1', role: 'USER' },
+        token: 'token',
+      });
+      jest.advanceTimersByTime(100);
+    });
+    mockNavigate.mockClear();
+
+    act(() => {
+      getByTestId('logout').click();
+    });
+
+    expect(getByTestId('consumer')).toHaveAttribute('data-authenticated', 'false');
+    expect(getByTestId('consumer')).toHaveAttribute('data-logging-out', 'true');
+    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    expect(mockLogoutMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('signs out this tab when another tab broadcasts an explicit logout', () => {
+    jest.useFakeTimers();
+    const { getByTestId } = renderProvider();
+
+    act(() => {
+      mockCapturedLoginOptions.onSuccess({
+        user: { id: '1', role: 'USER' },
+        token: 'token',
+      });
+      jest.advanceTimersByTime(100);
+    });
+    mockNavigate.mockClear();
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: EXPLICIT_LOGOUT_KEY, newValue: Date.now().toString() }),
+      );
+    });
+
+    expect(getByTestId('consumer')).toHaveAttribute('data-authenticated', 'false');
+    expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+  });
+
+  it('cannot be signed back in by a pending authentication update', () => {
+    jest.useFakeTimers();
+    const { getByTestId } = renderProvider();
+
+    act(() => {
+      mockCapturedLoginOptions.onSuccess({
+        user: { id: '1', role: 'USER' },
+        token: 'token',
+      });
+      getByTestId('logout').click();
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(getByTestId('consumer')).toHaveAttribute('data-authenticated', 'false');
+    expect(mockNavigate).toHaveBeenLastCalledWith('/', { replace: true });
   });
 
   it('calls window.location.replace and setTokenHeader(undefined) when redirect is present', () => {
@@ -298,10 +368,12 @@ describe('AuthContextProvider — logout onSuccess/onError handling', () => {
 describe('AuthContextProvider — silentRefresh post-login redirect', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
     sessionStorage.clear();
   });
 
   afterEach(() => {
+    localStorage.clear();
     sessionStorage.clear();
     window.history.replaceState({}, '', '/');
   });
@@ -330,6 +402,16 @@ describe('AuthContextProvider — silentRefresh post-login redirect', () => {
     });
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
     jest.useRealTimers();
+  });
+
+  it('does not silently restore a session after an explicit logout', () => {
+    markExplicitLogout();
+
+    const { getByTestId } = renderProviderLive();
+
+    expect(mockRefreshMutate).not.toHaveBeenCalled();
+    expect(getByTestId('consumer')).toHaveAttribute('data-auth-resolved', 'true');
+    expect(getByTestId('consumer')).toHaveAttribute('data-authenticated', 'false');
   });
 
   it('does not expose a guest state while the initial refresh is pending', () => {

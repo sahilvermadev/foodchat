@@ -3,7 +3,12 @@ import { normalizeShoppingList } from 'librechat-data-provider/mobile';
 import type { OfflineShoppingMutation } from '@/features/shopping/model';
 import { offlineDatabase, writeLastSync } from './database';
 
-type MutationRow = { mutation_id: string; payload_json: string };
+type MutationRow = {
+  attempts: number;
+  last_error: string | null;
+  mutation_id: string;
+  payload_json: string;
+};
 type ShoppingRow = { payload_json: string };
 
 export async function cacheOfflineShoppingList(userId: string, list: ShoppingList) {
@@ -49,7 +54,7 @@ export async function queueOfflineShoppingMutation(
 export async function listOfflineShoppingMutations(userId: string) {
   const db = await offlineDatabase();
   const rows = await db.getAllAsync<MutationRow>(
-    `SELECT mutation_id, payload_json FROM offline_shopping_mutations
+    `SELECT mutation_id, payload_json, attempts, last_error FROM offline_shopping_mutations
      WHERE user_id = ? ORDER BY created_at ASC`,
     userId,
   );
@@ -68,20 +73,32 @@ export async function listOfflineShoppingMutations(userId: string) {
           (item.recipeReference ? undefined : `${mutation.id}:contribution:${index}`),
       }));
     }
-    return { id: row.mutation_id, mutation };
+    return { attempts: row.attempts, id: row.mutation_id, lastError: row.last_error, mutation };
   });
 }
 
-export async function countOfflineShoppingMutations(userId: string) {
+export async function offlineShoppingMutationStatus(userId: string) {
   const db = await offlineDatabase();
-  const row = await db.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) AS count FROM offline_shopping_mutations WHERE user_id = ?',
+  const row = await db.getFirstAsync<{ failed: number; pending: number }>(
+    `SELECT COUNT(*) AS pending,
+       SUM(CASE WHEN attempts > 0 THEN 1 ELSE 0 END) AS failed
+     FROM offline_shopping_mutations WHERE user_id = ?`,
     userId,
   );
-  return row?.count ?? 0;
+  return { failed: row?.failed ?? 0, pending: row?.pending ?? 0 };
 }
 
 export async function deleteOfflineShoppingMutation(mutationId: string) {
   const db = await offlineDatabase();
   await db.runAsync('DELETE FROM offline_shopping_mutations WHERE mutation_id = ?', mutationId);
+}
+
+export async function failOfflineShoppingMutation(mutationId: string, error: string) {
+  const db = await offlineDatabase();
+  await db.runAsync(
+    `UPDATE offline_shopping_mutations SET attempts = attempts + 1, last_error = ?
+     WHERE mutation_id = ?`,
+    error.slice(0, 500),
+    mutationId,
+  );
 }

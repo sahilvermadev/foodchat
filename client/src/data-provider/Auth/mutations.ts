@@ -11,21 +11,9 @@ import store from '~/store';
 export const useLogoutUserMutation = (
   options?: t.LogoutOptions,
 ): UseMutationResult<t.TLogoutResponse, unknown, undefined, unknown> => {
-  const queryClient = useQueryClient();
-  const clearStates = useClearStates();
-  const resetDefaultPreset = useResetRecoilState(store.defaultPreset);
-  const setQueriesEnabled = useSetRecoilState<boolean>(store.queriesEnabled);
-
   return useMutation([MutationKeys.logoutUser], {
     mutationFn: () => dataService.logout(),
     ...(options || {}),
-    onSuccess: (...args) => {
-      setQueriesEnabled(false);
-      resetDefaultPreset();
-      clearStates();
-      queryClient.removeQueries();
-      options?.onSuccess?.(...args);
-    },
   });
 };
 

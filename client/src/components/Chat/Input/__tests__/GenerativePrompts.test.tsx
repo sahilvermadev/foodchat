@@ -130,7 +130,7 @@ describe('GenerativePrompts', () => {
     expect(rail).not.toHaveClass('absolute');
 
     const quickPrompt = screen.getByRole('button', { name: /Quick lunch/i });
-    expect(quickPrompt).toHaveClass('rounded-full', 'min-h-8', 'whitespace-nowrap');
+    expect(quickPrompt).toHaveClass('rounded-full', 'min-h-11', 'whitespace-nowrap');
     expect(screen.getByText('Quick lunch')).toHaveClass('min-[769px]:hidden');
     expect(screen.getByText(/Cook a quick lunch with what is ready/i)).toHaveClass(
       'hidden',

@@ -61,6 +61,85 @@ afterAll(async () => {
 });
 
 describe('social import service', () => {
+  test('returns incremental import changes and deletion tombstones', async () => {
+    const socialImport = await createSocialImport('offline-import-user', {
+      sourceUrl: 'https://example.com/recipes/soup',
+      title: 'Soup',
+    });
+    const checkpoint = new Date().toISOString();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await updateSocialImport('offline-import-user', socialImport._id, { status: 'inspiration' });
+
+    const changed = await listSocialImports('offline-import-user', { since: checkpoint });
+    expect(changed.imports).toEqual([
+      expect.objectContaining({ _id: socialImport._id, status: 'inspiration' }),
+    ]);
+
+    const deletionCheckpoint = new Date().toISOString();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await deleteSocialImport('offline-import-user', socialImport._id);
+    const deleted = await listSocialImports('offline-import-user', {
+      since: deletionCheckpoint,
+    });
+    expect(deleted.deletedIds).toContain(socialImport._id);
+  });
+
+  test('finishes a pending import deletion before returning an offline delta', async () => {
+    const user = 'offline-pending-import-delete-user';
+    const socialImport = await createSocialImport(user, {
+      sourceUrl: 'https://example.com/recipes/stew',
+      title: 'Stew',
+    });
+    const checkpoint = new Date(Date.now() - 1000).toISOString();
+    await mongoose.models.SocialImportTombstone.create({
+      deletedAt: new Date(),
+      importId: socialImport._id,
+      state: 'pending',
+      user,
+    });
+
+    const delta = await listSocialImports(user, { since: checkpoint });
+
+    expect(delta.deletedIds).toContain(socialImport._id);
+    expect(delta.imports).toEqual([]);
+    expect(await mongoose.models.SocialImport.exists({ _id: socialImport._id })).toBeNull();
+  });
+
+  test('paginates every incremental import when changes share a timestamp', async () => {
+    const user = 'offline-import-pagination-user';
+    const imports = await Promise.all(
+      ['soup', 'salad', 'bread'].map((slug) =>
+        createSocialImport(user, {
+          sourceUrl: `https://example.com/recipes/${slug}`,
+          title: slug,
+        }),
+      ),
+    );
+    const updatedAt = new Date('2026-07-29T10:00:00.000Z');
+    await mongoose.models.SocialImport.updateMany(
+      { _id: { $in: imports.map((item) => item._id) } },
+      { $set: { updatedAt } },
+      { timestamps: false },
+    );
+
+    const first = await listSocialImports(user, {
+      limit: 2,
+      since: '2026-07-29T09:59:00.000Z',
+      until: '2026-07-29T10:01:00.000Z',
+    });
+    const second = await listSocialImports(user, {
+      cursor: first.nextCursor,
+      limit: 2,
+      since: '2026-07-29T09:59:00.000Z',
+      until: first.syncedAt,
+    });
+
+    expect(first.nextCursor).toBeDefined();
+    expect([...first.imports, ...second.imports].map((item) => item._id).sort()).toEqual(
+      imports.map((item) => item._id).sort(),
+    );
+  });
+
   test('normalizes and saves YouTube Shorts links', async () => {
     const socialImport = await createSocialImport('user-a', {
       sourceUrl: 'https://youtube.com/shorts/abc123?si=share&utm_source=app',

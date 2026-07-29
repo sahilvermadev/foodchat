@@ -3,7 +3,7 @@ import { ErrorTypes, registerPage } from 'librechat-data-provider';
 import { OpenIDIcon, useToastContext } from '@librechat/client';
 import { useOutletContext, useSearchParams, useLocation } from 'react-router-dom';
 import type { TLoginLayoutContext } from '~/common';
-import { getLoginError, persistRedirectToSession } from '~/utils';
+import { clearExplicitLogout, getLoginError, persistRedirectToSession } from '~/utils';
 import { ErrorMessage } from '~/components/Auth/ErrorMessage';
 import SocialButton from '~/components/Auth/SocialButton';
 import { useLocalize } from '~/hooks';
@@ -69,6 +69,7 @@ function Login() {
   useEffect(() => {
     if (shouldAutoRedirect) {
       console.log('Auto-redirecting to OpenID provider...');
+      clearExplicitLogout();
       window.location.href = `${startupConfig.serverDomain}/oauth/openid`;
     }
   }, [shouldAutoRedirect, startupConfig]);

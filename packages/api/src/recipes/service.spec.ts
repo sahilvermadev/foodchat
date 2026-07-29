@@ -217,6 +217,83 @@ describe('saved recipe title integrity', () => {
     });
   });
 
+  test('returns incremental recipe changes and deletion tombstones', async () => {
+    const saved = await saveRecipe('offline-delta-user', {
+      documentMarkdown: markdown,
+      recipe: recipe('Thai Iced Tea'),
+    });
+    const checkpoint = new Date().toISOString();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await updateSavedRecipe('offline-delta-user', saved._id, { favorite: true });
+
+    const changed = await listOfflineRecipes('offline-delta-user', { since: checkpoint });
+    expect(changed.recipes).toEqual([expect.objectContaining({ _id: saved._id, favorite: true })]);
+
+    const deletionCheckpoint = new Date().toISOString();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await deleteSavedRecipe('offline-delta-user', saved._id);
+    const deleted = await listOfflineRecipes('offline-delta-user', {
+      since: deletionCheckpoint,
+    });
+    expect(deleted.deletedIds).toContain(saved._id);
+    expect(deleted.recipes).toEqual([]);
+  });
+
+  test('finishes a pending recipe deletion before returning an offline delta', async () => {
+    const user = 'offline-pending-delete-user';
+    const saved = await saveRecipe(user, {
+      documentMarkdown: markdown,
+      recipe: recipe('Thai Iced Tea'),
+    });
+    const checkpoint = new Date(Date.now() - 1000).toISOString();
+    await mongoose.models.RecipeTombstone.create({
+      deletedAt: new Date(),
+      recipeId: saved._id,
+      state: 'pending',
+      user,
+    });
+
+    const delta = await listOfflineRecipes(user, { since: checkpoint });
+
+    expect(delta.deletedIds).toContain(saved._id);
+    expect(delta.recipes).toEqual([]);
+    expect(await mongoose.models.SavedRecipe.exists({ _id: saved._id })).toBeNull();
+  });
+
+  test('paginates every recipe when multiple changes share a timestamp', async () => {
+    const user = 'offline-recipe-pagination-user';
+    const updatedAt = new Date('2026-07-29T10:00:00.000Z');
+    const saved = await mongoose.models.SavedRecipe.insertMany(
+      ['Tea one', 'Tea two', 'Tea three'].map((title) => ({
+        categorizationStatus: 'complete',
+        categorizationVersion: 1,
+        createdAt: updatedAt,
+        documentMarkdown: markdown.replaceAll('Thai Iced Tea', title),
+        illustrationStatus: 'complete',
+        recipe: recipe(title),
+        saveList: 'want_to_cook',
+        title,
+        updatedAt,
+        user,
+      })),
+    );
+
+    const first = await listOfflineRecipes(user, {
+      limit: 2,
+      until: '2026-07-29T10:01:00.000Z',
+    });
+    const second = await listOfflineRecipes(user, {
+      cursor: first.nextCursor,
+      limit: 2,
+      until: first.syncedAt,
+    });
+
+    expect(first.nextCursor).toBeDefined();
+    expect([...first.recipes, ...second.recipes].map((item) => item._id).sort()).toEqual(
+      saved.map((item) => String(item._id)).sort(),
+    );
+  });
+
   test('canonicalizes a malformed supplied title and structured title from markdown', async () => {
     const saved = await saveRecipe('new-recipe-user', {
       title: '{',
@@ -505,6 +582,20 @@ describe('cookbook organization', () => {
       personalNotes: 'Use less sugar next time.',
       pinned: true,
       saveList: 'cooked_already',
+      workspaceState: {
+        checkedIngredientIds: ['ingredient-1'],
+        servings: 6,
+        timers: [
+          {
+            endsAt: 2_000_000_000_000,
+            id: 'timer-1',
+            label: 'Bake',
+            remaining: 300,
+            running: true,
+          },
+        ],
+        unitMode: 'metric',
+      },
     });
 
     expect(updated).toMatchObject({
@@ -513,6 +604,13 @@ describe('cookbook organization', () => {
       personalNotes: 'Use less sugar next time.',
       pinned: true,
       saveList: 'cooked_already',
+      workspaceState: {
+        checkedIngredientIds: ['ingredient-1'],
+        servings: 6,
+        timers: [expect.objectContaining({ id: 'timer-1', running: true })],
+        unitMode: 'metric',
+        updatedAt: expect.any(String),
+      },
       categorizationVersion: 4,
       illustrationStatus: 'complete',
     });

@@ -2,7 +2,7 @@ import type { TStartupConfig } from 'librechat-data-provider';
 import { useLocalize } from '~/hooks';
 
 const footerLinkClass =
-  'text-sm text-text-secondary underline decoration-transparent transition-colors hover:text-[#c1121f] hover:decoration-[#c1121f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1121f]/30';
+  'whitespace-nowrap rounded-sm text-sm text-text-secondary underline decoration-transparent transition-colors hover:text-surface-submit hover:decoration-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary';
 
 function Footer({ startupConfig }: { startupConfig: TStartupConfig | null | undefined }) {
   const localize = useLocalize();
@@ -40,7 +40,7 @@ function Footer({ startupConfig }: { startupConfig: TStartupConfig | null | unde
     <div className="align-end m-4 flex justify-center gap-2" role="contentinfo">
       {privacyPolicyRender}
       {privacyPolicyRender && termsOfServiceRender && (
-        <div className="border-r-[1px] border-gray-300 dark:border-gray-600" />
+        <div className="border-r border-border-light" />
       )}
       {termsOfServiceRender}
     </div>

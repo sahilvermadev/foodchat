@@ -4,13 +4,16 @@ import { buildLoginRedirectUrl } from 'librechat-data-provider';
 import { useAuthContext } from '~/hooks';
 
 export default function useAuthRedirect({ allowGuest = false }: { allowGuest?: boolean } = {}) {
-  const { user, roles, isAuthenticated } = useAuthContext();
+  const { user, roles, isAuthenticated, isLoggingOut } = useAuthContext();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (isAuthenticated) {
+        return;
+      }
+      if (isLoggingOut) {
         return;
       }
       if (allowGuest) {
@@ -25,7 +28,7 @@ export default function useAuthRedirect({ allowGuest = false }: { allowGuest?: b
     return () => {
       clearTimeout(timeout);
     };
-  }, [allowGuest, isAuthenticated, navigate, location]);
+  }, [allowGuest, isAuthenticated, isLoggingOut, navigate, location]);
 
   return {
     user,

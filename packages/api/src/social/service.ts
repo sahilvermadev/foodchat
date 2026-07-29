@@ -24,6 +24,7 @@ import type {
   ISocialImportJob,
   ISocialPlaylistSubscription,
 } from '@librechat/data-schemas';
+import type { FilterQuery } from 'mongoose';
 import {
   extractFirstLinkedRecipe,
   extractWebRecipe,
@@ -39,6 +40,7 @@ import {
 import { createIllustrationThumbnail, fetchRemoteImage } from '../illustrations/media';
 import type { IllustrationMedia } from '../illustrations/media';
 import { createCookingDocument } from '../cooking/service';
+import { encodeTimestampCursor, parseTimestampCursor } from '../pagination';
 
 const maxLimit = 1000;
 const webExtractionEnabledInTest = 'SOCIAL_IMPORT_ENABLE_WEB_EXTRACTION_IN_TEST';
@@ -71,17 +73,7 @@ type NormalizedSource = {
   embedHtmlAllowed: boolean;
 };
 
-type SocialImportListFilter = {
-  user: string;
-  provider?: SocialImportProvider;
-  status?: SocialImportStatus;
-  createdAt?: { $lt: Date };
-  $or?: Array<{
-    status?: SocialImportStatus | { $in: SocialImportStatus[] };
-    extractedText?: { $exists: false } | '';
-  }>;
-  $and?: SocialImportSearchClause[];
-};
+type SocialImportListFilter = FilterQuery<ISocialImport>;
 
 type SocialImportSearchClause = {
   $or: Array<{
@@ -124,6 +116,22 @@ function jobModel() {
 
 function playlistModel() {
   return mongoose.model<ISocialPlaylistSubscription>('SocialPlaylistSubscription');
+}
+
+async function reconcileSocialImportDeletions(user: string): Promise<void> {
+  const tombstones = await mongoose.models.SocialImportTombstone.find({
+    state: 'pending',
+    user,
+  }).select('_id importId');
+  if (!tombstones.length) return;
+  await model().deleteMany({
+    _id: { $in: tombstones.map((tombstone) => tombstone.importId) },
+    user,
+  });
+  await mongoose.models.SocialImportTombstone.updateMany(
+    { _id: { $in: tombstones.map((tombstone) => tombstone._id) }, user },
+    { $set: { deletedAt: new Date(), state: 'committed' } },
+  );
 }
 
 function idOf(doc: { _id: unknown }): string {
@@ -664,14 +672,6 @@ function cleanLimit(limit: number | string | undefined): number {
   return Math.min(Math.max(Math.floor(parsed), 1), maxLimit);
 }
 
-function parseCursor(value: string | undefined): Date | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
-
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -733,10 +733,6 @@ function buildFilter(user: string, query: SocialImportsQuery): SocialImportListF
     filter.provider = query.provider;
   }
   applyViewFilter(filter, query);
-  const cursor = parseCursor(query.cursor);
-  if (cursor) {
-    filter.createdAt = { $lt: cursor };
-  }
   const terms = searchTerms(query.q ?? '');
   if (terms.length) {
     filter.$and = terms.map(searchClause);
@@ -1128,18 +1124,58 @@ export async function listSocialImports(
   user: string,
   query: SocialImportsQuery,
 ): Promise<SocialImportsResponse> {
+  await reconcileSocialImportDeletions(user);
   const limit = cleanLimit(query.limit);
+  const since = query.since ? new Date(query.since) : undefined;
+  const incremental = Boolean(since && !Number.isNaN(since.getTime()));
+  const requestedUntil = query.until ? new Date(query.until) : undefined;
+  const until =
+    requestedUntil && !Number.isNaN(requestedUntil.getTime()) ? requestedUntil : new Date();
   const filter = buildFilter(user, query);
+  if (incremental && since) filter.updatedAt = { $gt: since, $lte: until };
+  else filter.createdAt = { ...filter.createdAt, $lte: until };
+  const cursor = parseTimestampCursor(query.cursor);
+  const cursorField = incremental ? 'updatedAt' : 'createdAt';
+  let cursorClause: FilterQuery<ISocialImport> | undefined;
+  if (cursor?.id && mongoose.isValidObjectId(cursor.id)) {
+    cursorClause = {
+      $or: [
+        { [cursorField]: { $lt: cursor.timestamp } },
+        {
+          _id: { $lt: new mongoose.Types.ObjectId(cursor.id) },
+          [cursorField]: cursor.timestamp,
+        },
+      ],
+    };
+  } else if (cursor) {
+    cursorClause = { [cursorField]: { $lt: cursor.timestamp } };
+  }
+  const pageFilter = cursorClause ? { $and: [filter, cursorClause] } : filter;
+  const sort: Record<string, 1 | -1> = incremental
+    ? { updatedAt: -1, _id: -1 }
+    : { createdAt: -1, _id: -1 };
   const [total, imports] = await Promise.all([
-    model().countDocuments(filter),
+    model().countDocuments(pageFilter),
     model()
-      .find(filter)
-      .sort({ createdAt: -1, _id: -1 })
+      .find(pageFilter)
+      .sort(sort)
       .limit(limit + 1),
   ]);
   const page = imports.slice(0, limit).map(serializeSocialImport);
-  const nextCursor = imports.length > limit ? iso(imports[limit - 1].createdAt) : undefined;
-  return { imports: page, total, nextCursor };
+  const next = imports.length > limit ? imports[limit - 1] : undefined;
+  let nextTimestamp = next?.createdAt;
+  if (incremental && next?.updatedAt) nextTimestamp = next.updatedAt;
+  const nextCursor =
+    next && nextTimestamp ? encodeTimestampCursor(nextTimestamp, idOf(next)) : undefined;
+  const deletedIds =
+    incremental && since
+      ? ((await mongoose.models.SocialImportTombstone.find({
+          user,
+          state: { $ne: 'pending' },
+          deletedAt: { $gt: since, $lte: until },
+        }).distinct('importId')) as string[])
+      : [];
+  return { deletedIds, imports: page, nextCursor, syncedAt: iso(until), total };
 }
 
 export async function listSocialImportJobs(
@@ -1557,6 +1593,13 @@ export async function updateSocialImport(
 }
 
 export async function deleteSocialImport(user: string, importId: string): Promise<boolean> {
-  const result = await model().deleteOne({ _id: importId, user });
-  return result.deletedCount === 1;
+  const exists = await model().exists({ _id: importId, user });
+  if (!exists) return false;
+  await mongoose.models.SocialImportTombstone.updateOne(
+    { importId, user },
+    { $set: { deletedAt: new Date(), state: 'pending' } },
+    { upsert: true },
+  );
+  await reconcileSocialImportDeletions(user);
+  return true;
 }

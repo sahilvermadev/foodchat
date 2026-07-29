@@ -8,6 +8,7 @@ import RecipeDetail from './RecipeDetail';
 let mockRecipe: SavedRecipe;
 const mockCreateCookingDocument = jest.fn();
 const mockNewConversation = jest.fn();
+const mockUpdateRecipe = jest.fn();
 
 jest.mock('~/components/Chat/Messages/Content/Markdown', () => ({
   __esModule: true,
@@ -15,12 +16,13 @@ jest.mock('~/components/Chat/Messages/Content/Markdown', () => ({
 }));
 
 jest.mock('~/data-provider', () => ({
+  useAddShoppingItemsMutation: () => ({ isLoading: false, mutate: jest.fn() }),
   useCreateCookingDocumentMutation: () => ({
     isLoading: false,
     mutate: mockCreateCookingDocument,
   }),
   useRecipeQuery: () => ({ data: mockRecipe, isLoading: false }),
-  useUpdateSavedRecipeMutation: () => ({ isLoading: false, mutate: jest.fn() }),
+  useUpdateSavedRecipeMutation: () => ({ isLoading: false, mutate: mockUpdateRecipe }),
 }));
 
 jest.mock('~/hooks', () => ({
@@ -47,6 +49,9 @@ function savedRecipe(ingredients: NonNullable<SavedRecipe['recipe']>['ingredient
     title: 'Changezi Chicken',
     documentType: 'recipe',
     saveList: 'want_to_cook',
+    collections: [],
+    favorite: false,
+    pinned: false,
     documentMarkdown: `# Changezi Chicken
 
 ## Ingredients
@@ -158,6 +163,65 @@ describe('RecipeDetail structured ingredients', () => {
           title: 'Discuss Changezi Chicken',
         }),
       }),
+    );
+  });
+
+  test('edits the same collections exposed by the mobile recipe editor', () => {
+    mockRecipe = { ...savedRecipe([]), collections: ['Dinner'] };
+
+    renderDetail();
+
+    expect(screen.getByText('Dinner')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'com_recipes_edit_markdown_btn' }));
+    fireEvent.change(screen.getByPlaceholderText('com_recipes_collections_placeholder'), {
+      target: { value: 'Dinner, Weeknight' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'com_ui_save' }));
+
+    expect(mockUpdateRecipe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipeId: 'recipe-1',
+        payload: expect.objectContaining({ collections: ['Dinner', 'Weeknight'] }),
+      }),
+      expect.any(Object),
+    );
+  });
+
+  test('moves a cooked recipe back to want to cook', () => {
+    mockRecipe = { ...savedRecipe([]), saveList: 'cooked_already' };
+
+    renderDetail();
+    fireEvent.click(screen.getByRole('button', { name: 'com_recipe_mark_want_to_cook' }));
+
+    expect(mockUpdateRecipe).toHaveBeenCalledWith({
+      recipeId: mockRecipe._id,
+      payload: { saveList: 'want_to_cook' },
+    });
+  });
+
+  test('uses neutral tags for dietary facts and caution styling for allergens', () => {
+    mockRecipe = {
+      ...savedRecipe([]),
+      categorization: {
+        cuisine: ['Indian'],
+        diet: ['vegetarian'],
+        equipment: ['Grill'],
+        potentialAllergens: ['dairy'],
+      },
+    } as SavedRecipe;
+
+    renderDetail();
+
+    expect(screen.getByText('vegetarian')).toHaveClass('bg-surface-primary-alt');
+    expect(screen.getByText('dairy')).toHaveClass('bg-status-caution/10', 'text-status-caution');
+    const details = screen.getByText('com_recipe_equipment_details').closest('summary');
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveTextContent(/\d/);
+    expect(details?.closest('header')).toBeNull();
+    expect(screen.getByText('Grill')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'com_recipes_add_favorite' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
     );
   });
 });

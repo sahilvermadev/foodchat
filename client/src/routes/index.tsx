@@ -15,8 +15,9 @@ import StartupLayout from './Layouts/Startup';
 import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
 import Root from './Root';
-import { RecipeDetail, RecipeLibrary, SocialImports } from '~/components/Cooking';
+import { RecipeDetail, RecipeLibrary, ShoppingList, SocialImports } from '~/components/Cooking';
 import { PreferencesWorkspace } from '~/components/Preferences';
+import LandingPage from '~/components/LandingPage';
 
 const AuthProviderLayout = () => (
   <AuthContextProvider>
@@ -94,17 +95,16 @@ export const router = createBrowserRouter(
       errorElement: <RouteErrorBoundary />,
       children: [
         {
+          index: true,
+          element: <LandingPage />,
+        },
+        {
           path: 'chat',
           element: <Navigate to="/cook" replace={true} />,
         },
         {
-          path: '/',
           element: <Root />,
           children: [
-            {
-              index: true,
-              element: <Navigate to="/cook" replace={true} />,
-            },
             {
               path: 'cook',
               element: <ChatRoute mode="cooking" />,
@@ -128,6 +128,10 @@ export const router = createBrowserRouter(
             {
               path: 'imports/share',
               element: <SocialImports />,
+            },
+            {
+              path: 'shopping',
+              element: <ShoppingList />,
             },
             {
               path: 'preferences',

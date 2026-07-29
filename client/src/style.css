@@ -1,3 +1,8 @@
+/* Hallmark · genre: editorial · macrostructure: Workbench app family · design-system: DESIGN.md · designed-as-app
+ * theme: custom · vibe: "quiet mineral neutrals, ember signal" · axes: light+dark / geometric-sans / warm
+ * contrast: pass (40–41) · tokens: pass (48) · palette-slop: pass
+ */
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -56,8 +61,52 @@
 
 /* Custom Variables */
 :root {
-  --white: #fff;
-  --black: #000;
+  --color-paper: oklch(97.5% 0.006 55);
+  --color-paper-2: oklch(95.2% 0.008 55);
+  --color-paper-3: oklch(92.5% 0.009 55);
+  --color-ink: oklch(19% 0.01 35);
+  --color-ink-2: oklch(31% 0.01 35);
+  --color-muted: oklch(45% 0.01 45);
+  --color-neutral: oklch(38% 0.01 40);
+  --color-rule: oklch(85.5% 0.008 50);
+  --color-rule-2: oklch(77% 0.01 48);
+  --color-accent: oklch(53% 0.17 32);
+  --color-accent-hover: oklch(48% 0.17 32);
+  --color-accent-ink: oklch(97.5% 0.006 55);
+  --color-focus: oklch(55% 0.2 32);
+  --color-success: oklch(49% 0.11 150);
+  --color-caution: oklch(52% 0.12 78);
+  --color-danger: oklch(50% 0.18 25);
+  --color-danger-hover: oklch(44% 0.17 25);
+  --color-info: oklch(52% 0.11 245);
+  --color-status-ink: var(--color-paper);
+  --color-voice-surface: oklch(18% 0.012 35);
+  --color-voice-surface-2: oklch(23% 0.012 35);
+  --color-voice-text: oklch(95% 0.008 55);
+  --color-voice-muted: oklch(73% 0.008 50);
+  --color-overlay: oklch(15% 0.01 35 / 0.72);
+  --shadow-color: oklch(19% 0.01 35 / 0.14);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
+  --radius-control: 0.5rem;
+  --radius-card: 0.5rem;
+  --radius-dialog: 0.75rem;
+  --shadow-surface: 0 1px 2px var(--shadow-color);
+  --shadow-floating: 0 8px 24px var(--shadow-color);
+  --shadow-dialog: 0 16px 44px var(--shadow-color);
+  --z-base: 1;
+  --z-raised: 10;
+  --z-dropdown: 50;
+  --z-sticky: 70;
+  --z-modal: 100;
+  --z-toast: 120;
+  --z-tooltip: 130;
+  --white: var(--color-paper);
+  --black: var(--color-ink);
   --gray-20: #ececf1;
   --gray-50: #f7f7f8;
   --gray-100: #ececec;
@@ -103,14 +152,14 @@
   --amber-800: #92400e;
   --amber-900: #78350f;
   --amber-950: #451a03;
-  --rekky-terracotta: #c85a32;
-  --rekky-terracotta-hover: #b24e2a;
-  --rekky-soft-clay: #f4ebe1;
-  --rekky-alabaster: #fafaf7;
-  --rekky-stone: #f3f1eb;
-  --rekky-linen: #e6e3da;
-  --rekky-charcoal: #1a1917;
-  --rekky-umber: #4a4844;
+  --rekky-terracotta: var(--color-accent);
+  --rekky-terracotta-hover: var(--color-accent-hover);
+  --rekky-soft-clay: var(--color-paper-3);
+  --rekky-alabaster: var(--color-paper);
+  --rekky-stone: var(--color-paper-2);
+  --rekky-linen: var(--color-rule);
+  --rekky-charcoal: var(--color-ink);
+  --rekky-umber: var(--color-ink-2);
   --rekky-cream: var(--rekky-stone);
   --rekky-cream-raised: var(--rekky-alabaster);
   --rekky-parchment: var(--rekky-soft-clay);
@@ -119,20 +168,20 @@
   --rekky-mushroom: var(--rekky-umber);
   --rekky-tomato: var(--rekky-terracotta);
   --rekky-tomato-hover: var(--rekky-terracotta-hover);
-  --rekky-leaf: #75c46b;
-  --rekky-lemon: #f2c94c;
-  --rekky-aubergine: #6d3a6d;
-  --rekky-plum-950: #171217;
-  --rekky-plum-925: #1b151b;
-  --rekky-plum-900: #221d20;
-  --rekky-plum-850: #2a2224;
-  --rekky-plum-800: #34272c;
-  --rekky-plum-750: #3a3034;
-  --rekky-plum-700: #4a3b40;
-  --rekky-cream-text: #ffffff;
-  --rekky-cream-muted: #d8d0c8;
-  --rekky-mushroom-muted: #afa59d;
-  --brand-purple: #ab68ff;
+  --rekky-leaf: var(--color-success);
+  --rekky-lemon: var(--color-caution);
+  --rekky-aubergine: var(--color-accent);
+  --rekky-plum-950: oklch(14.5% 0.008 35);
+  --rekky-plum-925: oklch(16.5% 0.009 35);
+  --rekky-plum-900: oklch(18% 0.009 35);
+  --rekky-plum-850: oklch(22% 0.01 35);
+  --rekky-plum-800: oklch(25% 0.01 35);
+  --rekky-plum-750: oklch(29% 0.01 35);
+  --rekky-plum-700: oklch(36% 0.01 35);
+  --rekky-cream-text: oklch(94% 0.008 55);
+  --rekky-cream-muted: oklch(79% 0.008 55);
+  --rekky-mushroom-muted: oklch(68% 0.008 50);
+  --brand-purple: var(--color-accent);
   --gizmo-gray-500: #999;
   --gizmo-gray-600: #666;
   --gizmo-gray-950: #0f0f0f;
@@ -161,17 +210,18 @@ html {
   --text-primary: var(--rekky-ink);
   --text-secondary: var(--rekky-mushroom);
   --text-secondary-alt: var(--rekky-mushroom);
-  --text-tertiary: #6f6b64;
-  --text-warning: #8a5a00;
-  --text-destructive: var(--red-600);
-  --ring-primary: var(--rekky-tomato-hover);
+  --text-tertiary: var(--color-muted);
+  --text-warning: var(--color-caution);
+  --text-destructive: var(--color-danger);
+  --text-submit: var(--color-accent-ink);
+  --ring-primary: var(--color-focus);
   --header-primary: var(--rekky-cream-raised);
   --header-hover: var(--rekky-parchment);
   --header-button-hover: var(--rekky-parchment);
   --surface-active: var(--rekky-parchment-hover);
   --surface-active-alt: var(--rekky-soft-clay);
   --surface-hover: var(--rekky-parchment-hover);
-  --surface-hover-alt: #efe3d6;
+  --surface-hover-alt: var(--color-paper-3);
   --surface-primary: var(--rekky-cream-raised);
   --surface-primary-alt: var(--rekky-cream);
   --surface-primary-contrast: var(--rekky-parchment);
@@ -182,43 +232,63 @@ html {
   --surface-dialog: var(--rekky-cream-raised);
   --surface-submit: var(--rekky-tomato);
   --surface-submit-hover: var(--rekky-tomato-hover);
-  --surface-destructive: var(--red-700);
-  --surface-destructive-hover: var(--red-800);
+  --surface-destructive: var(--color-danger);
+  --surface-destructive-hover: var(--color-danger-hover);
   --surface-chat: var(--rekky-stone);
   --border-light: var(--rekky-linen);
-  --border-medium-alt: #d8d2c4;
-  --border-medium: #d8d2c4;
-  --border-heavy: #b9b1a2;
+  --border-medium-alt: var(--color-rule-2);
+  --border-medium: var(--color-rule-2);
+  --border-heavy: oklch(67% 0.01 45);
   --border-xheavy: var(--rekky-umber);
-  --border-destructive: var(--red-600);
+  --border-destructive: var(--color-danger);
   /* These are test styles */
 
-  --background: 45 25% 94%;
-  --foreground: 20 6% 10%;
-  --card: 60 23% 97%;
-  --card-foreground: 20 6% 10%;
-  --primary: 16 60% 49%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 45 25% 94%;
-  --secondary-foreground: 20 6% 10%;
-  --muted: 45 25% 94%;
-  --muted-foreground: 40 4% 28%;
-  --accent: 32 46% 92%;
-  --accent-foreground: 20 6% 10%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 45 19% 88%;
-  --input: 45 19% 88%;
-  --ring: 16 60% 49%;
+  --background: 97.5% 0.006 55;
+  --foreground: 19% 0.01 35;
+  --card: 95.2% 0.008 55;
+  --card-foreground: 19% 0.01 35;
+  --primary: 53% 0.17 32;
+  --primary-foreground: 97.5% 0.006 55;
+  --secondary: 92.5% 0.009 55;
+  --secondary-foreground: 19% 0.01 35;
+  --muted: 92.5% 0.009 55;
+  --muted-foreground: 45% 0.01 45;
+  --accent: 92.5% 0.009 55;
+  --accent-foreground: 19% 0.01 35;
+  --destructive: 50% 0.18 25;
+  --destructive-foreground: 97.5% 0.006 55;
+  --border: 85.5% 0.008 50;
+  --input: 77% 0.01 48;
+  --ring: 55% 0.2 32;
   --radius: 0.5rem;
   --chart-1: 16 60% 49%;
   --chart-2: 173 58% 39%;
   --chart-3: 197 37% 24%;
   --chart-4: 43 74% 66%;
   --chart-5: 27 87% 67%;
-  --switch-unchecked: 0 0% 58%;
+  --switch-unchecked: 67% 0.01 45;
 }
 .dark {
+  --color-paper: oklch(14.5% 0.008 35);
+  --color-paper-2: oklch(18% 0.009 35);
+  --color-paper-3: oklch(22% 0.01 35);
+  --color-ink: oklch(94% 0.008 55);
+  --color-ink-2: oklch(79% 0.008 55);
+  --color-muted: oklch(68% 0.008 50);
+  --color-neutral: oklch(60% 0.009 45);
+  --color-rule: oklch(29% 0.01 35);
+  --color-rule-2: oklch(36% 0.01 35);
+  --color-accent: oklch(70% 0.14 32);
+  --color-accent-hover: oklch(76% 0.13 32);
+  --color-accent-ink: oklch(16% 0.01 35);
+  --color-focus: oklch(72% 0.18 32);
+  --color-success: oklch(74% 0.11 150);
+  --color-caution: oklch(80% 0.13 78);
+  --color-danger: oklch(72% 0.16 25);
+  --color-danger-hover: oklch(78% 0.14 25);
+  --color-info: oklch(76% 0.1 245);
+  --color-status-ink: var(--color-paper);
+  --shadow-color: oklch(8% 0.008 35 / 0.38);
   --brand-purple: var(--rekky-aubergine);
   --presentation: var(--rekky-plum-950);
   --text-primary: var(--rekky-cream-text);
@@ -226,8 +296,9 @@ html {
   --text-secondary-alt: var(--rekky-mushroom-muted);
   --text-tertiary: var(--rekky-mushroom-muted);
   --text-warning: var(--rekky-lemon);
-  --text-destructive: #ff8a7a;
-  --ring-primary: var(--rekky-tomato);
+  --text-destructive: var(--color-danger);
+  --text-submit: var(--color-accent-ink);
+  --ring-primary: var(--color-focus);
   --header-primary: var(--rekky-plum-900);
   --header-hover: var(--rekky-plum-850);
   --header-button-hover: var(--rekky-plum-850);
@@ -245,64 +316,64 @@ html {
   --surface-dialog: var(--rekky-plum-900);
   --surface-submit: var(--rekky-tomato);
   --surface-submit-hover: var(--rekky-tomato-hover);
-  --surface-destructive: var(--red-800);
-  --surface-destructive-hover: var(--red-900);
+  --surface-destructive: var(--color-danger);
+  --surface-destructive-hover: var(--color-danger-hover);
   --surface-chat: var(--rekky-plum-900);
   --border-light: var(--rekky-plum-750);
   --border-medium-alt: var(--rekky-plum-700);
   --border-medium: var(--rekky-plum-700);
-  --border-heavy: #6b5a60;
+  --border-heavy: oklch(46% 0.01 35);
   --border-xheavy: var(--rekky-mushroom-muted);
-  --border-destructive: #ff8a7a;
+  --border-destructive: var(--color-danger);
   /* These are test styles */
 
-  --background: 300 12% 8%;
-  --foreground: 0 0% 98%;
-  --card: 330 8% 12%;
-  --card-foreground: 0 0% 98%;
-  --primary: 16 60% 49%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 330 8% 15%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 330 8% 15%;
-  --muted-foreground: 28 15% 82%;
-  --accent: 331 13% 18%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 40.6%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 332 9% 21%;
-  --input: 332 9% 21%;
-  --ring: 16 62% 43%;
+  --background: 14.5% 0.008 35;
+  --foreground: 94% 0.008 55;
+  --card: 18% 0.009 35;
+  --card-foreground: 94% 0.008 55;
+  --primary: 70% 0.14 32;
+  --primary-foreground: 16% 0.01 35;
+  --secondary: 22% 0.01 35;
+  --secondary-foreground: 94% 0.008 55;
+  --muted: 22% 0.01 35;
+  --muted-foreground: 68% 0.008 50;
+  --accent: 25% 0.01 35;
+  --accent-foreground: 94% 0.008 55;
+  --destructive: 72% 0.16 25;
+  --destructive-foreground: 16% 0.01 35;
+  --border: 29% 0.01 35;
+  --input: 36% 0.01 35;
+  --ring: 72% 0.18 32;
   --chart-1: 16 60% 49%;
   --chart-2: 116 41% 59%;
   --chart-3: 45 86% 62%;
   --chart-4: 300 31% 33%;
   --chart-5: 333 22% 57%;
-  --switch-unchecked: 0 0% 40%;
+  --switch-unchecked: 46% 0.01 35;
 }
 .gizmo {
-  --text-primary: var(--gizmo-gray-950);
-  --text-secondary: var(--gizmo-gray-600);
-  --text-tertiary: var(--gizmo-gray-500);
-  --surface-primary: var(--white);
-  --surface-secondary: var(--gray-50);
-  --surface-tertiary: var(--gray-100);
-  --border-light: rgba(0, 0, 0, 0.1);
-  --border-medium: rgba(0, 0, 0, 0.15);
-  --border-heavy: rgba(0, 0, 0, 0.2);
-  --border-xheavy: rgba(0, 0, 0, 0.25);
+  --text-primary: var(--color-ink);
+  --text-secondary: var(--color-ink-2);
+  --text-tertiary: var(--color-muted);
+  --surface-primary: var(--color-paper);
+  --surface-secondary: var(--color-paper-2);
+  --surface-tertiary: var(--color-paper-3);
+  --border-light: var(--color-rule);
+  --border-medium: var(--color-rule-2);
+  --border-heavy: oklch(67% 0.01 45);
+  --border-xheavy: var(--color-ink-2);
 }
 .gizmo.dark {
-  --text-primary: var(--gray-100);
-  --text-secondary: var(--gray-300);
-  --text-tertiary: var(--gizmo-gray-500);
-  --surface-primary: var(--gray-900);
-  --surface-secondary: var(--gray-800);
-  --surface-tertiary: var(--gray-700);
-  --border-light: rgba(217, 217, 227, 0.1);
-  --border-medium: rgba(217, 217, 227, 0.15);
-  --border-heavy: rgba(217, 217, 227, 0.2);
-  --border-xheavy: rgba(217, 217, 227, 0.25);
+  --text-primary: var(--color-ink);
+  --text-secondary: var(--color-ink-2);
+  --text-tertiary: var(--color-muted);
+  --surface-primary: var(--color-paper);
+  --surface-secondary: var(--color-paper-2);
+  --surface-tertiary: var(--color-paper-3);
+  --border-light: var(--color-rule);
+  --border-medium: var(--color-rule-2);
+  --border-heavy: oklch(46% 0.01 35);
+  --border-xheavy: var(--color-muted);
 }
 
 .text-token-text-primary {
@@ -331,9 +402,9 @@ html {
   font-family: var(--font-editorial), Georgia, serif;
   font-size: var(--font-size-section-title);
   font-weight: 600;
-  letter-spacing: 0.08em;
-  line-height: 1.05;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  text-transform: none;
 }
 
 .rekky-sans-display-title {
@@ -354,6 +425,7 @@ html {
   font-family: var(--font-body), Inter, sans-serif;
 }
 
+.rekky-wordmark,
 .rekky-sidebar-wordmark {
   font-family: var(--font-brand), 'Space Grotesk', Inter, sans-serif;
   font-size: 0.82rem;
@@ -438,20 +510,28 @@ html {
 .prose.cooking-recipe-markdown :where(h2, h3) {
   color: var(--text-primary);
   font-family: var(--font-editorial), Georgia, serif;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.4;
-  margin-bottom: 0.8rem;
-  margin-top: 2rem;
-  text-transform: uppercase;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  margin-bottom: 0.9rem;
+  margin-top: 2.5rem;
+  text-transform: none;
+}
+
+.prose.cooking-recipe-markdown :where(h2) {
+  font-size: clamp(1.25rem, 1.7vw, 1.5rem);
+}
+
+.prose.cooking-recipe-markdown :where(h3) {
+  font-size: clamp(1.05rem, 1.35vw, 1.2rem);
 }
 
 .prose.cooking-recipe-markdown :where(p, li) {
   color: var(--text-secondary);
   font-family: var(--font-body), Inter, sans-serif;
   line-height: 1.75;
-  max-width: 52rem;
+  max-width: 68ch;
 }
 
 .prose.cooking-recipe-markdown :where(strong) {
@@ -494,7 +574,7 @@ html {
 }
 
 .prose.cooking-recipe-markdown :where(th) {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--surface-primary-alt);
   color: var(--text-primary);
   font-family: var(--font-technical), 'Roboto Mono', monospace;
   font-size: 0.72rem;
@@ -512,7 +592,7 @@ html {
 }
 
 .prose.cooking-recipe-markdown :where(tbody tr:nth-child(even)) {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--surface-primary-alt);
 }
 
 @media (max-width: 640px) {
@@ -839,8 +919,9 @@ select {
   background-repeat: no-repeat;
   background-size: 1.5em 1.5em;
   padding-right: 2.5rem;
-  background-color: #fff;
-  border-color: #8e8ea0;
+  background-color: var(--surface-primary);
+  border-color: var(--border-medium);
+  color: var(--text-primary);
   border-radius: 0;
   border-width: 1px;
   font-size: 1rem;
@@ -1021,18 +1102,18 @@ pre {
   height: 32px;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  background-color: #ffffff;
+  border: 1px solid var(--border-light);
+  box-shadow: 0 1px 3px var(--shadow-color);
+  background-color: var(--surface-primary);
   z-index: 10;
   overflow: hidden;
   transition: transform 100ms ease;
 }
 
 .dark .premium-scroll-button {
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  background-color: #2a2a2e;
+  border-color: var(--border-light);
+  box-shadow: 0 1px 3px var(--shadow-color);
+  background-color: var(--surface-primary);
 }
 
 .scroll-animation-enter-active .premium-scroll-button {
@@ -1832,16 +1913,18 @@ button {
 body,
 html {
   height: 100%;
+  overflow-x: clip;
 }
 
 body {
-  font-family: Inter, sans-serif;
+  background-color: var(--presentation);
+  color: var(--text-primary);
+  font-family: var(--font-body), sans-serif;
 }
 
 .dark body,
 .dark html {
-  --tw-bg-opacity: 1;
-  background-color: rgba(23, 23, 23, var(--tw-bg-opacity));
+  background-color: var(--presentation);
 }
 
 #__next,
@@ -2105,8 +2188,7 @@ html {
 }
 .dark body,
 .dark html {
-  --tw-bg-opacity: 1;
-  background-color: rgba(33, 33, 33, var(--tw-bg-opacity));
+  background-color: var(--presentation);
 }
 #__next,
 #root {
@@ -2923,8 +3005,8 @@ html {
 
 .tooltip:where(.dark, .dark *) {
   background-color: var(--surface-primary);
-  color: white;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.35);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px 0 var(--shadow-color);
 }
 
 :focus {
@@ -2932,12 +3014,12 @@ html {
 }
 
 :focus-visible {
-  outline: 2px solid #000;
+  outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
 
 .dark :focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
 
@@ -3020,7 +3102,7 @@ html {
 }
 
 .account-settings-popover .select-item[data-active-item] {
-  box-shadow: 0 0 0 2px hsl(var(--ring));
+  box-shadow: 0 0 0 2px oklch(var(--ring));
 }
 
 .popover-ui[data-enter] {
@@ -3284,6 +3366,16 @@ html {
   color: var(--text-secondary);
 }
 
+.rekky-progressive-action {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .group:not(:hover) .rekky-progressive-action:not(:focus-visible) {
+    opacity: 0;
+  }
+}
+
 .rekky-rotating-word {
   display: inline-block;
   transform-origin: 50% 75%;
@@ -3309,8 +3401,22 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rekky-rotating-word {
-    animation: none;
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+  }
+
+  .animate-spin {
+    animation-duration: 2s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 

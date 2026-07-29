@@ -17,10 +17,43 @@ export class ApiError extends Error {
   }
 }
 
+export class ApiTimeoutError extends Error {
+  constructor() {
+    super('Rekky took too long to respond.');
+    this.name = 'ApiTimeoutError';
+  }
+}
+
 type ApiRequest = Omit<RequestInit, 'body'> & { body?: BodyInit | object };
 type RefreshHandler = () => Promise<boolean>;
 let refreshHandler: RefreshHandler | null = null;
 let refreshPromise: Promise<boolean> | null = null;
+const REQUEST_TIMEOUT_MS = 6_000;
+const STREAM_CONNECT_TIMEOUT_MS = 20_000;
+
+const requestWithTimeout = async (
+  url: string,
+  request: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+) => {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abort = () => controller.abort();
+  request.signal?.addEventListener('abort', abort, { once: true });
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    return await fetch(url, { ...request, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) throw new ApiTimeoutError();
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    request.signal?.removeEventListener('abort', abort);
+  }
+};
 
 export const configureAuthRefresh = (handler: RefreshHandler) => {
   refreshHandler = handler;
@@ -39,7 +72,7 @@ const execute = async <T>(
     headers.set('Content-Type', 'application/json');
     body = JSON.stringify(body);
   }
-  const response = await fetch(`${apiUrl}${path}`, { ...request, headers, body });
+  const response = await requestWithTimeout(`${apiUrl}${path}`, { ...request, headers, body });
   if (!response.ok) {
     let message = 'Rekky could not complete that request.';
     const responseText = await response.text();
@@ -76,7 +109,11 @@ const executeResponse = async (path: string, request: ApiRequest): Promise<Respo
     headers.set('Content-Type', 'application/json');
     body = JSON.stringify(body);
   }
-  const response = await fetch(`${apiUrl}${path}`, { ...request, headers, body });
+  const response = await requestWithTimeout(
+    `${apiUrl}${path}`,
+    { ...request, headers, body },
+    STREAM_CONNECT_TIMEOUT_MS,
+  );
   if (!response.ok) throw await responseError(response);
   return response;
 };

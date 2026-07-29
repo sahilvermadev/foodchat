@@ -1,5 +1,18 @@
 export const REDIRECT_PARAM = 'redirect_to';
 export const SESSION_KEY = 'post_login_redirect_to';
+export const EXPLICIT_LOGOUT_KEY = 'rekky_explicit_logout';
+
+export function markExplicitLogout(): void {
+  localStorage.setItem(EXPLICIT_LOGOUT_KEY, Date.now().toString());
+}
+
+export function clearExplicitLogout(): void {
+  localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+}
+
+export function hasExplicitlyLoggedOut(): boolean {
+  return localStorage.getItem(EXPLICIT_LOGOUT_KEY) != null;
+}
 
 /** Matches `/login` as a full path segment, with optional basename prefix (e.g. `/librechat/login/2fa`) */
 const LOGIN_PATH_RE = /(?:^|\/)login(?:\/|$)/;

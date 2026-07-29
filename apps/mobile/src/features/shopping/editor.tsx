@@ -117,7 +117,6 @@ export function ShoppingItemEditor({
               <Text style={styles.label}>{t('shopping.itemName')}</Text>
               <TextInput
                 autoCapitalize="sentences"
-                autoFocus
                 onChangeText={(value) => {
                   setName(value);
                   if (!categoryTouched) setCategory(shoppingCategory(value));

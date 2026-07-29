@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SymbolView } from 'expo-symbols';
 import {
   ActivityIndicator,
@@ -17,6 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { RecipeMetric } from './content';
 import type { RecipeDetail, StructuredRecipe } from './types';
 import type { ActiveTimerState } from './workspace';
+import type { RecipeWorkspaceState } from 'librechat-data-provider';
 import { ActionSheet } from '@/components/actionsheet';
 import { fonts, radius, space } from '@/constants/theme';
 import { useTheme } from '@/features/theme/provider';
@@ -79,8 +80,12 @@ function RecipeDetailView({
   const [activeTimers, setActiveTimers] = useState<Record<string, ActiveTimerState>>({});
   const [editTitle, setEditTitle] = useState('');
   const [editCollections, setEditCollections] = useState('');
+  const workspaceSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingWorkspaceState = useRef<Omit<RecipeWorkspaceState, 'updatedAt'> | null>(null);
   const updateRecipe = useUpdateRecipe();
   const deleteRecipe = useDeleteRecipe();
+  const updateRecipeRef = useRef(updateRecipe);
+  updateRecipeRef.current = updateRecipe;
   const handleTimerChange = useCallback((timerId: string, state?: ActiveTimerState) => {
     setActiveTimers((current) => {
       if (state) return { ...current, [timerId]: state };
@@ -95,6 +100,31 @@ function RecipeDetailView({
   const query = source === 'public' ? publicQuery : privateQuery;
   const detail = query.data;
   const privateDetail = source === 'private' ? (detail as RecipeDetail | undefined) : undefined;
+  const syncWorkspaceState = useCallback(
+    (workspaceState: Omit<RecipeWorkspaceState, 'updatedAt'>) => {
+      if (!privateDetail || !recipeId) return;
+      pendingWorkspaceState.current = workspaceState;
+      if (workspaceSyncTimer.current) return;
+      workspaceSyncTimer.current = setTimeout(() => {
+        workspaceSyncTimer.current = null;
+        const pending = pendingWorkspaceState.current;
+        pendingWorkspaceState.current = null;
+        if (!pending) return;
+        updateRecipe.mutate({ id: recipeId, patch: { workspaceState: pending } });
+      }, 1000);
+    },
+    [privateDetail, recipeId, updateRecipe],
+  );
+  useEffect(
+    () => () => {
+      if (workspaceSyncTimer.current) clearTimeout(workspaceSyncTimer.current);
+      const pending = pendingWorkspaceState.current;
+      if (pending && recipeId) {
+        updateRecipeRef.current.mutate({ id: recipeId, patch: { workspaceState: pending } });
+      }
+    },
+    [recipeId],
+  );
   const recipe = detail?.recipe;
   const canonicalMarkdown = detail?.documentMarkdown.trim();
   const renderCanonicalMarkdown = shouldRenderRecipeMarkdown({
@@ -181,6 +211,7 @@ function RecipeDetailView({
         <RecipeMetrics metrics={workspaceMetrics} />
         <RecipeWorkspace
           initialNotes={privateDetail?.personalNotes}
+          initialWorkspaceState={privateDetail?.workspaceState}
           isCooked={privateDetail?.saveList === 'cooked_already'}
           metadata={detail?.categorization}
           onMarkCooked={
@@ -199,6 +230,7 @@ function RecipeDetailView({
               : undefined
           }
           onTimerChange={handleTimerChange}
+          onWorkspaceStateChange={privateDetail ? syncWorkspaceState : undefined}
           recipe={workspaceRecipe}
           supplement={supplement}
           workspaceId={`saved:${recipeId}`}

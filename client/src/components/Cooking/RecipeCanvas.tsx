@@ -59,89 +59,19 @@ import { CodeBlockProvider } from '~/Providers';
 import { unicodeCitation } from '~/components/Web';
 import { langSubset } from '~/utils';
 import RecipeMetrics from './Metrics';
+import RecipeDocument, { RecipeDetailsDisclosure } from './RecipeDocument';
+import RecipeInstructions, { hasDisplayableInstructions } from './RecipeInstructions';
 import StructuredIngredients, { hasDisplayableIngredients } from './StructuredIngredients';
-import { recipeMarkdownDisplay, stripIngredientsSection } from './recipe';
+import { recipeMarkdownDisplay, structuredRecipeMarkdownSections } from './recipe';
+import {
+  recipeSourceLabel,
+  savedRecipePresentation,
+  uniqueRecipeValues,
+} from './recipePresentation';
 import { remarkCookingTimers } from './timerMarkdown';
+import { playTimerCompleteAlarm, prepareTimerAlarm } from './timerAlarm';
+import useRecipeWorkspace from './useRecipeWorkspace';
 import VoiceAssistantWidget from './VoiceAssistantWidget';
-
-type BrowserAudioContext = typeof AudioContext;
-
-function playTimerCompleteAlarm() {
-  const AudioContextCtor = (window.AudioContext ||
-    (window as Window & { webkitAudioContext?: BrowserAudioContext }).webkitAudioContext) as
-    | BrowserAudioContext
-    | undefined;
-
-  if (!AudioContextCtor) {
-    return;
-  }
-
-  const audioCtx = new AudioContextCtor();
-  void audioCtx.resume?.();
-
-  const compressor = audioCtx.createDynamicsCompressor();
-  compressor.threshold.setValueAtTime(-18, audioCtx.currentTime);
-  compressor.knee.setValueAtTime(16, audioCtx.currentTime);
-  compressor.ratio.setValueAtTime(4, audioCtx.currentTime);
-  compressor.attack.setValueAtTime(0.004, audioCtx.currentTime);
-  compressor.release.setValueAtTime(0.18, audioCtx.currentTime);
-  compressor.connect(audioCtx.destination);
-
-  const masterGain = audioCtx.createGain();
-  masterGain.gain.setValueAtTime(0.72, audioCtx.currentTime);
-  masterGain.connect(compressor);
-
-  const playTone = (startTime: number, frequency: number, duration: number, peakGain = 0.42) => {
-    const oscillator = audioCtx.createOscillator();
-    const harmonic = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    const harmonicGain = audioCtx.createGain();
-
-    oscillator.type = 'triangle';
-    oscillator.frequency.setValueAtTime(frequency, startTime);
-    oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.012, startTime + duration);
-
-    harmonic.type = 'sine';
-    harmonic.frequency.setValueAtTime(frequency * 2, startTime);
-
-    gain.gain.setValueAtTime(0.0001, startTime);
-    gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.018);
-    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-
-    harmonicGain.gain.setValueAtTime(0.0001, startTime);
-    harmonicGain.gain.linearRampToValueAtTime(peakGain * 0.18, startTime + 0.016);
-    harmonicGain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration * 0.72);
-
-    oscillator.connect(gain);
-    gain.connect(masterGain);
-    harmonic.connect(harmonicGain);
-    harmonicGain.connect(masterGain);
-    oscillator.start(startTime);
-    oscillator.stop(startTime + duration + 0.04);
-    harmonic.start(startTime);
-    harmonic.stop(startTime + duration + 0.04);
-  };
-
-  const start = audioCtx.currentTime + 0.04;
-  [
-    [0, 659.25, 0.16, 0.34],
-    [0.18, 880, 0.18, 0.42],
-    [0.4, 1174.66, 0.26, 0.36],
-    [0.86, 659.25, 0.16, 0.32],
-    [1.04, 880, 0.18, 0.4],
-    [1.26, 1318.51, 0.32, 0.36],
-  ].forEach(([offset, frequency, duration, peakGain]) => {
-    playTone(start + offset, frequency, duration, peakGain);
-  });
-
-  if ('vibrate' in navigator) {
-    navigator.vibrate([70, 40, 90]);
-  }
-
-  window.setTimeout(() => {
-    void audioCtx.close();
-  }, 2200);
-}
 
 export function KitchenTimer({ seconds, label }: { seconds: number; label?: string }) {
   const localize = useLocalize();
@@ -195,6 +125,7 @@ export function KitchenTimer({ seconds, label }: { seconds: number; label?: stri
     e.preventDefault();
     e.stopPropagation();
     if (isCompleted) {
+      prepareTimerAlarm();
       setTimeLeft(seconds);
       endsAtRef.current = Date.now() + seconds * 1000;
       setIsRunning(true);
@@ -207,6 +138,7 @@ export function KitchenTimer({ seconds, label }: { seconds: number; label?: stri
       return;
     }
 
+    prepareTimerAlarm();
     endsAtRef.current = Date.now() + timeLeft * 1000;
     setIsRunning(true);
   };
@@ -224,12 +156,10 @@ export function KitchenTimer({ seconds, label }: { seconds: number; label?: stri
   const timeString = `${minutes}:${secs.toString().padStart(2, '0')}`;
   let timerToneClass = 'border-border-light bg-surface-primary text-text-secondary';
   if (isRunning) {
-    timerToneClass =
-      'border-amber-500/25 bg-amber-500/10 text-amber-600 shadow-[0_0_8px_rgba(245,158,11,0.04)] dark:text-amber-300';
+    timerToneClass = 'border-status-caution/25 bg-status-caution/10 text-status-caution';
   }
   if (isCompleted) {
-    timerToneClass =
-      'border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300';
+    timerToneClass = 'border-status-success/25 bg-status-success/10 text-status-success';
   }
   let primaryActionLabel = localize('com_cooking_start_named_timer', { 0: timerName });
   if (isRunning) {
@@ -249,15 +179,15 @@ export function KitchenTimer({ seconds, label }: { seconds: number; label?: stri
 
   return (
     <span
-      className={`rekky-timer mx-1 inline-flex h-6 select-none items-center gap-0.5 rounded-full border px-1 text-[0.72rem] font-semibold leading-none transition-colors duration-200 ${timerToneClass}`}
-      style={{ verticalAlign: '-0.14em' }}
+      className={`rekky-timer mx-1 my-1 inline-flex min-h-11 select-none items-center gap-0.5 rounded-control border px-1 text-[0.72rem] font-semibold leading-none transition-colors duration-200 ${timerToneClass}`}
+      style={{ verticalAlign: '-0.35em' }}
       aria-label={`${timerName} ${timeString}`}
       title={timerName}
     >
       <button
         type="button"
         onClick={handlePrimaryAction}
-        className="inline-flex h-5 min-w-12 items-center justify-center gap-1 rounded-full px-1.5 tabular-nums transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-1 focus-visible:ring-border-heavy"
+        className="inline-flex min-h-11 min-w-16 items-center justify-center gap-1 rounded-control px-2 tabular-nums transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
         aria-label={primaryActionLabel}
         title={primaryActionLabel}
       >
@@ -269,7 +199,7 @@ export function KitchenTimer({ seconds, label }: { seconds: number; label?: stri
         <button
           type="button"
           onClick={handleReset}
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary focus:outline-none focus-visible:ring-1 focus-visible:ring-border-heavy"
+          className="inline-flex size-11 items-center justify-center rounded-control text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
           aria-label={localize('com_cooking_reset_named_timer', { 0: timerName })}
           title={localize('com_cooking_reset_timer')}
         >
@@ -344,31 +274,6 @@ function recipeToMarkdown(recipe: StructuredRecipe): string {
     .join('\n\n');
 }
 
-function getSourceLabel(url: string): string {
-  try {
-    const parsed = new URL(url);
-    const hostname = parsed.hostname.toLowerCase().replace('www.', '');
-    if (hostname === 'youtube.com' || hostname === 'youtu.be') {
-      return 'YouTube';
-    }
-    if (hostname === 'cooking.nytimes.com') {
-      return 'NYT Cooking';
-    }
-    if (hostname === 'nytimes.com') {
-      return 'New York Times';
-    }
-    if (hostname === 'instagram.com') {
-      return 'Instagram';
-    }
-    if (hostname === 'tiktok.com') {
-      return 'TikTok';
-    }
-    return hostname;
-  } catch {
-    return 'Source';
-  }
-}
-
 export default function RecipeCanvas({
   draft,
   markdown = '',
@@ -398,6 +303,19 @@ export default function RecipeCanvas({
   });
   const saveRecipe = useSaveRecipeMutation();
   const updateSavedRecipe = useUpdateSavedRecipeMutation();
+  const savedRecipe = savedRecipeByIdQuery.data ?? savedRecipeByDraftQuery.data;
+  const [workspaceState, updateWorkspaceState] = useRecipeWorkspace(
+    savedRecipe?.workspaceState,
+    savedRecipe
+      ? (next) =>
+          updateSavedRecipe
+            .mutateAsync({
+              recipeId: savedRecipe._id,
+              payload: { workspaceState: next },
+            })
+            .then(() => undefined)
+      : undefined,
+  );
 
   const documentMarkdown = useMemo(() => {
     const assistantMarkdown = markdown.trim();
@@ -414,15 +332,16 @@ export default function RecipeCanvas({
   const hasStructuredIngredients = draft?.recipe
     ? hasDisplayableIngredients(draft.recipe.ingredients)
     : false;
+  const hasStructuredSteps = hasDisplayableInstructions(draft?.recipe);
 
-  const processedBody = useMemo(() => {
-    if (!documentParts.body) {
-      return '';
-    }
-    return hasStructuredIngredients
-      ? stripIngredientsSection(documentParts.body)
-      : documentParts.body;
-  }, [documentParts.body, hasStructuredIngredients]);
+  const documentSections = useMemo(
+    () =>
+      structuredRecipeMarkdownSections(documentParts.body, {
+        ingredients: hasStructuredIngredients,
+        instructions: hasStructuredSteps,
+      }),
+    [documentParts.body, hasStructuredIngredients, hasStructuredSteps],
+  );
 
   const rehypePlugins = useMemo(
     () => [
@@ -472,7 +391,16 @@ export default function RecipeCanvas({
     return null;
   }
 
-  const savedRecipe = savedRecipeByIdQuery.data ?? savedRecipeByDraftQuery.data;
+  const presentation = savedRecipePresentation(savedRecipe);
+  const documentTags = uniqueRecipeValues([
+    ...(savedRecipe?.collections ?? []),
+    ...presentation.primaryTags,
+    ...presentation.diets,
+    ...(savedRecipe ? [] : (draft?.recipe.tags ?? [])),
+  ]);
+  const equipment = presentation.equipment.length
+    ? presentation.equipment
+    : uniqueRecipeValues(draft?.recipe.equipment ?? []);
   const canSave = Boolean(documentMarkdown.trim());
   const hasSavedRecipe = Boolean(savedRecipe);
   const hasChangedSavedRecipe =
@@ -499,10 +427,12 @@ export default function RecipeCanvas({
   const handleCopyMarkdown = () => {
     const copied = copy(documentMarkdown, { format: 'text/plain' });
     setIsCopied(copied);
-    showToast({
-      message: localize(copied ? 'com_cooking_markdown_copied' : 'com_ui_copy_failed'),
-      severity: copied ? NotificationSeverity.SUCCESS : NotificationSeverity.ERROR,
-    });
+    if (!copied) {
+      showToast({
+        message: localize('com_ui_copy_failed'),
+        severity: NotificationSeverity.ERROR,
+      });
+    }
     if (copied) {
       window.setTimeout(() => setIsCopied(false), 2000);
     }
@@ -534,6 +464,18 @@ export default function RecipeCanvas({
     saveRecipe.mutate(payload);
   };
 
+  const ensureRecipeId = async () => {
+    if (savedRecipe) {
+      return savedRecipe._id;
+    }
+    const payload = savePayload('want_to_cook');
+    if (!payload) {
+      throw new Error('Recipe data is unavailable.');
+    }
+    const created = await saveRecipe.mutateAsync(payload);
+    return created._id;
+  };
+
   const handleSave = () => {
     if (!canSave || !draft || isSaving) {
       return;
@@ -559,26 +501,26 @@ export default function RecipeCanvas({
           size="sm"
           variant="submit"
           disabled={isSaving}
-          className="size-11 gap-0 rounded-full bg-transparent p-0 text-surface-submit shadow-none hover:bg-surface-hover hover:text-surface-submit sm:h-9 sm:w-auto sm:gap-2 sm:rounded-md sm:bg-surface-submit sm:px-3 sm:text-white sm:hover:bg-surface-submit sm:hover:text-white"
+          className="min-h-11 gap-2 rounded-control border-transparent bg-surface-submit px-3.5 text-text-submit shadow-none transition-colors hover:bg-surface-submit-hover focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-55"
           aria-label={localize('com_recipes_save_recipe')}
         >
           {saveIcon}
-          <span className="hidden sm:inline">{buttonLabel}</span>
-          <ChevronDown className="hidden h-3.5 w-3.5 opacity-85 sm:block" aria-hidden="true" />
+          <span>{buttonLabel}</span>
+          <ChevronDown className="h-3.5 w-3.5 opacity-85" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="min-w-44 rounded-lg border-border-light bg-surface-primary p-1.5 shadow-xl"
+        className="min-w-44 rounded-card border-border-light bg-surface-primary p-1.5 shadow-floating"
       >
         <DropdownMenuItem
-          className="flex cursor-pointer items-center rounded-md px-2.5 py-2 text-sm text-text-primary transition-colors hover:bg-surface-hover focus:bg-surface-hover"
+          className="flex min-h-11 cursor-pointer items-center rounded-control px-3 text-sm text-text-primary transition-colors hover:bg-surface-hover focus:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
           onSelect={() => saveNewRecipe('want_to_cook')}
         >
           {localize('com_recipes_save_list_want_to_cook')}
         </DropdownMenuItem>
         <DropdownMenuItem
-          className="flex cursor-pointer items-center rounded-md px-2.5 py-2 text-sm text-text-primary transition-colors hover:bg-surface-hover focus:bg-surface-hover"
+          className="flex min-h-11 cursor-pointer items-center rounded-control px-3 text-sm text-text-primary transition-colors hover:bg-surface-hover focus:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
           onSelect={() => saveNewRecipe('cooked_already')}
         >
           {localize('com_recipes_save_list_cooked_already')}
@@ -591,11 +533,11 @@ export default function RecipeCanvas({
       variant={hasChangedSavedRecipe ? 'submit' : 'outline'}
       disabled={isSaving || !hasChangedSavedRecipe}
       onClick={handleSave}
-      className="size-11 gap-0 rounded-full border-0 bg-transparent p-0 text-surface-submit shadow-none hover:bg-surface-hover hover:text-surface-submit disabled:text-surface-submit sm:h-9 sm:w-auto sm:gap-2 sm:rounded-md sm:border sm:px-3"
+      className="min-h-11 gap-2 rounded-control border border-border-light bg-transparent px-3.5 text-text-secondary shadow-none transition-colors hover:border-border-medium hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-55"
       aria-label={buttonLabel}
     >
       {saveIcon}
-      <span className="hidden sm:inline">{buttonLabel}</span>
+      <span>{buttonLabel}</span>
     </Button>
   );
 
@@ -608,7 +550,7 @@ export default function RecipeCanvas({
             type="button"
             onClick={handleCopyMarkdown}
             aria-label={localize('com_cooking_copy_markdown')}
-            className="inline-flex size-11 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-heavy sm:size-8 sm:rounded-md"
+            className="inline-flex size-11 items-center justify-center rounded-control border border-border-light text-text-secondary transition-colors hover:border-border-medium hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
           >
             {isCopied ? (
               <Check className="size-[1.125rem] sm:size-4" aria-hidden="true" />
@@ -624,69 +566,82 @@ export default function RecipeCanvas({
 
   return (
     <section className="rekky-ui rekky-recipe-surface flex min-h-0 min-w-0 flex-1 flex-col bg-surface-primary-alt text-text-primary">
-      <div className="min-h-0 flex-1 overflow-y-auto px-0 py-0 sm:px-7 sm:py-6 lg:px-10">
-        <article className="mx-auto min-h-full max-w-[68rem] border-y border-border-light bg-surface-primary shadow-none sm:rounded-lg sm:border">
-          {documentMarkdown ? (
-            <header className="border-b border-border-light px-4 py-6 sm:px-8 sm:py-9 lg:px-12">
-              <div className="min-w-0">
-                {documentParts.title ? (
-                  <h1 className="rekky-title text-text-primary">{documentParts.title}</h1>
+      <div className="min-h-0 flex-1 overflow-y-auto sm:px-7 sm:py-6 lg:px-10">
+        {documentMarkdown ? (
+          <RecipeDocument
+            title={documentParts.title || draft?.recipe.title || localize('com_cooking_recipe')}
+            imageUrl={savedRecipe?.illustrationUrl}
+            sourceUrl={draft?.sourceUrl ?? savedRecipe?.sourceUrl}
+            sourceLabel={
+              draft?.sourceUrl || savedRecipe?.sourceUrl
+                ? recipeSourceLabel(draft?.sourceUrl ?? savedRecipe?.sourceUrl ?? '')
+                : undefined
+            }
+            metadata={
+              <>
+                {draft ? <span>{localize(documentTypeKey(draft))}</span> : null}
+                {savedRecipe?.categorizationStatus === 'pending' ? (
+                  <>
+                    {draft ? <span aria-hidden="true">·</span> : null}
+                    <span>{localize('com_recipes_categorizing')}</span>
+                  </>
                 ) : null}
-                <div className="mt-3 flex min-h-11 items-start justify-between gap-3 sm:min-h-9">
-                  <div className="min-w-0 pt-1 sm:pt-0">
-                    {draft ? (
-                      <div className="rekky-meta flex flex-wrap items-center gap-x-2 text-text-secondary">
-                        <span>{localize(documentTypeKey(draft))}</span>
-                        {draft.sourceUrl ? (
-                          <>
-                            <span>·</span>
-                            <a
-                              href={draft.sourceUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 font-medium text-surface-submit underline decoration-dotted underline-offset-4 hover:text-surface-submit-hover"
-                            >
-                              <span>{getSourceLabel(draft.sourceUrl)}</span>
-                              <svg
-                                className="size-3 shrink-0"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                <polyline points="15 3 21 3 21 9" />
-                                <line x1="10" y1="14" x2="21" y2="3" />
-                              </svg>
-                            </a>
-                          </>
-                        ) : null}
-                      </div>
+                {isPreparingDraft ? (
+                  <>
+                    {draft || savedRecipe?.categorizationStatus === 'pending' ? (
+                      <span aria-hidden="true">·</span>
                     ) : null}
-                    {savedRecipe?.categorizationStatus === 'pending' ? (
-                      <p className="rekky-meta mt-2 text-text-secondary">
-                        {localize('com_recipes_categorizing')}
-                      </p>
-                    ) : null}
-                    {isPreparingDraft ? (
-                      <p className="rekky-meta mt-2 text-text-secondary">
-                        {localize('com_cooking_updating_canvas')}
-                      </p>
-                    ) : null}
-                  </div>
-                  {documentActions}
-                </div>
+                    <span>{localize('com_cooking_updating_canvas')}</span>
+                  </>
+                ) : null}
+              </>
+            }
+            actions={documentActions}
+            tags={documentTags}
+            warnings={presentation.allergens}
+          >
+            {documentSections.preamble ? (
+              <div className="cooking-recipe-markdown markdown prose light dark:prose-invert mb-7 max-w-none break-words text-text-primary">
+                <CodeBlockProvider>
+                  <ReactMarkdown
+                    /** @ts-expect-error Unified plugin versions expose incompatible duplicate types. */
+                    remarkPlugins={remarkPlugins}
+                    /** @ts-expect-error Unified plugin versions expose incompatible duplicate types. */
+                    rehypePlugins={rehypePlugins}
+                    components={markdownComponents as { [nodeType: string]: React.ElementType }}
+                  >
+                    {documentSections.preamble}
+                  </ReactMarkdown>
+                </CodeBlockProvider>
               </div>
-            </header>
-          ) : null}
-          {documentMarkdown ? (
-            <div className="px-4 py-6 sm:px-8 sm:py-9 lg:px-12">
-              <RecipeMetrics metrics={documentParts.metrics} />
-              {hasStructuredIngredients ? (
-                <StructuredIngredients ingredients={draft?.recipe.ingredients ?? []} />
-              ) : null}
+            ) : null}
+            <RecipeMetrics metrics={documentParts.metrics} />
+            <RecipeDetailsDisclosure
+              label={localize('com_recipe_equipment_details')}
+              groups={[
+                { label: localize('com_recipe_equipment'), items: equipment },
+                { label: localize('com_ui_details'), items: presentation.detailTags },
+              ]}
+            />
+            {hasStructuredIngredients ? (
+              <StructuredIngredients
+                ensureRecipeId={draft ? ensureRecipeId : undefined}
+                ingredients={draft?.recipe.ingredients ?? []}
+                onWorkspaceChange={savedRecipe ? updateWorkspaceState : undefined}
+                recipeId={savedRecipe?._id}
+                recipeTitle={draft?.recipe.title}
+                servings={draft?.recipe.servings}
+                workspaceState={workspaceState}
+              />
+            ) : null}
+            {draft?.recipe && hasStructuredSteps ? (
+              <RecipeInstructions
+                onWorkspaceChange={savedRecipe ? updateWorkspaceState : undefined}
+                recipe={draft.recipe}
+                workspaceState={workspaceState}
+              />
+            ) : null}
+            {documentSections.remainder ? (
               <div className="cooking-recipe-markdown markdown prose light dark:prose-invert max-w-none break-words text-text-primary">
                 <CodeBlockProvider>
                   <ReactMarkdown
@@ -696,17 +651,17 @@ export default function RecipeCanvas({
                     rehypePlugins={rehypePlugins}
                     components={markdownComponents as { [nodeType: string]: React.ElementType }}
                   >
-                    {processedBody}
+                    {documentSections.remainder}
                   </ReactMarkdown>
                 </CodeBlockProvider>
               </div>
-            </div>
-          ) : (
-            <div className="flex min-h-72 items-center justify-center text-sm text-text-secondary">
-              {localize('com_cooking_preparing_recipe')}
-            </div>
-          )}
-        </article>
+            ) : null}
+          </RecipeDocument>
+        ) : (
+          <div className="flex min-h-72 items-center justify-center text-sm text-text-secondary">
+            {localize('com_cooking_preparing_recipe')}
+          </div>
+        )}
       </div>
       {conversationId && (
         <VoiceAssistantWidget conversationId={conversationId} recipeMarkdown={documentMarkdown} />

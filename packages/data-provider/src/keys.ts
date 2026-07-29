@@ -70,6 +70,7 @@ export enum QueryKeys {
   socialImports = 'socialImports',
   socialImportJobs = 'socialImportJobs',
   socialPlaylists = 'socialPlaylists',
+  shoppingList = 'shoppingList',
 }
 
 export enum MutationKeys {
@@ -116,4 +117,10 @@ export enum MutationKeys {
   updateSocialPlaylist = 'updateSocialPlaylist',
   syncSocialPlaylist = 'syncSocialPlaylist',
   deleteSocialPlaylist = 'deleteSocialPlaylist',
+  addShoppingItems = 'addShoppingItems',
+  updateShoppingItem = 'updateShoppingItem',
+  deleteShoppingItem = 'deleteShoppingItem',
+  deleteShoppingContribution = 'deleteShoppingContribution',
+  mergeShoppingItems = 'mergeShoppingItems',
+  clearPurchasedShoppingItems = 'clearPurchasedShoppingItems',
 }

@@ -1,5 +1,5 @@
 import type { Ingredient } from 'librechat-data-provider';
-import { ingredientText, scaledYieldText } from './workspace-format';
+import { ingredientText, restoredTimerState, scaledYieldText } from './workspace-format';
 
 const ingredient: Ingredient = {
   id: 'flour',
@@ -63,8 +63,22 @@ describe('scaledYieldText', () => {
   });
 
   it('updates a serves-style yield', () => {
+    expect(scaledYieldText({ baseServings: 4, currentServings: 6, yieldText: 'Serves 4' })).toBe(
+      'Serves 6',
+    );
+  });
+});
+
+describe('restoredTimerState', () => {
+  it('restores a running timer from its deadline', () => {
     expect(
-      scaledYieldText({ baseServings: 4, currentServings: 6, yieldText: 'Serves 4' }),
-    ).toBe('Serves 6');
+      restoredTimerState({ endsAt: 70_000, remaining: 60, running: true }, 60, 10_000),
+    ).toEqual({ endsAt: 70_000, remaining: 60, running: true });
+  });
+
+  it('finishes an elapsed timer instead of restarting it', () => {
+    expect(restoredTimerState({ endsAt: 9_000, remaining: 30, running: true }, 30, 10_000)).toEqual(
+      { endsAt: undefined, remaining: 0, running: false },
+    );
   });
 });

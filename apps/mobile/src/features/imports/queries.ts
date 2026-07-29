@@ -11,6 +11,15 @@ import type {
   SocialPlaylistSubscriptionsResponse,
   UpdateSocialImportRequest,
 } from 'librechat-data-provider';
+import {
+  socialImport,
+  socialImportDraft,
+  socialImportRetry,
+  socialImports,
+  socialPlaylist,
+  socialPlaylists,
+  socialPlaylistSync,
+} from 'librechat-data-provider/mobile';
 
 import { apiFetch } from '@/lib/api/client';
 import { useAuth } from '@/features/auth/provider';
@@ -47,11 +56,11 @@ export function useSocialImports(params: SocialImportsQuery) {
       if (!isOnlineNow() && user) return listOfflineImports(user.id, params);
       try {
         const response = await apiFetch<SocialImportsResponse>(
-          `/api/social-imports?${queryString(params, pageParam)}`,
+          socialImports(queryString(params, pageParam)),
         );
         if (user) {
           await cacheOfflineImports(user.id, response.imports);
-          void cacheOfflineMedia([], response.imports);
+          void cacheOfflineMedia(user.id, [], response.imports);
         }
         return response;
       } catch (error) {
@@ -80,9 +89,7 @@ export function useSocialPlaylists() {
     queryFn: async () => {
       if (!isOnlineNow() && user) return listOfflinePlaylists(user.id);
       try {
-        const response = await apiFetch<SocialPlaylistSubscriptionsResponse>(
-          '/api/social-imports/playlists',
-        );
+        const response = await apiFetch<SocialPlaylistSubscriptionsResponse>(socialPlaylists());
         if (user)
           await replaceOfflinePlaylists(user.id, response.subscriptions, new Date().toISOString());
         return response;
@@ -111,12 +118,12 @@ export function useImportMutations() {
 
   const createImport = useMutation({
     mutationFn: (payload: CreateSocialImportRequest) =>
-      apiFetch<SocialImport>('/api/social-imports', { method: 'POST', body: payload }),
+      apiFetch<SocialImport>(socialImports(), { method: 'POST', body: payload }),
     onSuccess: refreshImports,
   });
   const createPlaylist = useMutation({
     mutationFn: (sourceUrl: string) =>
-      apiFetch<SocialPlaylistSubscriptionResponse>('/api/social-imports/playlists', {
+      apiFetch<SocialPlaylistSubscriptionResponse>(socialPlaylists(), {
         method: 'POST',
         body: { sourceUrl },
       }),
@@ -124,7 +131,7 @@ export function useImportMutations() {
   });
   const updateImport = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateSocialImportRequest }) =>
-      apiFetch<SocialImport>(`/api/social-imports/${encodeURIComponent(id)}`, {
+      apiFetch<SocialImport>(socialImport(id), {
         method: 'PATCH',
         body: payload,
       }),
@@ -132,7 +139,7 @@ export function useImportMutations() {
   });
   const createDraft = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload?: CreateSocialImportDraftRequest }) =>
-      apiFetch<SocialImportDraftResponse>(`/api/social-imports/${encodeURIComponent(id)}/draft`, {
+      apiFetch<SocialImportDraftResponse>(socialImportDraft(id), {
         method: 'POST',
         body: payload ?? {},
       }),
@@ -140,39 +147,35 @@ export function useImportMutations() {
   });
   const retryImport = useMutation({
     mutationFn: (id: string) =>
-      apiFetch<SocialImport>(`/api/social-imports/${encodeURIComponent(id)}/retry`, {
+      apiFetch<SocialImport>(socialImportRetry(id), {
         method: 'POST',
         body: {},
       }),
     onSuccess: refreshImports,
   });
   const deleteImport = useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<void>(`/api/social-imports/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => apiFetch<void>(socialImport(id), { method: 'DELETE' }),
     onSuccess: refreshImports,
   });
   const updatePlaylist = useMutation({
     mutationFn: ({ id, status }: { id: string; status: SocialPlaylistSubscription['status'] }) =>
-      apiFetch<SocialPlaylistSubscription>(
-        `/api/social-imports/playlists/${encodeURIComponent(id)}`,
-        {
-          method: 'PATCH',
-          body: { status },
-        },
-      ),
+      apiFetch<SocialPlaylistSubscription>(socialPlaylist(id), {
+        method: 'PATCH',
+        body: { status },
+      }),
     onSuccess: refreshPlaylists,
   });
   const syncPlaylist = useMutation({
     mutationFn: (id: string) =>
-      apiFetch<SocialPlaylistSubscriptionResponse>(
-        `/api/social-imports/playlists/${encodeURIComponent(id)}/sync`,
-        { method: 'POST', body: {} },
-      ),
+      apiFetch<SocialPlaylistSubscriptionResponse>(socialPlaylistSync(id), {
+        method: 'POST',
+        body: {},
+      }),
     onSuccess: async () => Promise.all([refreshImports(), refreshPlaylists()]),
   });
   const deletePlaylist = useMutation({
     mutationFn: (id: string) =>
-      apiFetch<void>(`/api/social-imports/playlists/${encodeURIComponent(id)}`, {
+      apiFetch<void>(socialPlaylist(id), {
         method: 'DELETE',
       }),
     onSuccess: refreshPlaylists,

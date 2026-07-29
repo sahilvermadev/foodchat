@@ -124,6 +124,21 @@ describe('useAuthRedirect', () => {
     expect(router.state.historyAction).toBe('REPLACE');
   });
 
+  it('does not compete with an explicit logout redirect', async () => {
+    (useAuthContext as jest.Mock).mockReturnValue({
+      user: null,
+      isAuthenticated: false,
+      isLoggingOut: true,
+    });
+
+    const router = createTestRouter('/', '/c/recipe');
+    render(<RouterProvider router={router} />);
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(router.state.location.pathname).toBe('/c/recipe');
+  });
+
   it('should keep unauthenticated users on guest-allowed routes', async () => {
     (useAuthContext as jest.Mock).mockReturnValue({
       user: null,

@@ -74,6 +74,24 @@ export type SavedRecipeSort =
   | 'title'
   | 'quickest';
 
+export type RecipeUnitMode = 'original' | 'metric' | 'imperial';
+
+export type RecipeWorkspaceTimer = {
+  id: string;
+  label: string;
+  remaining: number;
+  running: boolean;
+  endsAt?: number;
+};
+
+export type RecipeWorkspaceState = {
+  servings: number;
+  unitMode: RecipeUnitMode;
+  checkedIngredientIds: string[];
+  timers: RecipeWorkspaceTimer[];
+  updatedAt: string;
+};
+
 export type CookingDocument = {
   _id: string;
   user: string;
@@ -141,6 +159,7 @@ export type SavedRecipe = {
   favorite: boolean;
   pinned: boolean;
   personalNotes?: string;
+  workspaceState?: RecipeWorkspaceState;
   lastCookedAt?: string;
   recipe?: StructuredRecipe;
   yield?: string;
@@ -316,6 +335,7 @@ export type UpdateSavedRecipeRequest = {
   favorite?: boolean;
   pinned?: boolean;
   personalNotes?: string;
+  workspaceState?: Omit<RecipeWorkspaceState, 'updatedAt'>;
   recipe?: StructuredRecipe;
 };
 
@@ -363,6 +383,7 @@ export type SavedRecipesResponse = {
 };
 
 export type OfflineRecipesResponse = {
+  deletedIds?: string[];
   recipes: SavedRecipe[];
   syncedAt: string;
   nextCursor?: string;
@@ -547,12 +568,16 @@ export type SocialImportsQuery = {
   view?: 'all' | 'ready' | 'needs_help' | 'processing' | 'saved';
   limit?: number;
   cursor?: string;
+  since?: string;
+  until?: string;
 };
 
 export type SocialImportsResponse = {
+  deletedIds?: string[];
   imports: SocialImport[];
   total: number;
   nextCursor?: string;
+  syncedAt?: string;
 };
 
 export type SocialImportJobsResponse = {

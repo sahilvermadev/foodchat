@@ -9,6 +9,7 @@ export * from './Misc';
 export * from './connection';
 export * from './Preferences';
 export * from './Cooking';
+export * from './Shopping';
 export * from './mutations';
 export * from './queries';
 export * from './roles';

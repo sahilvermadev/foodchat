@@ -59,6 +59,38 @@ export async function cacheOfflineImports(userId: string, imports: SocialImport[
   });
 }
 
+export async function mergeOfflineImports(
+  userId: string,
+  imports: SocialImport[],
+  deletedIds: string[],
+  syncedAt: string,
+) {
+  const db = await offlineDatabase();
+  await db.withExclusiveTransactionAsync(async (transaction) => {
+    for (const importId of deletedIds) {
+      await transaction.runAsync(
+        'DELETE FROM offline_imports WHERE user_id = ? AND import_id = ?',
+        userId,
+        importId,
+      );
+    }
+    for (const item of imports) {
+      await transaction.runAsync(
+        `INSERT INTO offline_imports (user_id, import_id, payload_json, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, import_id) DO UPDATE SET
+           payload_json = excluded.payload_json,
+           created_at = excluded.created_at`,
+        userId,
+        item._id,
+        JSON.stringify(item),
+        item.createdAt,
+      );
+    }
+  });
+  await writeLastSync(userId, 'imports', syncedAt);
+}
+
 export async function listOfflineImports(
   userId: string,
   params: SocialImportsQuery,

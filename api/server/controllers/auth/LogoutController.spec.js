@@ -181,7 +181,7 @@ describe('LogoutController', () => {
       );
     });
 
-    it('defaults to DOMAIN_CLIENT/login when OPENID_POST_LOGOUT_REDIRECT_URI is unset', async () => {
+    it('returns OpenID users to the public landing page by default', async () => {
       delete process.env.OPENID_POST_LOGOUT_REDIRECT_URI;
       const req = buildReq();
       const res = buildRes();
@@ -190,9 +190,7 @@ describe('LogoutController', () => {
 
       const body = res.send.mock.calls[0][0];
       const url = new URL(body.redirect);
-      expect(url.searchParams.get('post_logout_redirect_uri')).toBe(
-        'https://app.example.com/login',
-      );
+      expect(url.searchParams.get('post_logout_redirect_uri')).toBe('https://app.example.com/');
     });
   });
 
@@ -465,7 +463,7 @@ describe('LogoutController', () => {
 
     it('keeps id_token_hint when projected URL length equals the max', async () => {
       const baseUrl = new URL('https://idp.example.com/logout');
-      baseUrl.searchParams.set('post_logout_redirect_uri', 'https://app.example.com/login');
+      baseUrl.searchParams.set('post_logout_redirect_uri', 'https://app.example.com/');
       const baseLength = baseUrl.toString().length;
       const tokenLength = 2000 - baseLength - '&id_token_hint='.length;
       const exactToken = 'a'.repeat(tokenLength);
@@ -487,7 +485,7 @@ describe('LogoutController', () => {
 
     it('falls back to logout_hint when projected URL is one char over the max', async () => {
       const baseUrl = new URL('https://idp.example.com/logout');
-      baseUrl.searchParams.set('post_logout_redirect_uri', 'https://app.example.com/login');
+      baseUrl.searchParams.set('post_logout_redirect_uri', 'https://app.example.com/');
       const baseLength = baseUrl.toString().length;
       const tokenLength = 2000 - baseLength - '&id_token_hint='.length + 1;
       const overToken = 'a'.repeat(tokenLength);

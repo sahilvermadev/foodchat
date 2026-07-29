@@ -15,4 +15,4 @@ export type TokenResponse = {
   user?: AuthUser;
 };
 export type LoginResponse = TokenResponse | { twoFAPending: true; tempToken: string };
-export type AuthStatus = 'restoring' | 'signedOut' | 'twoFactor' | 'signedIn';
+export type AuthStatus = 'restoring' | 'signedOut' | 'twoFactor' | 'signedIn' | 'signingOut';

@@ -121,7 +121,7 @@ test('renders registration form', () => {
   const { getByText, getByTestId, getByRole } = setup();
   expect(getByText(/Create your account/i)).toBeInTheDocument();
   expect(getByTestId('auth-shell')).toHaveClass('bg-presentation');
-  expect(getByTestId('auth-card')).toHaveClass('bg-surface-primary', 'rounded-3xl');
+  expect(getByTestId('auth-card')).toHaveClass('bg-surface-primary', 'rounded-dialog');
   expect(getByRole('link', { name: 'Rekky' })).toHaveAttribute('href', '/cook');
   expect(getByRole('textbox', { name: /Full name/i })).toBeInTheDocument();
   expect(getByRole('form', { name: /Registration form/i })).toBeVisible();

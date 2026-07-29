@@ -10,6 +10,7 @@ import type {
   SavedRecipeList,
   SaveRecipeRequest,
 } from 'librechat-data-provider';
+import { recipe, recipeByDraft, recipes } from 'librechat-data-provider/mobile';
 import type { ActiveTimerState } from '@/features/recipes/workspace';
 
 import { ActionSheet } from '@/components/actionsheet';
@@ -71,9 +72,7 @@ function useSavedDocument(document: CookingDocument) {
     queryKey: [...recipeKeys.all, 'by-draft', document._id],
     queryFn: async () => {
       try {
-        return await apiFetch<SavedRecipe>(
-          `/api/recipes/by-draft/${encodeURIComponent(document._id)}`,
-        );
+        return await apiFetch<SavedRecipe>(recipeByDraft(document._id));
       } catch (caught) {
         if (caught instanceof ApiError && caught.status === 404) return null;
         throw caught;
@@ -104,11 +103,11 @@ function useSavedDocument(document: CookingDocument) {
     };
     try {
       const next = saved
-        ? await apiFetch<SavedRecipe>(`/api/recipes/${encodeURIComponent(saved._id)}`, {
+        ? await apiFetch<SavedRecipe>(recipe(saved._id), {
             method: 'PATCH',
             body: payload,
           })
-        : await apiFetch<SavedRecipe>('/api/recipes', { method: 'POST', body: payload });
+        : await apiFetch<SavedRecipe>(recipes(), { method: 'POST', body: payload });
       queryClient.setQueryData([...recipeKeys.all, 'by-draft', document._id], next);
       await queryClient.invalidateQueries({ queryKey: recipeKeys.all });
       void syncNow().catch(() => undefined);

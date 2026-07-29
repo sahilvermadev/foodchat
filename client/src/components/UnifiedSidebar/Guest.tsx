@@ -15,8 +15,8 @@ function GuestPreviewPanel({ icon: Icon, titleKey, bodyKey }: GuestPreviewPanelP
 
   return (
     <div className="flex h-full min-h-0 flex-col px-4 py-5 text-text-primary">
-      <div className="flex min-h-0 flex-1 flex-col justify-center rounded-2xl border border-black/10 bg-white/40 p-5 text-center shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-[#c1121f]/10 text-[#c1121f] dark:bg-[#e63946]/15 dark:text-[#e63946]">
+      <div className="flex min-h-0 flex-1 flex-col justify-center rounded-card border border-border-light bg-surface-primary p-5 text-center shadow-surface">
+        <div className="bg-surface-submit/10 mx-auto flex size-12 items-center justify-center rounded-full text-surface-submit">
           <Icon className="size-6" aria-hidden="true" />
         </div>
         <h2 className="mt-4 text-base font-semibold leading-6">{localize(titleKey)}</h2>

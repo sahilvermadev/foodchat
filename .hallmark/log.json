@@ -1,0 +1,22 @@
+[
+  {
+    "date": "2026-07-28",
+    "scope": "app",
+    "macrostructure": "Workbench app family",
+    "theme": "custom",
+    "theme_axes": "light+dark / geometric-sans / warm",
+    "vibe": "quiet mineral neutrals, ember signal",
+    "enrichment": "none",
+    "brief": "Rekky web app palette system"
+  },
+  {
+    "date": "2026-07-29",
+    "scope": "public landing page",
+    "macrostructure": "Narrative Workflow",
+    "theme": "Rekky locked system",
+    "theme_axes": "light+dark / editorial-workbench / warm-mineral",
+    "vibe": "one adaptable recipe evolving from source to dinner",
+    "enrichment": "interactive product document with constraint and voice demonstrations",
+    "brief": "Conversion landing page for adaptive, hands-free cooking with Rekky"
+  }
+]

@@ -59,7 +59,7 @@ function RotatingCookingHeadline() {
     >
       <span>{localize('com_cooking_chat_landing_prefix')}</span>
       <span
-        className="ml-[0.3em] inline-grid w-[4.5em] overflow-hidden text-center align-baseline text-[#c1121f] dark:text-[#e63946]"
+        className="ml-[0.3em] inline-grid w-[4.5em] overflow-hidden text-center align-baseline text-surface-submit"
         aria-hidden="true"
       >
         <span key={word} className="rekky-rotating-word whitespace-nowrap">

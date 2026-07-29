@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { clearExplicitLogout } from '~/utils';
+
 const SocialButton = ({ id, enabled, serverDomain, oauthPath, Icon, label }) => {
   if (!enabled) {
     return null;
@@ -11,6 +13,7 @@ const SocialButton = ({ id, enabled, serverDomain, oauthPath, Icon, label }) => 
         aria-label={`${label}`}
         className="flex w-full items-center space-x-3 rounded-full border border-border-medium bg-surface-primary-alt px-5 py-3 text-text-primary transition-colors duration-200 hover:bg-surface-hover"
         href={`${serverDomain}/oauth/${oauthPath}`}
+        onClick={clearExplicitLogout}
         data-testid={id}
       >
         <Icon />

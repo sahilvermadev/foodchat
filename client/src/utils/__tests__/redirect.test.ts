@@ -1,4 +1,7 @@
 import {
+  clearExplicitLogout,
+  hasExplicitlyLoggedOut,
+  markExplicitLogout,
   buildLoginRetryRedirect,
   buildTwoFactorRedirect,
   persistRedirectToSession,
@@ -203,5 +206,21 @@ describe('persistRedirectToSession', () => {
   it('rejects /login paths', () => {
     persistRedirectToSession('/login?redirect_to=/c/new');
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
+  });
+});
+
+describe('explicit logout state', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('persists until a fresh login explicitly clears it', () => {
+    expect(hasExplicitlyLoggedOut()).toBe(false);
+
+    markExplicitLogout();
+    expect(hasExplicitlyLoggedOut()).toBe(true);
+
+    clearExplicitLogout();
+    expect(hasExplicitlyLoggedOut()).toBe(false);
   });
 });

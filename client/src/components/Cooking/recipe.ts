@@ -51,6 +51,14 @@ function isIngredientsHeading(line: string): boolean {
   return text === 'ingredients' || text === 'ingredient list';
 }
 
+function isInstructionsHeading(line: string): boolean {
+  const heading = line.match(/^(#{1,6})\s+(.+)$/);
+  if (!heading) return false;
+  return /^(?:instructions|directions|method|steps|preparation)$/i.test(
+    cleanMetricText(heading[2]),
+  );
+}
+
 function headingDepth(line: string): number {
   const heading = line.match(/^(#{1,6})\s+/);
   return heading ? heading[1].length : 0;
@@ -219,9 +227,9 @@ export function recipeMarkdownDisplay(
   };
 }
 
-export function stripIngredientsSection(markdown: string): string {
+function stripSection(markdown: string, matchesHeading: (line: string) => boolean): string {
   const lines = markdown.split('\n');
-  const start = lines.findIndex(isIngredientsHeading);
+  const start = lines.findIndex(matchesHeading);
   if (start === -1) {
     return markdown;
   }
@@ -236,4 +244,33 @@ export function stripIngredientsSection(markdown: string): string {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+export function stripIngredientsSection(markdown: string): string {
+  return stripSection(markdown, isIngredientsHeading);
+}
+
+export function stripInstructionsSection(markdown: string): string {
+  return stripSection(markdown, isInstructionsHeading);
+}
+
+export function structuredRecipeMarkdownSections(
+  markdown: string,
+  options: { ingredients: boolean; instructions: boolean },
+): { preamble: string; remainder: string } {
+  const lines = markdown.split('\n');
+  const firstStructuredSection = lines.findIndex(
+    (line) =>
+      (options.ingredients && isIngredientsHeading(line)) ||
+      (options.instructions && isInstructionsHeading(line)),
+  );
+  const preamble =
+    firstStructuredSection > 0 ? lines.slice(0, firstStructuredSection).join('\n').trim() : '';
+  let remainder = markdown;
+  if (options.ingredients) remainder = stripIngredientsSection(remainder);
+  if (options.instructions) remainder = stripInstructionsSection(remainder);
+  if (preamble && remainder.startsWith(preamble)) {
+    remainder = remainder.slice(preamble.length).trim();
+  }
+  return { preamble, remainder };
 }

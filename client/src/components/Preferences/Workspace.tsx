@@ -20,7 +20,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Spinner } from '@librechat/client';
 import type {
   DeviceLocationContext,
@@ -40,6 +40,13 @@ import { useLocalize } from '~/hooks';
 import type { TranslationKeys } from '~/hooks';
 import { cn } from '~/utils';
 import { ProtectedImage } from '~/components/ui';
+import {
+  collectionPageContent,
+  collectionPageScroll,
+  collectionPageTitle,
+  collectionSecondaryAction,
+} from '../Cooking/collection';
+import { rekkyStatusTag } from '../Rekky/styles';
 import {
   SPECIALTY_INGREDIENT_CATEGORIES,
   cleanPreferenceLine,
@@ -524,9 +531,7 @@ function DietSafetyEditor({
         <div className="flex flex-wrap gap-2">
           {presets.map((p) => {
             const active = activeNames.has(p.name);
-            const activeClass = isSafety
-              ? 'border-red-500 bg-red-500/10 text-red-700 shadow-[0_0_8px_rgba(239,68,68,0.2)] dark:text-red-400'
-              : 'border-green-500 bg-green-500/10 text-green-700 shadow-[0_0_8px_rgba(34,197,94,0.2)] dark:text-green-400';
+            const activeClass = isSafety ? rekkyStatusTag.danger : rekkyStatusTag.success;
             return (
               <button
                 key={p.name}
@@ -833,7 +838,7 @@ function KitchenCheckboxEditor({
                     className={cn(
                       'flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[0.8rem] font-medium leading-4 transition-colors sm:px-3 sm:text-sm',
                       active
-                        ? 'border-amber-500 bg-amber-500/10 text-amber-800 dark:text-amber-300'
+                        ? 'bg-status-caution/10 border-status-caution text-status-caution'
                         : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:text-text-primary',
                     )}
                     aria-pressed={active}
@@ -843,7 +848,7 @@ function KitchenCheckboxEditor({
                       className={cn(
                         'flex size-4 items-center justify-center rounded border',
                         active
-                          ? 'border-amber-500 bg-amber-500 text-white'
+                          ? 'border-status-caution bg-status-caution text-status-ink'
                           : 'border-border-medium',
                       )}
                     >
@@ -932,7 +937,7 @@ function CookingLevelSlider({
               className={cn(
                 'flex min-h-16 flex-col items-start rounded-lg border p-3 text-left transition-colors duration-200',
                 active
-                  ? 'border-amber-500 bg-amber-500/10 text-text-primary'
+                  ? 'bg-status-caution/10 border-status-caution text-text-primary'
                   : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:text-text-primary',
               )}
               onClick={() => selectLevel(cl.level)}
@@ -1145,7 +1150,7 @@ function LocationEditor({
           className={cn(
             'flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors duration-200',
             success
-              ? 'border-green-500 bg-green-500/10 text-green-700'
+              ? 'bg-status-success/10 border-status-success text-status-success'
               : 'border-border-light bg-surface-primary text-text-secondary hover:bg-surface-hover hover:text-text-primary',
           )}
           onClick={detectLocation}
@@ -1174,7 +1179,7 @@ function LocationEditor({
                   className={cn(
                     'min-h-10 flex-1 rounded-md py-1.5 text-xs font-semibold capitalize transition-colors',
                     active
-                      ? 'bg-amber-500 text-white shadow-sm'
+                      ? 'bg-status-caution text-status-ink shadow-sm'
                       : 'text-text-secondary hover:text-text-primary',
                   )}
                   onClick={() => updateField('system', sys)}
@@ -1378,23 +1383,20 @@ function PreferenceCard({
   }
 
   return (
-    <article className="hover:bg-surface-primary/20 group relative w-full min-w-0 rounded-md py-1 transition-colors sm:py-1.5">
+    <article className="hover:bg-surface-hover/70 group relative -mx-3 w-[calc(100%+1.5rem)] min-w-0 rounded-card p-3 transition-colors">
       <button
         type="button"
-        className="absolute inset-0 z-10 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-heavy"
+        className="absolute inset-0 z-raised rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
         aria-label={`${localize('com_ui_edit')} ${config.heading}`}
         onClick={() => onEdit(config.heading)}
       >
         <span className="sr-only">{localize('com_ui_edit')}</span>
       </button>
       <div className="flex items-start gap-2.5 sm:gap-2.5">
-        <Icon
-          className="text-text-secondary/70 mt-0.5 size-3.5 flex-shrink-0 sm:mt-1"
-          aria-hidden="true"
-        />
+        <Icon className="mt-0.5 size-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-3">
-            <h2 className="text-[1rem] font-medium uppercase leading-none tracking-[0.12em] text-text-primary transition-colors group-hover:text-surface-submit sm:text-lg sm:tracking-[0.08em]">
+            <h2 className="text-base font-semibold leading-tight text-text-primary">
               {config.heading}
             </h2>
           </div>
@@ -1423,6 +1425,7 @@ function PreferenceCardModal({
   onCancelCard: () => void;
 }) {
   const config = atAGlanceHeadings.find((h) => h.heading === heading);
+  const reduceMotion = useReducedMotion();
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef(onCancelCard);
   cancelRef.current = onCancelCard;
@@ -1527,7 +1530,7 @@ function PreferenceCardModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-stretch justify-center bg-black/60 p-0 backdrop-blur-md sm:z-[100] sm:items-center sm:px-4 sm:py-6"
+      className="fixed inset-0 z-modal flex items-stretch justify-center bg-overlay p-0 backdrop-blur-md sm:items-center sm:px-4 sm:py-6"
       onClick={(event) => {
         if (
           event.target === event.currentTarget &&
@@ -1539,12 +1542,12 @@ function PreferenceCardModal({
     >
       <motion.div
         ref={dialogRef}
-        initial={{ opacity: 0, scale: 0.95, y: 15 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 15 }}
-        transition={{ type: 'spring', duration: 0.3 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
         className={cn(
-          'flex h-[100dvh] w-full flex-col overflow-hidden bg-surface-primary shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-xl sm:border sm:border-border-light',
+          'flex h-[100dvh] w-full flex-col overflow-hidden bg-surface-primary shadow-dialog sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-dialog sm:border sm:border-border-light',
           heading === 'Kitchen' ? 'max-w-5xl' : 'max-w-2xl',
         )}
         role="dialog"
@@ -1582,7 +1585,7 @@ function PreferenceCardModal({
           </button>
           <button
             type="button"
-            className="flex min-h-11 flex-[1.4] items-center justify-center gap-1.5 rounded-lg bg-surface-submit px-4 text-sm font-medium text-white shadow-sm hover:bg-surface-submit-hover disabled:opacity-50 sm:flex-none"
+            className="flex min-h-11 flex-[1.4] items-center justify-center gap-1.5 rounded-lg bg-surface-submit px-4 text-sm font-medium text-text-submit shadow-sm hover:bg-surface-submit-hover disabled:opacity-50 sm:flex-none"
             disabled={isSaving}
             onClick={() => onSaveCard(heading)}
           >
@@ -1618,9 +1621,9 @@ function AtAGlanceGrid({
 }) {
   return (
     <section>
-      <div className="columns-1 gap-x-12 [column-fill:balance] md:columns-2 xl:columns-3 2xl:columns-4">
+      <div className="columns-1 gap-x-10 [column-fill:balance] md:columns-2 xl:columns-3 2xl:columns-4">
         {atAGlanceHeadings.map((config) => (
-          <div key={config.heading} className="mb-7 break-inside-avoid sm:mb-10">
+          <div key={config.heading} className="mb-5 break-inside-avoid sm:mb-7">
             <PreferenceCard
               config={config}
               sections={sections}
@@ -1822,9 +1825,9 @@ function SpecialtyIngredientsPanel({
   }, [areSuggestionsOpen, isConfirmingCreate, onDraftChange]);
 
   return (
-    <section className="pt-2">
+    <section className="border-t border-border-light pt-6 sm:pt-7">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-medium uppercase leading-none tracking-[0.08em] text-text-primary">
+        <h2 className="text-xl font-semibold leading-tight text-text-primary">
           {localize('com_preferences_specialty_title')}
         </h2>
         <div ref={panelRef} className="relative w-full sm:max-w-sm">
@@ -1839,7 +1842,7 @@ function SpecialtyIngredientsPanel({
             id="specialty-ingredient-input"
             ref={inputRef}
             value={draft}
-            className="border-border-light/70 placeholder:text-text-secondary/70 w-full min-w-0 rounded-md border bg-surface-primary py-2 pl-10 pr-10 text-sm text-text-primary shadow-none [color-scheme:light] focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 dark:bg-white/5 dark:[color-scheme:dark]"
+            className="placeholder:text-text-secondary/70 h-10 w-full min-w-0 rounded-control border border-border-light bg-surface-primary pl-10 pr-10 text-sm text-text-primary shadow-surface transition-colors [color-scheme:light] hover:border-border-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary dark:[color-scheme:dark]"
             placeholder={localize('com_preferences_specialty_search_placeholder')}
             disabled={isSaving || isResolving}
             onFocus={() => setAreSuggestionsOpen(true)}
@@ -1879,7 +1882,7 @@ function SpecialtyIngredientsPanel({
             </button>
           )}
           {shouldShowSuggestions && (
-            <div className="absolute right-0 top-11 z-20 w-full overflow-hidden rounded-md border border-border-light bg-surface-primary shadow-lg sm:w-[26rem]">
+            <div className="absolute right-0 top-11 z-dropdown w-full overflow-hidden rounded-card border border-border-light bg-surface-primary shadow-floating sm:w-[26rem]">
               {suggestions.length > 0 && (
                 <div className="rekky-meta border-b border-border-light px-3 py-2 text-text-secondary">
                   {localize('com_preferences_specialty_suggestions_label')}
@@ -1918,7 +1921,7 @@ function SpecialtyIngredientsPanel({
             </div>
           )}
           {shouldConfirmCreate && (
-            <div className="absolute right-0 top-11 z-20 flex w-full flex-wrap items-center gap-2 rounded-md border border-border-light bg-surface-primary p-2 shadow-lg sm:w-[28rem]">
+            <div className="absolute right-0 top-11 z-dropdown flex w-full flex-wrap items-center gap-2 rounded-card border border-border-light bg-surface-primary p-2 shadow-floating sm:w-[28rem]">
               <p className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-text-primary">
                 {createLabel}
               </p>
@@ -1940,7 +1943,7 @@ function SpecialtyIngredientsPanel({
               <button
                 type="button"
                 aria-label={localize('com_preferences_specialty_add_label')}
-                className="flex items-center justify-center gap-2 rounded-md bg-surface-submit px-3 py-2 text-sm font-medium text-white hover:bg-surface-submit-hover disabled:opacity-50"
+                className="flex items-center justify-center gap-2 rounded-md bg-surface-submit px-3 py-2 text-sm font-medium text-text-submit hover:bg-surface-submit-hover disabled:opacity-50"
                 disabled={!draft.trim() || isSaving || isResolving}
                 onClick={createIngredient}
               >
@@ -1971,7 +1974,7 @@ function SpecialtyIngredientsPanel({
                 exit={{ opacity: 0, scale: 0.96 }}
                 className="group relative min-w-0"
               >
-                <span className="absolute right-2 top-2 z-10 flex size-4 items-center justify-center rounded-full bg-black/35 text-white opacity-70 backdrop-blur">
+                <span className="absolute right-2 top-2 z-raised flex size-4 items-center justify-center rounded-full bg-overlay text-status-ink opacity-80 backdrop-blur">
                   <CheckCircle2 className="icon-xs" aria-hidden="true" />
                 </span>
                 <IngredientThumb ingredient={catalogItem} fallbackName={ingredient} />
@@ -1990,7 +1993,7 @@ function SpecialtyIngredientsPanel({
                 <button
                   type="button"
                   aria-label={localize('com_preferences_specialty_remove')}
-                  className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-full bg-black/35 text-white opacity-0 backdrop-blur hover:bg-black/55 focus-visible:opacity-100 group-hover:opacity-100"
+                  className="rekky-progressive-action absolute right-1 top-1 flex size-8 items-center justify-center rounded-full bg-overlay text-status-ink backdrop-blur transition-colors hover:bg-surface-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
                   disabled={isSaving}
                   onClick={() => onRemove(ingredient)}
                 >
@@ -2053,7 +2056,7 @@ function SpecialtyIngredientsPanel({
             </button>
             <button
               type="button"
-              className="rounded-lg bg-surface-submit px-3 py-2 text-sm font-medium text-white hover:bg-surface-submit-hover disabled:opacity-50"
+              className="rounded-lg bg-surface-submit px-3 py-2 text-sm font-medium text-text-submit hover:bg-surface-submit-hover disabled:opacity-50"
               disabled={!editingName.trim() || isSaving}
               onClick={onSaveEdit}
             >
@@ -2100,12 +2103,12 @@ function PreferencesAgentDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-0 py-0 backdrop-blur-md sm:items-center sm:px-3 sm:py-4">
+    <div className="fixed inset-0 z-modal flex items-end justify-center bg-overlay px-0 py-0 backdrop-blur-md sm:items-center sm:px-3 sm:py-4">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="preferences-agent-title"
-        className="border-border-light/10 flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border bg-surface-primary shadow-2xl sm:rounded-2xl"
+        className="border-border-light/10 flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-dialog border bg-surface-primary shadow-dialog sm:rounded-dialog"
       >
         <div className="flex items-start justify-between gap-3 px-6 pb-2 pt-6">
           <div>
@@ -2114,7 +2117,10 @@ function PreferencesAgentDialog({
               className="flex items-center gap-2 text-base font-semibold text-text-primary"
             >
               {showCompletedState && (
-                <CheckCircle2 className="size-5 flex-shrink-0 text-green-500" aria-hidden="true" />
+                <CheckCircle2
+                  className="size-5 flex-shrink-0 text-status-success"
+                  aria-hidden="true"
+                />
               )}
               {showCompletedState
                 ? localize('com_preferences_profile_refined_title')
@@ -2147,7 +2153,7 @@ function PreferencesAgentDialog({
                 <div
                   key={message.id}
                   className={cn(
-                    'max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
+                    'max-w-[85%] rounded-card px-4 py-3 text-sm leading-relaxed',
                     message.role === 'user'
                       ? 'ml-auto bg-surface-active-alt text-text-primary'
                       : 'bg-surface-secondary/45 mr-auto text-text-primary',
@@ -2158,7 +2164,7 @@ function PreferencesAgentDialog({
               ) : null,
             )}
             {isLoading && (
-              <div className="bg-surface-secondary/45 mr-auto flex items-center gap-2 rounded-2xl px-4 py-3 text-sm text-text-secondary">
+              <div className="bg-surface-secondary/45 mr-auto flex items-center gap-2 rounded-card px-4 py-3 text-sm text-text-secondary">
                 <Spinner className="icon-sm" />
                 {localize('com_preferences_agent_thinking')}
               </div>
@@ -2173,7 +2179,7 @@ function PreferencesAgentDialog({
               <button
                 key={index}
                 type="button"
-                className="bg-surface-secondary/50 rounded-full border-0 px-3.5 py-1.5 text-xs text-text-secondary shadow-none transition-all duration-150 hover:bg-surface-hover hover:text-text-primary"
+                className="bg-surface-secondary/50 rounded-full border-0 px-3.5 py-1.5 text-xs text-text-secondary shadow-none transition-colors duration-150 hover:bg-surface-hover hover:text-text-primary"
                 onClick={() => onSendSuggestion(suggestion.text)}
               >
                 {suggestion.display}
@@ -2183,7 +2189,7 @@ function PreferencesAgentDialog({
         )}
 
         <div className="bg-surface-primary px-6 pb-6 pt-3">
-          <div className="bg-surface-secondary/60 focus-within:bg-surface-secondary/80 flex items-center gap-2 rounded-xl border-0 p-1.5 transition-all duration-150">
+          <div className="bg-surface-secondary/60 focus-within:bg-surface-secondary/80 flex items-center gap-2 rounded-control border border-transparent p-1.5 transition-colors duration-150 focus-within:border-border-medium">
             <label htmlFor="preferences-agent-message" className="sr-only">
               {localize('com_preferences_message_label')}
             </label>
@@ -2208,7 +2214,7 @@ function PreferencesAgentDialog({
             <button
               type="button"
               aria-label={localize('com_ui_submit')}
-              className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-surface-submit text-white transition-colors hover:bg-surface-submit-hover disabled:opacity-50"
+              className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-surface-submit text-text-submit transition-colors hover:bg-surface-submit-hover disabled:opacity-50"
               disabled={!draft.trim() || isLoading}
               onClick={onSubmit}
             >
@@ -2546,32 +2552,26 @@ export default function PreferencesWorkspace() {
   };
 
   return (
-    <main className="rekky-ui rekky-preferences-surface flex h-full min-h-0 flex-col bg-[#f7f1e8] text-text-primary dark:bg-[#141014]">
+    <main className="rekky-ui rekky-preferences-surface flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary">
       {/* Mobile Top Header Navbar */}
-      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-30 flex h-12 shrink-0 items-center justify-center border-b px-5 backdrop-blur md:hidden">
+      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-sticky flex h-12 shrink-0 items-center justify-center border-b px-5 backdrop-blur md:hidden">
         <span className="text-[1.05rem] font-medium tracking-normal text-text-primary">
           {localize('com_preferences_dashboard_title')}
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-14">
-        <div className="mx-auto w-full max-w-[1500px]">
-          <section
-            aria-label={localize('com_preferences_document')}
-            className="min-w-0 space-y-8 pt-3 sm:space-y-12 sm:pt-0"
-          >
+      <div className={collectionPageScroll}>
+        <div className={collectionPageContent}>
+          <section aria-label={localize('com_preferences_document')} className="min-w-0 space-y-7">
             <header>
-              <div className="flex flex-col gap-4 pt-1 lg:flex-row lg:items-start lg:justify-between">
-                <h1
-                  id="preferences-title"
-                  className="hidden text-[2.45rem] font-medium leading-[0.95] tracking-normal text-text-primary sm:block sm:text-[3.45rem]"
-                >
+              <div className="flex items-center justify-between gap-4 pt-1">
+                <h1 id="preferences-title" className={collectionPageTitle}>
                   {localize('com_preferences_dashboard_title')}
                 </h1>
                 <div className="flex flex-wrap gap-2 md:justify-end">
                   <button
                     type="button"
-                    className="border-border-light/60 bg-surface-primary/35 sm:bg-surface-primary/65 inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium text-text-secondary shadow-none transition-colors hover:bg-surface-hover hover:text-text-primary sm:mt-1 sm:rounded-md sm:border-0"
+                    className={collectionSecondaryAction}
                     onClick={() => setIsAgentOpen(true)}
                   >
                     <Eye className="icon-sm" aria-hidden="true" />
@@ -2581,12 +2581,12 @@ export default function PreferencesWorkspace() {
               </div>
             </header>
             {editError && (
-              <div className="rounded-lg border border-red-700/30 bg-red-700/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+              <div className="border-status-danger/30 bg-status-danger/10 rounded-lg border px-3 py-2 text-sm text-status-danger">
                 {editError}
               </div>
             )}
             {preferencesQuery.isLoading ? (
-              <div className="flex h-48 items-center justify-center rounded-lg border border-border-light bg-surface-primary">
+              <div className="flex h-48 items-center justify-center text-text-secondary">
                 <Spinner className="text-text-primary" />
               </div>
             ) : (

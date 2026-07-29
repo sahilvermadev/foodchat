@@ -40,7 +40,10 @@ function AuthLayout({
         <div className="mx-auto sm:max-w-sm">
           <ErrorMessage>
             {localize('com_auth_error_invalid_reset_token')}{' '}
-            <a className="font-semibold text-green-600 hover:underline" href="/forgot-password">
+            <a
+              className="font-semibold text-surface-submit hover:underline"
+              href="/forgot-password"
+            >
               {localize('com_auth_click_here')}
             </a>{' '}
             {localize('com_auth_to_try_again')}
@@ -60,29 +63,31 @@ function AuthLayout({
   return (
     <div
       data-testid="auth-shell"
-      className="rekky-ui relative flex min-h-dvh flex-col overflow-x-hidden bg-presentation text-text-primary"
+      className="rekky-ui relative flex min-h-dvh flex-col overflow-x-clip bg-presentation text-text-primary"
     >
       <Banner />
       <DisplayError />
       <Link
         to="/cook"
         aria-label={localize('com_ui_app_name')}
-        className="absolute left-5 top-5 z-20 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary md:left-8 md:top-8"
+        className="absolute left-5 top-5 z-sticky rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary md:left-8 md:top-8"
       >
-        <span className="rekky-sidebar-wordmark text-[#c1121f]">{localize('com_ui_app_name')}</span>
+        <span className="rekky-sidebar-wordmark text-surface-submit">
+          {localize('com_ui_app_name')}
+        </span>
       </Link>
-      <div className="fixed bottom-4 left-4 z-20">
+      <div className="fixed bottom-4 left-4 z-sticky">
         <ThemeSelector />
       </div>
 
       <main className="relative flex flex-grow items-center justify-center px-5 py-20">
         <div
           data-testid="auth-card"
-          className="w-full max-w-md rounded-3xl border border-border-light bg-surface-primary px-6 py-7 shadow-lg shadow-black/5 dark:shadow-black/20 sm:px-8 sm:py-8"
+          className="w-full max-w-md rounded-dialog border border-border-light bg-surface-primary px-6 py-7 shadow-dialog sm:px-8 sm:py-8"
         >
           {!hasStartupConfigError && !isFetching && header && (
             <h1
-              className="mb-2 text-center text-3xl font-medium leading-tight tracking-[-0.025em] text-text-primary"
+              className="mb-2 min-w-0 break-words text-center text-3xl font-medium leading-tight tracking-[-0.025em] text-text-primary [overflow-wrap:anywhere]"
               style={{ userSelect: 'none' }}
             >
               {header}

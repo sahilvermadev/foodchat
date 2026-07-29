@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  Heart,
   ListFilter,
   LoaderCircle,
   MoreHorizontal,
+  Pin,
   Plus,
   Search,
   Trash2,
-  Users,
   X,
 } from 'lucide-react';
 import {
@@ -22,6 +23,7 @@ import {
 } from '@librechat/client';
 import type {
   RecipeTimeBucket,
+  SavedRecipeFacetsResponse,
   SavedRecipeList,
   SavedRecipeSummary,
   SavedRecipesQuery,
@@ -29,12 +31,24 @@ import type {
 import type { TranslationKeys } from '~/hooks';
 import {
   useDeleteSavedRecipeMutation,
+  useRecipeFacetsQuery,
   useRecipesInfiniteQuery,
-  useRecipesQuery,
+  useUpdateSavedRecipeMutation,
 } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import { ProtectedImage } from '~/components/ui';
+import {
+  collectionCard,
+  collectionCardBody,
+  collectionCardMedia,
+  collectionCardTitle,
+  collectionGrid,
+  collectionPageContent,
+  collectionPageScroll,
+  collectionPageTitle,
+  collectionSecondaryAction,
+} from './collection';
 import { isRecipeCategorizationActive } from './library';
 
 type FilterKey =
@@ -44,7 +58,9 @@ type FilterKey =
   | 'diet'
   | 'timeBucket'
   | 'mainIngredient'
-  | 'equipment';
+  | 'equipment'
+  | 'difficulty'
+  | 'collection';
 type FilterGroup = {
   key: FilterKey;
   labelKey: TranslationKeys;
@@ -66,6 +82,8 @@ const filterKeys: FilterKey[] = [
   'timeBucket',
   'mainIngredient',
   'equipment',
+  'difficulty',
+  'collection',
 ];
 const filterLabelKeys: Record<FilterKey, TranslationKeys> = {
   documentType: 'com_recipes_filter_document_type',
@@ -75,6 +93,8 @@ const filterLabelKeys: Record<FilterKey, TranslationKeys> = {
   timeBucket: 'com_recipes_filter_time_bucket',
   mainIngredient: 'com_recipes_filter_main_ingredient',
   equipment: 'com_recipes_filter_equipment',
+  difficulty: 'com_recipes_filter_difficulty',
+  collection: 'com_recipes_filter_collection',
 };
 const recipeSkeletonItems = [0, 1, 2, 3, 4, 5];
 
@@ -84,30 +104,14 @@ function SkeletonBlock({ className }: { className: string }) {
 
 function RecipeCardSkeleton() {
   return (
-    <div className="border-border-light/60 bg-surface-primary/80 overflow-hidden rounded-lg border shadow-none">
-      <div className="relative aspect-[2.08/1] overflow-hidden bg-surface-hover">
-        <SkeletonBlock className="h-full w-full rounded-none" />
+    <div className="overflow-hidden">
+      <div className="relative aspect-[3/2] overflow-hidden rounded-card bg-surface-hover">
+        <SkeletonBlock className="h-full w-full rounded-card" />
       </div>
-      <div className="flex min-h-[188px] flex-col p-6">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-            <SkeletonBlock className="h-7 w-4/5" />
-          </div>
-          <SkeletonBlock className="h-8 w-8 shrink-0 rounded-full" />
-        </div>
-        <div className="mt-4 flex flex-col gap-2">
-          <SkeletonBlock className="h-4 w-full" />
-          <SkeletonBlock className="h-4 w-2/3" />
-        </div>
-        <div className="mt-5 flex gap-2">
-          <SkeletonBlock className="h-8 w-24 rounded-full bg-surface-primary-alt" />
-          <SkeletonBlock className="h-8 w-20 rounded-full bg-surface-primary-alt" />
-        </div>
-        <div className="mt-auto flex gap-1.5 pt-4">
-          <SkeletonBlock className="h-8 w-20 rounded-full" />
-          <SkeletonBlock className="h-8 w-24 rounded-full" />
-          <SkeletonBlock className="h-8 w-16 rounded-full" />
-        </div>
+      <div className="px-1 py-3">
+        <SkeletonBlock className="h-3 w-24 rounded-full" />
+        <SkeletonBlock className="mt-3 h-5 w-4/5" />
+        <SkeletonBlock className="mt-2 h-4 w-2/3" />
       </div>
     </div>
   );
@@ -115,11 +119,7 @@ function RecipeCardSkeleton() {
 
 function RecipeLibrarySkeleton({ label }: { label: string }) {
   return (
-    <div
-      role="status"
-      aria-label={label}
-      className="grid animate-pulse auto-rows-[minmax(0,auto)] gap-6 lg:grid-cols-2 2xl:grid-cols-3"
-    >
+    <div role="status" aria-label={label} className={cn(collectionGrid, 'animate-pulse')}>
       <span className="sr-only">{label}</span>
       {recipeSkeletonItems.map((item) => (
         <RecipeCardSkeleton key={item} />
@@ -197,10 +197,30 @@ function filterGroups(recipes: SavedRecipeSummary[]): FilterGroup[] {
   return groups.filter((group) => group.values.length > 0);
 }
 
-function activeFilters(filters: Record<string, string>): ActiveFilter[] {
+function facetFilterGroups(facets?: SavedRecipeFacetsResponse): FilterGroup[] {
+  if (!facets) return [];
+  const values = (key: keyof SavedRecipeFacetsResponse) => {
+    const facet = facets[key];
+    return Array.isArray(facet)
+      ? facet
+          .map((option) =>
+            typeof option === 'object' && option && 'value' in option ? String(option.value) : '',
+          )
+          .filter(Boolean)
+      : [];
+  };
+  return filterKeys
+    .map((key) => ({ key, labelKey: filterLabelKeys[key], values: values(key) }))
+    .filter((group) => group.values.length > 0);
+}
+
+function activeFilters(filters: Record<string, string[]>): ActiveFilter[] {
   return filterKeys.flatMap((key) => {
-    const value = filters[key];
-    return value ? [{ key, labelKey: filterLabelKeys[key], value }] : [];
+    return (filters[key] ?? []).map((value) => ({
+      key,
+      labelKey: filterLabelKeys[key],
+      value,
+    }));
   });
 }
 
@@ -222,39 +242,36 @@ function recipeSaveList(recipe: SavedRecipeSummary): SavedRecipeList {
   return recipe.saveList ?? 'want_to_cook';
 }
 
-function recipeDescription(recipe: SavedRecipeSummary): string {
-  const description = recipe.shortDescription?.trim();
-  const title = recipe.title.toLowerCase();
-
-  if (!description || description.toLowerCase() === title) {
-    return '';
-  }
-
-  return description;
-}
-
 export default function RecipeLibrary() {
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const [query, setQuery] = useState('');
   const [saveListFilter, setSaveListFilter] = useState<SaveListFilter>('all');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [sort, setSort] = useState<SavedRecipesQuery['sort']>('recently_updated');
   const [recipeToDelete, setRecipeToDelete] = useState<SavedRecipeSummary | null>(null);
   const params = useMemo<SavedRecipesQuery>(
     () => ({
       q: query,
-      documentType: filters.documentType as SavedRecipesQuery['documentType'],
-      cuisine: filters.cuisine,
-      mealType: filters.mealType,
-      diet: filters.diet,
-      timeBucket: filters.timeBucket as RecipeTimeBucket | undefined,
-      mainIngredient: filters.mainIngredient,
-      equipment: filters.equipment,
+      documentType: filters.documentType?.join(',') as SavedRecipesQuery['documentType'],
+      cuisine: filters.cuisine?.join(','),
+      mealType: filters.mealType?.join(','),
+      diet: filters.diet?.join(','),
+      timeBucket: filters.timeBucket?.join(',') as RecipeTimeBucket | undefined,
+      mainIngredient: filters.mainIngredient?.join(','),
+      equipment: filters.equipment?.join(','),
+      difficulty: filters.difficulty?.join(','),
+      collection: filters.collection?.join(','),
       ...(saveListFilter !== 'all' ? { saveList: saveListFilter } : {}),
+      ...(favoriteOnly ? { favorite: true } : {}),
+      ...(pinnedOnly ? { pinned: true } : {}),
+      sort,
       limit: 30,
     }),
-    [filters, query, saveListFilter],
+    [favoriteOnly, filters, pinnedOnly, query, saveListFilter, sort],
   );
   const recipesQuery = useRecipesInfiniteQuery(params, {
     refetchInterval: (data) =>
@@ -269,30 +286,41 @@ export default function RecipeLibrary() {
         ? 3000
         : false,
   });
-  const filterOptionsQuery = useRecipesQuery({ q: query, limit: 100 });
+  const facetsQuery = useRecipeFacetsQuery({
+    q: query,
+    ...(saveListFilter !== 'all' ? { saveList: saveListFilter } : {}),
+  });
   const recipes = useMemo(
     () => recipesQuery.data?.pages.flatMap((page) => page.recipes) ?? [],
     [recipesQuery.data?.pages],
   );
   const total = recipesQuery.data?.pages[0]?.total ?? recipes.length;
-  const filterOptionRecipes = filterOptionsQuery.data?.recipes ?? recipes;
-  const groups = useMemo(() => filterGroups(filterOptionRecipes), [filterOptionRecipes]);
+  const groups = useMemo(() => {
+    const facetGroups = facetFilterGroups(facetsQuery.data);
+    return facetGroups.length ? facetGroups : filterGroups(recipes);
+  }, [facetsQuery.data, recipes]);
   const selectedFilters = useMemo(() => activeFilters(filters), [filters]);
   const deleteRecipe = useDeleteSavedRecipeMutation();
+  const updateRecipe = useUpdateSavedRecipeMutation();
 
   const setFilter = (key: FilterKey, value: string) => {
-    setFilters((current) => ({
-      ...current,
-      [key]: current[key] === value ? '' : value,
-    }));
+    setFilters((current) => {
+      const values = current[key] ?? [];
+      return {
+        ...current,
+        [key]: values.includes(value)
+          ? values.filter((currentValue) => currentValue !== value)
+          : [...values, value],
+      };
+    });
   };
 
   const hasFilters = selectedFilters.length > 0;
   const clearFilters = () => setFilters({});
-  const removeFilter = (key: FilterKey) =>
+  const removeFilter = (key: FilterKey, value: string) =>
     setFilters((current) => ({
       ...current,
-      [key]: '',
+      [key]: (current[key] ?? []).filter((currentValue) => currentValue !== value),
     }));
   const confirmDelete = () => {
     if (!recipeToDelete || deleteRecipe.isLoading) {
@@ -301,7 +329,6 @@ export default function RecipeLibrary() {
 
     deleteRecipe.mutate(recipeToDelete, {
       onSuccess: () => {
-        showToast({ status: 'success', message: localize('com_recipes_delete_success') });
         setRecipeToDelete(null);
       },
       onError: () => {
@@ -317,39 +344,32 @@ export default function RecipeLibrary() {
   return (
     <main className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary">
       {/* Mobile Top Header Navbar */}
-      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-30 flex h-12 shrink-0 items-center justify-center border-b px-5 backdrop-blur md:hidden">
+      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-sticky flex h-12 shrink-0 items-center justify-center border-b px-5 backdrop-blur md:hidden">
         <span className="text-[1.05rem] font-medium tracking-[-0.04em] text-text-primary">
           {localize('com_recipes_library')}
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-8 sm:py-7 lg:px-14">
-        <div className="mx-auto flex max-w-[1500px] flex-col gap-5 pt-3 sm:gap-7 sm:pt-0">
+      <div className={collectionPageScroll}>
+        <div className={collectionPageContent}>
           <header className="pt-1">
-            <div className="flex flex-col gap-4">
-              <div>
-                <h1
-                  id="recipe-library-title"
-                  className="hidden text-[2.45rem] font-medium leading-[0.95] tracking-[-0.04em] text-text-primary sm:block sm:text-[clamp(2.75rem,5vw,3.45rem)] sm:tracking-[-0.03em]"
-                >
-                  {localize('com_recipes_library')}
-                </h1>
-                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-text-secondary sm:mt-4">
-                  <p className="rekky-body hidden sm:block">
-                    {localize('com_recipes_library_subtitle')}
-                  </p>
-                  {recipesQuery.isLoading ? (
-                    <SkeletonBlock className="hidden h-4 w-24 sm:block" />
-                  ) : (
-                    <span className="text-text-secondary/90 hidden text-sm font-medium sm:inline-block sm:border-l sm:border-border-light sm:pl-3">
-                      {recipeCountLabel}
-                    </span>
-                  )}
-                </div>
-              </div>
+            <div className="flex min-w-0 items-baseline gap-3">
+              <h1 id="recipe-library-title" className={collectionPageTitle}>
+                {localize('com_recipes_library')}
+              </h1>
+              {recipesQuery.isLoading ? (
+                <SkeletonBlock className="hidden h-4 w-24 sm:block" />
+              ) : (
+                <span className="hidden text-sm font-normal text-text-secondary sm:block">
+                  {recipeCountLabel}
+                </span>
+              )}
             </div>
-            <div className="mt-6 flex max-w-[1260px] gap-2 sm:mt-7 sm:gap-3 lg:flex-row">
-              <div className="relative flex-1">
+            <p className="mt-2 hidden text-sm text-text-secondary sm:block">
+              {localize('com_recipes_library_subtitle')}
+            </p>
+            <div className="mt-4 flex gap-2.5 sm:mt-5">
+              <div className="relative min-w-0 flex-1 md:max-w-[480px]">
                 <Search
                   className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary sm:left-4"
                   aria-hidden="true"
@@ -359,19 +379,19 @@ export default function RecipeLibrary() {
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={localize('com_recipes_search_placeholder_short')}
                   aria-label={localize('com_recipes_search_placeholder')}
-                  className="rekky-library-search-input border-border-light/70 min-h-11 rounded-lg pl-10 text-[0.92rem] shadow-none focus-visible:ring-1 focus-visible:ring-ring-primary sm:min-h-12 sm:pl-11 sm:text-[0.95rem]"
+                  className="rekky-library-search-input h-10 rounded-control border-border-light bg-surface-primary pl-10 text-sm shadow-surface transition-colors hover:border-border-medium focus-visible:ring-2 focus-visible:ring-ring-primary"
                 />
               </div>
               <button
                 type="button"
                 aria-label={localize('com_recipes_filters')}
-                className="border-border-light/70 bg-surface-primary/70 relative inline-flex min-h-11 w-12 shrink-0 items-center justify-center gap-2 rounded-lg border px-0 text-sm text-text-primary transition-colors hover:border-border-heavy hover:bg-surface-hover sm:min-h-12 sm:w-auto sm:px-5"
+                className={cn(collectionSecondaryAction, 'relative')}
                 onClick={() => setFiltersOpen(true)}
               >
                 <ListFilter className="h-4 w-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{localize('com_recipes_filters')}</span>
+                <span>{localize('com_recipes_filters')}</span>
                 {selectedFilters.length > 0 ? (
-                  <span className="absolute ml-6 mt-[-1.5rem] rounded-full bg-surface-submit px-1.5 py-0.5 text-[0.65rem] leading-none text-white sm:static sm:ml-0 sm:mt-0 sm:px-2 sm:text-xs">
+                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-surface-submit px-1.5 py-0.5 text-[10px] font-bold leading-none text-text-submit">
                     {selectedFilters.length}
                   </span>
                 ) : null}
@@ -386,8 +406,8 @@ export default function RecipeLibrary() {
                   <button
                     key={`${filter.key}:${filter.value}`}
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border-light bg-surface-primary px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-                    onClick={() => removeFilter(filter.key)}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-surface-hover px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                    onClick={() => removeFilter(filter.key, filter.value)}
                   >
                     <span>
                       {localize(filter.labelKey)}: {displayFilter(filter.value)}
@@ -405,7 +425,7 @@ export default function RecipeLibrary() {
               </div>
             ) : null}
             <div
-              className="-mx-5 mt-4 flex flex-nowrap gap-2 overflow-x-auto px-5 sm:mx-0 sm:mt-5 sm:flex-wrap sm:px-0"
+              className="no-scrollbar -mx-4 mt-3 flex flex-nowrap items-center gap-2 overflow-x-auto border-b border-border-light px-4 pb-3 pt-1 sm:mx-0 sm:flex-wrap sm:pl-0 sm:pr-1"
               role="tablist"
               aria-label={localize('com_recipes_save_list_filter_label')}
             >
@@ -418,10 +438,10 @@ export default function RecipeLibrary() {
                     role="tab"
                     aria-selected={active}
                     className={cn(
-                      'shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors sm:py-2',
+                      'h-8 shrink-0 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
                       active
-                        ? 'border-surface-submit bg-surface-submit text-white'
-                        : 'border-border-light bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+                        ? 'bg-surface-submit/10 border-transparent text-surface-submit'
+                        : 'border-transparent bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary',
                     )}
                     onClick={() => setSaveListFilter(value)}
                   >
@@ -429,18 +449,66 @@ export default function RecipeLibrary() {
                   </button>
                 );
               })}
+              <button
+                type="button"
+                aria-pressed={favoriteOnly}
+                className={cn(
+                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
+                  favoriteOnly
+                    ? 'bg-surface-submit/10 border-transparent text-surface-submit'
+                    : 'border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+                )}
+                onClick={() => setFavoriteOnly((value) => !value)}
+              >
+                <Heart className="size-3.5" aria-hidden="true" />
+                {localize('com_recipes_favorites')}
+              </button>
+              <button
+                type="button"
+                aria-pressed={pinnedOnly}
+                className={cn(
+                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
+                  pinnedOnly
+                    ? 'bg-surface-submit/10 border-transparent text-surface-submit'
+                    : 'border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+                )}
+                onClick={() => setPinnedOnly((value) => !value)}
+              >
+                <Pin className="size-3.5" aria-hidden="true" />
+                {localize('com_recipes_pinned')}
+              </button>
+              <label className="ml-auto inline-flex h-8 shrink-0 items-center gap-2 text-xs text-text-secondary">
+                {localize('com_recipes_sort')}
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as SavedRecipesQuery['sort'])}
+                  className="rekky-select h-8 rounded-control border border-border-light bg-surface-primary px-3 text-xs text-text-primary shadow-surface transition-colors hover:border-border-medium hover:bg-surface-hover active:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-55"
+                >
+                  <option value="recently_updated">
+                    {localize('com_recipes_sort_recently_updated')}
+                  </option>
+                  <option value="recently_saved">
+                    {localize('com_recipes_sort_recently_saved')}
+                  </option>
+                  <option value="recently_cooked">
+                    {localize('com_recipes_sort_recently_cooked')}
+                  </option>
+                  <option value="title">{localize('com_recipes_sort_title')}</option>
+                  <option value="quickest">{localize('com_recipes_sort_quickest')}</option>
+                </select>
+              </label>
             </div>
           </header>
 
           {filtersOpen ? (
-            <div className="fixed inset-0 z-50">
+            <div className="fixed inset-0 z-modal">
               <button
                 type="button"
                 aria-label={localize('com_recipes_close_filters')}
                 className="absolute inset-0 bg-black/40"
                 onClick={() => setFiltersOpen(false)}
               />
-              <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-border-light bg-surface-primary text-text-primary shadow-2xl">
+              <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-border-light bg-surface-primary text-text-primary shadow-dialog">
                 <div className="flex items-center justify-between border-b border-border-light px-5 py-4">
                   <div>
                     <h2 className="text-base font-semibold">{localize('com_recipes_filters')}</h2>
@@ -467,7 +535,7 @@ export default function RecipeLibrary() {
                           </h3>
                           <div className="flex flex-wrap gap-2">
                             {group.values.map((value) => {
-                              const active = filters[group.key] === value;
+                              const active = (filters[group.key] ?? []).includes(value);
                               return (
                                 <button
                                   key={`${group.key}:${value}`}
@@ -475,7 +543,7 @@ export default function RecipeLibrary() {
                                   className={cn(
                                     'rounded-full border px-3 py-1.5 text-xs capitalize transition-colors',
                                     active
-                                      ? 'border-surface-submit bg-surface-submit text-white'
+                                      ? 'border-surface-submit bg-surface-submit text-text-submit'
                                       : 'border-border-light bg-surface-primary-alt text-text-secondary hover:bg-surface-hover hover:text-text-primary',
                                   )}
                                   onClick={() => setFilter(group.key, value)}
@@ -505,7 +573,7 @@ export default function RecipeLibrary() {
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg bg-surface-submit px-4 py-2 text-sm font-medium text-white hover:bg-surface-submit-hover"
+                    className="rounded-lg bg-surface-submit px-4 py-2 text-sm font-medium text-text-submit hover:bg-surface-submit-hover"
                     onClick={() => setFiltersOpen(false)}
                   >
                     {localize('com_ui_done')}
@@ -525,30 +593,29 @@ export default function RecipeLibrary() {
           ) : null}
           {!recipesQuery.isLoading && recipes.length > 0 ? (
             <>
-              <div className="grid auto-rows-[minmax(0,auto)] gap-4 sm:gap-6 lg:grid-cols-2 2xl:grid-cols-3">
+              <div className={collectionGrid}>
                 {recipes.map((recipe) => {
-                  const description = recipeDescription(recipe);
                   const servings = recipe.servings;
                   const recipeChips = chips(recipe);
                   const visibleRecipeChips = recipeChips.slice(0, 2);
                   const hiddenRecipeChipCount = recipeChips.length - visibleRecipeChips.length;
 
                   return (
-                    <article
-                      key={recipe._id}
-                      className="border-border-light/50 bg-surface-primary/75 sm:border-border-light/60 sm:bg-surface-primary/80 group relative overflow-hidden rounded-lg border shadow-none transition-colors hover:border-border-medium hover:bg-surface-primary"
-                    >
+                    <article key={recipe._id} className={collectionCard}>
                       <Link
                         to={`/recipes/${recipe._id}`}
                         aria-label={localize('com_recipes_open_recipe', { 0: recipe.title })}
-                        className="absolute inset-0 z-0"
+                        className="absolute inset-0 z-base rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
                       />
-                      <div className="pointer-events-none relative aspect-[2.45/1] overflow-hidden bg-surface-hover sm:aspect-[2.08/1]">
+                      <div
+                        className={cn(collectionCardMedia, 'pointer-events-none')}
+                        data-testid="recipe-library-media"
+                      >
                         {recipe.illustrationUrl ? (
                           <ProtectedImage
                             src={recipe.illustrationUrl}
                             alt=""
-                            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                            className="h-full w-full object-cover"
                             loading="lazy"
                             decoding="async"
                             fallback={
@@ -563,13 +630,7 @@ export default function RecipeLibrary() {
                             ) : null}
                           </div>
                         )}
-                        <div className="from-surface-primary/35 absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t to-transparent" />
-                      </div>
-                      <div className="pointer-events-none relative flex min-h-[164px] flex-col p-5 sm:min-h-[188px] sm:p-6">
-                        <div className="flex min-w-0 items-start justify-between gap-3">
-                          <h2 className="line-clamp-2 pr-2 text-[1.35rem] font-medium leading-[1.05] tracking-[-0.025em] text-text-primary sm:text-[1.45rem] sm:leading-[1.08] sm:tracking-[-0.02em]">
-                            {recipe.title}
-                          </h2>
+                        <div className="pointer-events-auto absolute right-3 top-3 z-raised">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <button
@@ -577,15 +638,43 @@ export default function RecipeLibrary() {
                                 aria-label={localize('com_recipes_recipe_actions', {
                                   0: recipe.title,
                                 })}
-                                className="text-text-secondary/70 pointer-events-auto relative z-10 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full opacity-75 transition hover:bg-surface-hover hover:text-text-primary hover:opacity-100 focus-visible:bg-surface-hover focus-visible:text-text-primary focus-visible:opacity-100"
+                                className="rekky-progressive-action flex size-8 items-center justify-center rounded-full bg-overlay text-status-ink shadow-surface backdrop-blur-md transition-colors hover:bg-surface-primary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
                               >
                                 <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent
                               align="end"
-                              className="pointer-events-auto z-50 min-w-44"
+                              className="pointer-events-auto z-dropdown min-w-44 shadow-floating"
                             >
+                              <DropdownMenuItem
+                                className="cursor-pointer"
+                                onSelect={() =>
+                                  updateRecipe.mutate({
+                                    recipeId: recipe._id,
+                                    payload: { favorite: !recipe.favorite },
+                                  })
+                                }
+                              >
+                                <Heart className="size-4" aria-hidden="true" />
+                                {localize(
+                                  recipe.favorite
+                                    ? 'com_recipes_remove_favorite'
+                                    : 'com_recipes_add_favorite',
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="cursor-pointer"
+                                onSelect={() =>
+                                  updateRecipe.mutate({
+                                    recipeId: recipe._id,
+                                    payload: { pinned: !recipe.pinned },
+                                  })
+                                }
+                              >
+                                <Pin className="size-4" aria-hidden="true" />
+                                {localize(recipe.pinned ? 'com_recipes_unpin' : 'com_recipes_pin')}
+                              </DropdownMenuItem>
                               <DropdownMenuItem
                                 variant="destructive"
                                 className="cursor-pointer"
@@ -597,55 +686,39 @@ export default function RecipeLibrary() {
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
-                        <div className="text-text-secondary/80 mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.68rem] font-semibold uppercase tracking-[0.13em] sm:mt-4 sm:text-xs">
+                      </div>
+                      <div className={cn(collectionCardBody, 'pointer-events-none')}>
+                        <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-text-secondary">
                           <span>{displayFilter(recipe.documentType)}</span>
-                          <span className="text-text-tertiary" aria-hidden="true">
-                            /
-                          </span>
+                          <span aria-hidden="true">·</span>
                           <span>{localize(saveListLabelKey(recipeSaveList(recipe)))}</span>
                         </div>
+                        <h2 className={cn(collectionCardTitle, 'mt-2')}>{recipe.title}</h2>
                         {isRecipeCategorizationActive(recipe.categorizationStatus) ? (
-                          <span className="text-text-secondary/80 mt-2 text-xs font-medium">
+                          <span className="mt-2 text-xs font-medium text-text-secondary">
                             {localize('com_recipes_categorizing')}
                           </span>
                         ) : null}
-                        {description ? (
-                          <p className="mt-3 line-clamp-2 max-w-[31rem] text-[0.93rem] leading-6 text-text-secondary sm:mt-4 sm:text-[0.96rem] sm:leading-7">
-                            {description}
-                          </p>
-                        ) : null}
-                        <div className="mt-auto flex min-h-[2.7rem] flex-col justify-end gap-2 pt-4 sm:min-h-[3.4rem] sm:gap-3 sm:pt-5">
-                          <div className="text-text-secondary/90 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-2 text-xs font-semibold uppercase tracking-[0.09em]">
-                            {recipe.documentType === 'recipe' &&
-                            typeof servings === 'number' &&
-                            servings > 0 ? (
-                              <span className="inline-flex items-center gap-1.5">
-                                <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                                {localize('com_cooking_servings_count', { 0: String(servings) })}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="flex flex-wrap gap-x-4 gap-y-2">
-                            {visibleRecipeChips.map((chip) => (
-                              <span
-                                key={chip}
-                                className="text-text-secondary/75 text-xs font-semibold uppercase tracking-[0.1em]"
-                              >
-                                {displayFilter(chip)}
-                              </span>
-                            ))}
-                            {hiddenRecipeChipCount > 0 ? (
-                              <span className="text-text-secondary/75 text-xs font-semibold uppercase tracking-[0.1em]">
-                                +{hiddenRecipeChipCount}
-                              </span>
-                            ) : null}
-                            {recipeChips.length === 0 &&
-                            recipe.categorizationStatus === 'failed' ? (
-                              <span className="text-text-secondary/75 text-xs font-semibold uppercase tracking-[0.1em]">
-                                {localize('com_recipes_saved')}
-                              </span>
-                            ) : null}
-                          </div>
+                        <div className="mt-auto flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-xs text-text-secondary">
+                          {recipe.documentType === 'recipe' &&
+                          typeof servings === 'number' &&
+                          servings > 0 ? (
+                            <span>
+                              {localize('com_cooking_servings_count', { 0: String(servings) })}
+                            </span>
+                          ) : null}
+                          {typeof servings === 'number' &&
+                          servings > 0 &&
+                          recipeChips.length > 0 ? (
+                            <span aria-hidden="true">·</span>
+                          ) : null}
+                          {visibleRecipeChips.map((chip) => (
+                            <span key={chip}>{displayFilter(chip)}</span>
+                          ))}
+                          {hiddenRecipeChipCount > 0 ? <span>+{hiddenRecipeChipCount}</span> : null}
+                          {recipeChips.length === 0 && recipe.categorizationStatus === 'failed' ? (
+                            <span>{localize('com_recipes_saved')}</span>
+                          ) : null}
                         </div>
                       </div>
                     </article>
@@ -653,7 +726,7 @@ export default function RecipeLibrary() {
                 })}
                 <Link
                   to="/cook"
-                  className="flex min-h-[218px] items-center justify-center rounded-lg border border-dashed border-border-medium bg-surface-primary p-8 text-center transition-colors hover:border-surface-submit hover:bg-surface-primary-alt"
+                  className="flex aspect-[3/2] min-h-[218px] items-center justify-center rounded-card border border-dashed border-border-medium p-8 text-center transition-colors hover:border-surface-submit hover:bg-surface-hover"
                 >
                   <div className="flex flex-col items-center gap-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full border border-surface-submit text-surface-submit">
@@ -711,7 +784,7 @@ export default function RecipeLibrary() {
             <button
               type="button"
               disabled={deleteRecipe.isLoading}
-              className="flex h-10 items-center justify-center gap-2 rounded-lg border-none bg-surface-destructive px-4 py-2 text-sm text-white transition-colors hover:bg-surface-destructive-hover disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex h-10 items-center justify-center gap-2 rounded-control border-none bg-surface-destructive px-4 py-2 text-sm text-status-ink transition-colors hover:bg-surface-destructive-hover disabled:cursor-not-allowed disabled:opacity-70"
               onClick={confirmDelete}
             >
               {deleteRecipe.isLoading ? (

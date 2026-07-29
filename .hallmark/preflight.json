@@ -1,0 +1,10 @@
+{
+  "date": "2026-07-28",
+  "design_system": "DESIGN.md",
+  "framework": "React SPA",
+  "styling": "Tailwind CSS with semantic CSS custom properties",
+  "fonts": ["Space Grotesk", "Lora", "Merriweather", "JetBrains Mono", "Syne"],
+  "motion": "motion-on",
+  "spacing": "4-point scale",
+  "runtime_tokens": "client/src/style.css"
+}

@@ -34,9 +34,9 @@ Android.
 
 The primary tabs are:
 
-1. **Today** — contextual entry point, recent recipes, and quick prompts.
-2. **Cook** — multimodal Rekky conversation with text, camera, attachments, and voice.
-3. **Library** — saved recipes, guides, collections, filters, and offline availability.
+1. **Cook** — contextual entry point and multimodal Rekky conversation.
+2. **Cookbook** — saved recipes, guides, collections, filters, and offline availability.
+3. **Shopping** — synchronized ingredients grouped by grocery category and recipe provenance.
 4. **Imports** — social and web recipe inbox, processing state, playlists, and review.
 
 Secondary destinations use native stacks and sheets: recipe detail, import review,
@@ -70,6 +70,36 @@ must not import browser request singletons, Recoil stores, DOM utilities, or web
   completed until it is acknowledged.
 - Use motion to show causality and continuity, not decoration.
 - Use glass and blur as platform enhancement, with opaque accessible fallbacks.
+
+## Offline data model
+
+- Connectivity is three-state (`unknown`, `online`, `offline`). Unknown connectivity never authorizes
+  credential deletion or a network-only empty state.
+- SecureStore owns refresh credentials. A local session is removed only after an authenticated
+  refresh endpoint explicitly rejects it.
+- Per-user SQLite snapshots own recipes, imports, playlists, shopping data, opened cooking canvases,
+  workspace progress, timer deadlines, synchronization checkpoints, and media availability.
+- Recipe and import snapshots synchronize incrementally inside a bounded server snapshot. Deletion
+  tombstones are retained server-side for 90 days so reconnecting devices can remove stale records.
+- Recipe, import, and shopping mutations use durable command logs. Idempotent replay preserves order;
+  permanent shopping conflicts are isolated and reconciled from the authoritative server list.
+- Offline media is best-effort and budgeted separately from recipe text. Its manifest records whether
+  each asset was downloaded; recipe content never depends on an image being present.
+- AI generation, chat streaming, source extraction, and realtime voice remain online capabilities.
+  Previously saved recipes and cooking controls remain usable without them.
+
+## Cross-platform account contract
+
+Web and mobile use the same saved-recipe, social-import, preference, and shopping-list APIs. A saved
+recipe owns synchronized `workspaceState` containing the selected serving count, unit mode, checked
+ingredient ids, and timer deadlines. Mobile SQLite is an offline cache of this state rather than a
+separate source of truth: the newest timestamp wins, and newer local state is uploaded after
+reconnection.
+
+Presentation remains platform-native. Ingredient conversion, yield scaling, recipe fact derivation,
+allergen evidence, equipment normalization, shopping identity, and contribution merging live in
+`packages/data-provider`, keeping browser and native behavior aligned without sharing DOM and React
+Native UI code.
 
 ## Delivery slices
 

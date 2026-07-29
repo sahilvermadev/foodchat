@@ -1,8 +1,16 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { PropsWithChildren } from 'react';
 
-import { ApiError, configureAuthRefresh } from '@/lib/api/client';
-import { isOnlineNow, useConnectivity } from '@/features/connectivity/provider';
+import { configureAuthRefresh } from '@/lib/api/client';
+import { connectivityStatusNow, useConnectivity } from '@/features/connectivity/provider';
 import { clearOfflineUser } from '@/features/offline/database';
 import { clearOfflineMedia } from '@/features/offline/media';
 import { clearPersistedQueryCache, queryClient } from '@/lib/query-client';
@@ -10,7 +18,9 @@ import { userErrorMessage } from '@/lib/errors';
 import { tokenVault } from '@/lib/auth/token-vault';
 import type { AuthUser } from '@/lib/auth/token-vault';
 import { authService } from './service';
+import { terminateSession } from './logout';
 import type { AuthStatus, TokenResponse } from './types';
+import { canRefreshSession, credentialsWereRejected } from './session';
 
 type AuthContextValue = {
   status: AuthStatus;
@@ -36,6 +46,7 @@ let sessionRefreshFailedAt = 0;
 const REFRESH_FAILURE_COOLDOWN_MS = 30_000;
 
 export function AuthProvider({ children }: PropsWithChildren) {
+  const logoutInFlight = useRef(false);
   const { isOnline } = useConnectivity();
   const [status, setStatus] = useState<AuthStatus>('restoring');
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -93,13 +104,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         await clearSession();
         return false;
       }
-      if (stored.refreshExpiresAt <= Date.now()) {
-        if (isOnlineNow() !== true) {
-          setUser(stored.user);
-          setStatus('signedIn');
-          return false;
-        }
-        await clearSession();
+      if (!canRefreshSession(connectivityStatusNow())) {
+        setUser(stored.user);
+        setStatus('signedIn');
         return false;
       }
       try {
@@ -108,7 +115,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return true;
       } catch (reason) {
         sessionRefreshFailedAt = Date.now();
-        if (!isOnlineNow() || !(reason instanceof ApiError) || reason.status >= 500) {
+        const credentialsRejected = reason instanceof Error && credentialsWereRejected(reason);
+        if (!credentialsRejected) {
           setUser(stored.user);
           setStatus('signedIn');
           return false;
@@ -186,16 +194,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
       },
       logout: async () => {
-        const stored = await tokenVault.getSession();
-        const accessToken = tokenVault.getAccessToken();
-        if (stored && accessToken) {
-          try {
-            await authService.logout(accessToken, stored.refreshToken);
-          } catch {
-            // Local credential removal is authoritative even when offline.
-          }
+        if (logoutInFlight.current) return;
+        logoutInFlight.current = true;
+        setError(null);
+        setStatus('signingOut');
+        try {
+          const stored = await tokenVault.getSession();
+          const accessToken = tokenVault.getAccessToken();
+          const revoke =
+            stored && accessToken
+              ? async () => {
+                  await authService.logout(accessToken, stored.refreshToken);
+                }
+              : undefined;
+          await terminateSession({ clear: clearSession, revoke });
+        } finally {
+          logoutInFlight.current = false;
+          setUser(null);
+          setStatus('signedOut');
         }
-        await clearSession();
       },
     }),
     [acceptTokens, clearSession, credentialVersion, error, status, tempToken, user],

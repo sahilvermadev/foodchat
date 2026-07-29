@@ -94,6 +94,19 @@ describe('canonical recipe normalization', () => {
     });
   });
 
+  it('keeps Markdown timer ids stable when an earlier instruction is inserted', () => {
+    const original = structuredRecipeFromMarkdown(groupedMarkdown, placeholder)!;
+    const withEarlierStep = structuredRecipeFromMarkdown(
+      groupedMarkdown.replace(
+        '1. Mix the chicken in a mixing bowl.',
+        '1. Wash your hands.\n2. Mix the chicken in a mixing bowl.',
+      ),
+      placeholder,
+    )!;
+
+    expect(original.steps[1].timers[0].id).toBe(withEarlierStep.steps[2].timers[0].id);
+  });
+
   it('replaces a placeholder with canonical Markdown content', () => {
     expect(
       canonicalRecipeFromContent({ markdown: groupedMarkdown, recipe: placeholder }),

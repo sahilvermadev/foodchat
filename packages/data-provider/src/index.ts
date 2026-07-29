@@ -9,6 +9,7 @@ export * from './messages';
 export * from './sse';
 export * from './cooking-stream';
 export * from './recipe-normalization';
+export * from './recipe-format';
 export * from './shopping';
 /* artifacts  */
 export * from './artifacts';

@@ -27,6 +27,8 @@ import { ActionSheet } from '@/components/actionsheet';
 import { OfflineStatus } from '@/components/offline-status';
 import { fonts, radius, shadow, space } from '@/constants/theme';
 import { useConnectivity } from '@/features/connectivity/provider';
+import { useAuth } from '@/features/auth/provider';
+import { queuePendingImport } from '@/features/offline/pending';
 import { AuthenticatedImage } from '@/features/recipes/authenticated-image';
 import {
   activeImportFilterCount,
@@ -392,6 +394,7 @@ export default function ImportsScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { isOnline } = useConnectivity();
+  const { user } = useAuth();
   const styles = useStyles();
   const shared = useLocalSearchParams<{
     text?: string | string[];
@@ -459,7 +462,16 @@ export default function ImportsScreen() {
     const url = value.trim();
     if (!url || mutations.createImport.isPending || mutations.createPlaylist.isPending) return;
     if (!isOnline) {
-      showNotice(t('offline.onlineAction'));
+      if (user) {
+        await queuePendingImport(user.id, {
+          id: `import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+          playlist: isYouTubePlaylistUrl(url),
+          sourceUrl: url,
+        });
+        setSourceUrl('');
+        setImportOpen(false);
+      }
+      showNotice(t('offline.importWhenOnline'));
       return;
     }
     try {
@@ -487,7 +499,15 @@ export default function ImportsScreen() {
     ]);
     if (!url || handledShare.current === url) return;
     if (!isOnline) {
-      setSourceUrl(url);
+      if (user) {
+        void queuePendingImport(user.id, {
+          id: `import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+          playlist: isYouTubePlaylistUrl(url),
+          sourceUrl: url,
+        }).then(clearSharedPayloads);
+      } else {
+        setSourceUrl(url);
+      }
       setNotice(t('offline.importWhenOnline'));
       return;
     }
@@ -521,6 +541,7 @@ export default function ImportsScreen() {
     shared.url,
     showError,
     t,
+    user,
   ]);
 
   const openImport = async (item: SocialImport, recreate = false) => {

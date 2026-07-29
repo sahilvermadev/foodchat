@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { initialCookingChatState } from 'librechat-data-provider/mobile';
+import {
+  cookingDocument,
+  initialCookingChatState,
+  selectCookingDocument,
+} from 'librechat-data-provider/mobile';
 import type {
   ConversationCookingDocuments,
   CookingChatMessage,
@@ -118,7 +122,7 @@ export function useCookState({
       setError(undefined);
       try {
         const collection = await apiFetch<ConversationCookingDocuments>(
-          `/api/cooking/documents/${encodeURIComponent(documentId)}/select`,
+          selectCookingDocument(documentId),
           { method: 'POST', body: {} },
         );
         queryClient.setQueryData(cookKeys.documents(conversationId), collection);
@@ -138,7 +142,7 @@ export function useCookState({
       setError(undefined);
       try {
         const collection = await apiFetch<ConversationCookingDocuments>(
-          `/api/cooking/documents/${encodeURIComponent(documentId)}`,
+          cookingDocument(documentId),
           { method: 'DELETE' },
         );
         queryClient.setQueryData(cookKeys.documents(conversationId), collection);

@@ -23,6 +23,13 @@ import {
 } from '~/data-provider';
 import { useDebounce, useLocalize } from '~/hooks';
 import {
+  collectionGrid,
+  collectionPageContent,
+  collectionPageScroll,
+  collectionPageTitle,
+  collectionPrimaryAction,
+} from '../collection';
+import {
   DeleteImportDialog,
   EmptyImports,
   FilterToolbar,
@@ -181,16 +188,14 @@ export default function SocialImports() {
   const activeFiltersCount = useMemo(() => {
     let count = 0;
     if (viewFilter !== 'all') count++;
-    if (sourceFilter !== 'all') count++;
     if (selectedCategory !== 'all') count++;
     if (selectedCreator !== 'all') count++;
     if (sortBy !== 'newest') count++;
     return count;
-  }, [viewFilter, sourceFilter, selectedCategory, selectedCreator, sortBy]);
+  }, [viewFilter, selectedCategory, selectedCreator, sortBy]);
 
   const clearAllFilters = () => {
     setViewFilter('all');
-    setSourceFilter('all');
     setSelectedCategory('all');
     setSelectedCreator('all');
     setSortBy('newest');
@@ -432,7 +437,6 @@ export default function SocialImports() {
     deleteImport.mutate(importToDelete, {
       onSuccess: () => {
         setImportToDelete(null);
-        showToast({ status: 'success', message: localize('com_social_imports_deleted') });
       },
       onError: () => {
         showToast({ status: 'error', message: localize('com_social_imports_delete_error') });
@@ -467,24 +471,21 @@ export default function SocialImports() {
   return (
     <main className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary">
       {/* Mobile Top Header Navbar */}
-      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-30 flex h-12 shrink-0 items-center justify-center border-b backdrop-blur md:hidden">
+      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-sticky flex h-12 shrink-0 items-center justify-center border-b backdrop-blur md:hidden">
         <span className="text-[1.05rem] font-medium tracking-normal text-text-primary">
           {localize('com_social_imports_title')}
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6 lg:px-14">
-        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 pt-3 sm:gap-5 sm:pt-0">
+      <div className={collectionPageScroll}>
+        <div className={collectionPageContent}>
           <header className="pt-1">
-            <div className="flex flex-col items-stretch justify-between gap-3 text-center sm:flex-row sm:items-start sm:text-left">
-              <div className="min-w-0 flex-1">
-                <h1
-                  id="social-imports-title"
-                  className="hidden text-[1.9rem] font-medium leading-none text-text-primary min-[380px]:text-[2rem] sm:block sm:text-[3rem]"
-                >
+            <div className="flex flex-col items-stretch justify-between gap-3 text-center sm:flex-row sm:items-center sm:text-left">
+              <div className="flex min-w-0 flex-1 items-baseline gap-3">
+                <h1 id="social-imports-title" className={collectionPageTitle}>
                   {localize('com_social_imports_title')}
                 </h1>
-                <p className="mt-2 hidden text-sm font-medium text-text-secondary sm:block">
+                <p className="hidden text-sm font-normal text-text-secondary sm:block">
                   {localize(
                     total === 1 ? 'com_social_imports_count_one' : 'com_social_imports_count_other',
                     { count: total },
@@ -493,7 +494,7 @@ export default function SocialImports() {
               </div>
               <button
                 type="button"
-                className="inline-flex h-9 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-submit px-3 text-sm font-medium text-white transition-colors hover:bg-surface-submit-hover sm:h-10 sm:w-auto sm:gap-2 sm:px-4"
+                className={`${collectionPrimaryAction} w-full sm:w-auto`}
                 onClick={() => setImportDialogOpen(true)}
               >
                 <Plus className="size-4" aria-hidden="true" />
@@ -542,11 +543,11 @@ export default function SocialImports() {
           {!isLoadingImports && imports.length > 0 ? (
             <>
               {timelineGroups.map((group) => (
-                <section key={group.id} className="flex flex-col gap-3">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-text-secondary">
+                <section key={group.id} className="flex flex-col gap-3 pt-1">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-text-secondary">
                     {localize(group.labelKey)}
                   </h2>
-                  <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  <div className={collectionGrid}>
                     {group.imports.map((socialImport) => {
                       const detailsValue =
                         detailsByImport[socialImport._id] ?? socialImport.userSuppliedText ?? '';

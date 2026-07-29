@@ -555,6 +555,8 @@ export const en = {
   'shopping.syncing': 'Syncing…',
   'shopping.syncOffline': 'Saved offline · will sync when connected',
   'shopping.syncPending': '{{count}} change(s) waiting to sync',
+  'shopping.syncRetrying': '{{count}} change(s) need attention before syncing',
+  'shopping.syncIssue': 'Some changes could not sync · retrying later',
   'shopping.possibleDuplicates': 'Possible duplicates',
   'shopping.possibleDuplicatesHelp':
     'Rekky kept these separate because their identity was uncertain.',
@@ -565,6 +567,7 @@ export const en = {
   'recipe.personalNotesPlaceholder': 'Add what you changed, liked, or want to remember…',
   'recipe.notesSaved': 'Saved privately on this device.',
   'recipe.notesSynced': 'Synced privately to your cookbook.',
+  'recipe.notesPending': 'Saved on this device · syncs when you reconnect.',
   'recipe.addPersonalNote': 'Add a private note',
   'recipe.editPersonalNotes': 'Edit my notes',
   'recipe.done': 'Done',

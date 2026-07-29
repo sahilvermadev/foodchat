@@ -51,6 +51,11 @@ import type {
   SpecialtyIngredientCatalogResponse,
   UpdatePreferencesRequest,
 } from './types/preferences';
+import type {
+  AddShoppingItemsRequest,
+  ShoppingList,
+  UpdateShoppingItemRequest,
+} from './types/shopping';
 
 export function revokeUserKey(name: string): Promise<unknown> {
   return request.delete(endpoints.revokeUserKey(name));
@@ -178,6 +183,47 @@ export function getRecipe(recipeId: string): Promise<SavedRecipe> {
 
 export function getSavedRecipeByDraft(draftId: string): Promise<SavedRecipe> {
   return request.get(endpoints.recipeByDraft(draftId));
+}
+
+export function getShoppingList(): Promise<ShoppingList> {
+  return request.get(endpoints.shoppingList());
+}
+
+export function addShoppingItems(payload: AddShoppingItemsRequest): Promise<ShoppingList> {
+  return request.post(endpoints.shoppingItems(), payload);
+}
+
+export function updateShoppingItem(
+  itemId: string,
+  payload: UpdateShoppingItemRequest & { mutationId: string },
+): Promise<ShoppingList> {
+  return request.patch(endpoints.shoppingItem(itemId), payload);
+}
+
+export function deleteShoppingItem(itemId: string, mutationId: string): Promise<ShoppingList> {
+  return request.deleteWithOptions(endpoints.shoppingItem(itemId), { data: { mutationId } });
+}
+
+export function deleteShoppingContribution(
+  itemId: string,
+  contributionId: string,
+  mutationId: string,
+): Promise<ShoppingList> {
+  return request.deleteWithOptions(endpoints.shoppingContribution(itemId, contributionId), {
+    data: { mutationId },
+  });
+}
+
+export function mergeShoppingItems(
+  targetId: string,
+  sourceId: string,
+  mutationId: string,
+): Promise<ShoppingList> {
+  return request.post(endpoints.shoppingMerge(targetId, sourceId), { mutationId });
+}
+
+export function clearPurchasedShoppingItems(mutationId: string): Promise<ShoppingList> {
+  return request.post(endpoints.shoppingClearPurchased(), { mutationId });
 }
 
 function socialImportsQueryString(params: SocialImportsQuery): string {
@@ -372,7 +418,7 @@ export const login = (payload: t.TLoginUser): Promise<t.TLoginResponse> => {
 };
 
 export const logout = (): Promise<m.TLogoutResponse> => {
-  return request.post(endpoints.logout());
+  return request.post(endpoints.logout(), undefined, { timeout: 10_000 });
 };
 
 export const register = (payload: t.TRegisterUser) => {

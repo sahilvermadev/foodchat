@@ -18,6 +18,7 @@ import type {
   CookingVoiceSessionGrant,
   PersistCookingVoiceTurnRequest,
 } from 'librechat-data-provider';
+import { cookingVoiceConfig, cookingVoiceTurns } from 'librechat-data-provider/mobile';
 import type { VoiceStatus } from './client';
 
 import { fonts, radius, shadow, space } from '@/constants/theme';
@@ -106,7 +107,7 @@ export function RecipeVoiceProvider({ children }: PropsWithChildren) {
       setError(undefined);
       lastUserText.current = '';
       try {
-        const config = await apiFetch<CookingVoiceConfig>('/api/cooking/voice/config');
+        const config = await apiFetch<CookingVoiceConfig>(cookingVoiceConfig());
         if (!active) return;
         if (!config.enabled || !config.sessionUrl) {
           throw new VoiceClientError('unavailable', 'Voice mode is not configured.');
@@ -145,9 +146,7 @@ export function RecipeVoiceProvider({ children }: PropsWithChildren) {
                 turnId: responseId || `voice-${Date.now()}`,
                 userText: lastUserText.current,
               };
-              void apiFetch('/api/cooking/voice/turns', { body, method: 'POST' }).catch(
-                () => undefined,
-              );
+              void apiFetch(cookingVoiceTurns(), { body, method: 'POST' }).catch(() => undefined);
             },
             onStatus: (next, position) => {
               if (!active) return;

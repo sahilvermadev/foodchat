@@ -168,6 +168,15 @@ const ingredientsFromMarkdown = (markdownLines: string[]): Ingredient[] => {
   return result;
 };
 
+const stableRecipeId = (value: string): string => {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+};
+
 const stepFromText = (value: string, index: number): RecipeStep => {
   const timers: RecipeStep['timers'] = [];
   const warnings: string[] = [];
@@ -178,7 +187,7 @@ const stepFromText = (value: string, index: number): RecipeStep => {
       const durationSeconds = Number(seconds);
       timers.push({
         durationSeconds,
-        id: `markdown-step-${index}-timer-${timers.length}`,
+        id: '',
         label: label?.trim() || `${Math.max(1, Math.round(durationSeconds / 60))} min`,
       });
       return '';
@@ -193,12 +202,18 @@ const stepFromText = (value: string, index: number): RecipeStep => {
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+([.,;:!?])/g, '$1')
     .trim();
+  const stepIdentity = `markdown-step-${stableRecipeId(text.toLowerCase())}`;
   return {
-    id: `markdown-step-${index}`,
+    id: stepIdentity,
     ingredientIds: [],
     order: index + 1,
     text,
-    timers,
+    timers: timers.map((timer, timerIndex) => ({
+      ...timer,
+      id: `${stepIdentity}-timer-${stableRecipeId(
+        `${timer.durationSeconds}:${timer.label.toLowerCase()}:${timerIndex}`,
+      )}`,
+    })),
     ...(temperatureMatch
       ? {
           temperature: {

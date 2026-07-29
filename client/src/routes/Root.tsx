@@ -48,7 +48,7 @@ export default function Root() {
 
   const handleDeclineTerms = () => {
     setShowTerms(false);
-    logout('/login?redirect=false');
+    logout();
   };
 
   if (!isAuthResolved) {

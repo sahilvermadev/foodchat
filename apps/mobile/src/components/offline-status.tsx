@@ -8,11 +8,11 @@ import { createThemeStyles } from '@/features/theme/styles';
 import { useTranslation } from '@/lib/i18n';
 
 export function OfflineStatus() {
-  const { isOnline } = useConnectivity();
+  const { status } = useConnectivity();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const styles = useStyles();
-  if (isOnline) return null;
+  if (status !== 'offline') return null;
   return (
     <View accessibilityRole="text" style={styles.container}>
       <SymbolView

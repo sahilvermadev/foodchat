@@ -102,8 +102,8 @@ const restoreInputs = (item: ShoppingListItem): AddShoppingItemInput[] => {
 export default function ShoppingScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { isOnline } = useConnectivity();
-  const { isSyncing } = useOfflineLibrary();
+  const { isOnline, status: connectivityStatus } = useConnectivity();
+  const { isSyncing, syncError, syncNow } = useOfflineLibrary();
   const { colors } = useTheme();
   const styles = useStyles();
   const listQuery = useShoppingList();
@@ -129,7 +129,10 @@ export default function ShoppingScreen() {
 
   useEffect(() => () => clearTimeout(undoTimer.current), []);
 
-  const activeItems = list?.items.filter((item) => !item.purchased && !item.pantry) ?? [];
+  const activeItems = useMemo(
+    () => list?.items.filter((item) => !item.purchased && !item.pantry) ?? [],
+    [list?.items],
+  );
   const pantryItems = list?.items.filter((item) => !item.purchased && item.pantry) ?? [];
   const purchasedItems = list?.items.filter((item) => item.purchased) ?? [];
   const toBuyCount = activeItems.length;
@@ -226,13 +229,16 @@ export default function ShoppingScreen() {
       .catch((reason) => setError(userErrorMessage(reason, t('shopping.updateError'))));
   };
 
-  const syncLabel = !isOnline
-    ? t('shopping.syncOffline')
-    : isSyncing
-      ? t('shopping.syncing')
-      : pendingQuery.data
-        ? t('shopping.syncPending', { count: pendingQuery.data })
-        : t('shopping.synced');
+  let syncLabel = t('shopping.synced');
+  if (connectivityStatus === 'unknown') syncLabel = t('shopping.syncing');
+  else if (!isOnline) syncLabel = t('shopping.syncOffline');
+  else if (isSyncing) syncLabel = t('shopping.syncing');
+  else if (syncError) syncLabel = t('shopping.syncIssue');
+  else if (pendingQuery.data?.failed) {
+    syncLabel = t('shopping.syncRetrying', { count: pendingQuery.data.failed });
+  } else if (pendingQuery.data?.pending) {
+    syncLabel = t('shopping.syncPending', { count: pendingQuery.data.pending });
+  }
 
   const itemRow = (item: ShoppingListItem) => {
     const purchaseAmount = shoppingPurchaseAmount(item);
@@ -360,15 +366,23 @@ export default function ShoppingScreen() {
         <View style={styles.headerCopy}>
           <Text style={styles.title}>{t('shopping.title')}</Text>
           <Text style={styles.subtitle}>{t('shopping.remaining', { count: toBuyCount })}</Text>
-          <View style={styles.syncRow}>
+          <Pressable
+            accessibilityLabel={syncLabel}
+            accessibilityRole="button"
+            disabled={!isOnline || isSyncing}
+            onPress={() => void syncNow().catch(() => undefined)}
+            style={styles.syncRow}
+          >
             <View
               style={[
                 styles.syncDot,
-                !isOnline || pendingQuery.data ? styles.syncDotPending : styles.syncDotReady,
+                !isOnline || syncError || pendingQuery.data?.pending
+                  ? styles.syncDotPending
+                  : styles.syncDotReady,
               ]}
             />
             <Text style={styles.syncText}>{syncLabel}</Text>
-          </View>
+          </Pressable>
         </View>
         <Pressable
           accessibilityLabel={t('shopping.addItem')}
@@ -423,6 +437,7 @@ export default function ShoppingScreen() {
           <Text style={styles.noticeText}>{notice}</Text>
         </Pressable>
       ) : null}
+      {/* eslint-disable-next-line no-nested-ternary */}
       {listQuery.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.ember} />

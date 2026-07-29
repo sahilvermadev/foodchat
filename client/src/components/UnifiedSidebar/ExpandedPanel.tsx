@@ -40,7 +40,7 @@ const BrandButton = memo(function BrandButton({
           aria-label={localize('com_ui_app_name')}
           onClick={handleClick}
         >
-          <span className="rekky-sidebar-wordmark select-none text-[#c1121f] transition-colors hover:text-[#e63946]">
+          <span className="rekky-sidebar-wordmark select-none text-surface-submit transition-colors hover:text-surface-submit-hover">
             {localize('com_ui_app_name')}
           </span>
         </a>
@@ -75,7 +75,7 @@ const NewChatButton = memo(function NewChatButton({
           href="/cook"
           data-testid="new-chat-button"
           aria-label={localize('com_ui_new_chat')}
-          className="flex h-11 w-11 items-center justify-center rounded-lg transition-colors hover:bg-surface-hover"
+          className="flex h-11 w-11 items-center justify-center rounded-lg transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
           onClick={handleClick}
         >
           <SquarePen className="h-6 w-6 text-text-primary" />
@@ -142,7 +142,7 @@ const NavIconButton = memo(function NavIconButton({
           className={cn(
             'h-11 w-11 rounded-lg',
             isActive
-              ? 'bg-[#c1121f]/10 text-[#c1121f] hover:bg-[#c1121f]/15 dark:bg-[#c1121f]/[0.12] dark:text-[#e63946]'
+              ? 'bg-surface-submit/10 hover:bg-surface-submit/15 text-surface-submit'
               : 'text-text-secondary hover:text-text-primary',
           )}
           onClick={handleClick}

@@ -174,6 +174,36 @@ describe('recipes routes', () => {
     );
   });
 
+  test('validates synchronized recipe workspace state', async () => {
+    const workspaceState = {
+      checkedIngredientIds: ['i1'],
+      servings: 4,
+      timers: [
+        {
+          endsAt: 2_000_000_000_000,
+          id: 'timer-1',
+          label: 'Simmer',
+          remaining: 300,
+          running: true,
+        },
+      ],
+      unitMode: 'metric',
+    };
+
+    await request(app)
+      .patch('/api/recipes/recipe-1')
+      .send({ workspaceState })
+      .expect(200, { _id: 'recipe-1' });
+    await request(app)
+      .patch('/api/recipes/recipe-1')
+      .send({ workspaceState: { ...workspaceState, unitMode: 'cups' } })
+      .expect(400);
+
+    expect(recipesApi.updateSavedRecipe).toHaveBeenCalledWith('auth-user', 'recipe-1', {
+      workspaceState,
+    });
+  });
+
   test('rejects malformed saved recipe list choices', async () => {
     await request(app)
       .post('/api/recipes')

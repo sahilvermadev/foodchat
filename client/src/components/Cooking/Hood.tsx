@@ -207,7 +207,7 @@ function Hood({ message, isSubmitting }: HoodProps) {
       </button>
 
       {open && (
-        <div className="border-border-light/80 dark:border-border-medium/40 animate-slide-down mt-1.5 max-w-lg border-l pl-3 transition-all">
+        <div className="border-border-light/80 dark:border-border-medium/40 animate-slide-down mt-1.5 max-w-lg border-l pl-3">
           <div className="relative space-y-0.5">
             {steps.map((step, idx) => (
               <StepRow key={`${step.type}-${idx}`} step={step} />

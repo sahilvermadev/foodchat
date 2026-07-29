@@ -8,7 +8,8 @@ import {
   createContext,
 } from 'react';
 import { debounce } from 'lodash';
-import { useRecoilState, useSetRecoilState } from 'recoil';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRecoilState, useResetRecoilState, useSetRecoilState } from 'recoil';
 import { useNavigate } from 'react-router-dom';
 import {
   apiBaseUrl,
@@ -28,13 +29,18 @@ import {
 } from '~/data-provider';
 import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
 import {
+  EXPLICIT_LOGOUT_KEY,
   SESSION_KEY,
+  clearExplicitLogout,
+  hasExplicitlyLoggedOut,
+  markExplicitLogout,
   isSafeRedirect,
   buildLoginRetryRedirect,
   buildTwoFactorRedirect,
   resolvePostLoginRedirect,
 } from '~/utils';
 import useTimeout from './useTimeout';
+import useClearStates from './Config/useClearStates';
 import store from '~/store';
 
 function getCurrentClientPath() {
@@ -63,13 +69,17 @@ const AuthContextProvider = ({
   children: ReactNode;
 }) => {
   const isExternalRedirectRef = useRef(false);
+  const logoutInFlightRef = useRef(false);
   const [user, setUser] = useRecoilState(store.user);
-  const logoutRedirectRef = useRef<string | undefined>(undefined);
   const [token, setToken] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isAuthResolved, setIsAuthResolved] = useState<boolean>(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const setQueriesEnabled = useSetRecoilState<boolean>(store.queriesEnabled);
+  const resetDefaultPreset = useResetRecoilState(store.defaultPreset);
+  const queryClient = useQueryClient();
+  const clearStates = useClearStates();
 
   const userRoleName = user?.role ?? '';
   const isCustomRole = isAuthenticated && !!user?.role && !isSystemRoleName(user.role);
@@ -100,10 +110,7 @@ const AuthContextProvider = ({
         }
 
         const searchParams = new URLSearchParams(window.location.search);
-        const logoutRedirect = logoutRedirectRef.current;
-        logoutRedirectRef.current = undefined;
-
-        const finalRedirect = logoutRedirect ?? resolvePostLoginRedirect(searchParams, redirect);
+        const finalRedirect = resolvePostLoginRedirect(searchParams, redirect);
 
         if (finalRedirect == null) {
           return;
@@ -122,6 +129,8 @@ const AuthContextProvider = ({
         navigate(buildTwoFactorRedirect(tempToken), { replace: true });
         return;
       }
+      clearExplicitLogout();
+      setIsLoggingOut(false);
       setError(undefined);
       setUserContext({ token, isAuthenticated: true, user, redirect: '/cook' });
     },
@@ -136,43 +145,75 @@ const AuthContextProvider = ({
   const logoutUser = useLogoutUserMutation({
     onSuccess: (data) => {
       if (data.redirect) {
-        /** data.redirect is the IdP's end_session_endpoint URL — an absolute URL generated
-         * server-side from trusted IdP metadata (not user input), so isSafeRedirect is bypassed.
-         * setUserContext is debounced (50ms) and won't fire before page unload, so clear the
-         * axios Authorization header synchronously to prevent in-flight requests. */
+        /** The absolute URL comes from trusted server-side IdP metadata. */
         isExternalRedirectRef.current = true;
         setTokenHeader(undefined);
         window.location.replace(data.redirect);
         return;
       }
-      setUserContext({
-        token: undefined,
-        isAuthenticated: false,
-        user: undefined,
-        redirect: '/login',
-      });
+      logoutInFlightRef.current = false;
+      setIsLoggingOut(false);
     },
-    onError: (error) => {
-      doSetError((error as Error).message);
-      setUserContext({
-        token: undefined,
-        isAuthenticated: false,
-        user: undefined,
-        redirect: '/login',
-      });
+    onError: () => {
+      logoutInFlightRef.current = false;
+      setIsLoggingOut(false);
     },
   });
   const refreshToken = useRefreshTokenMutation();
 
-  const logout = useCallback(
-    (redirect?: string) => {
-      if (redirect) {
-        logoutRedirectRef.current = redirect;
+  const clearLocalSession = useCallback(
+    (broadcast = true) => {
+      if (broadcast) {
+        markExplicitLogout();
       }
-      logoutUser.mutate(undefined);
+      setUserContext.cancel();
+      sessionStorage.removeItem(SESSION_KEY);
+      setQueriesEnabled(false);
+      resetDefaultPreset();
+      void queryClient.cancelQueries();
+      queryClient.clear();
+      void clearStates();
+      setTokenHeader(undefined);
+      setUser(undefined);
+      setToken(undefined);
+      setError(undefined);
+      setIsAuthenticated(false);
+      setIsAuthResolved(true);
+      setIsLoggingOut(broadcast);
+      navigate('/', { replace: true });
     },
-    [logoutUser],
+    [
+      clearStates,
+      navigate,
+      queryClient,
+      resetDefaultPreset,
+      setQueriesEnabled,
+      setUser,
+      setUserContext,
+    ],
   );
+
+  const logout = useCallback(() => {
+    if (logoutInFlightRef.current) {
+      return;
+    }
+    logoutInFlightRef.current = true;
+    clearLocalSession();
+    logoutUser.mutate(undefined);
+  }, [clearLocalSession, logoutUser]);
+
+  useEffect(() => {
+    const handleExplicitLogout = (event: StorageEvent) => {
+      if (event.key !== EXPLICIT_LOGOUT_KEY || event.newValue == null) {
+        return;
+      }
+      logoutInFlightRef.current = false;
+      clearLocalSession(false);
+    };
+
+    window.addEventListener('storage', handleExplicitLogout);
+    return () => window.removeEventListener('storage', handleExplicitLogout);
+  }, [clearLocalSession]);
 
   const userQuery = useGetUserQuery({ enabled: !!(token ?? '') });
 
@@ -189,12 +230,28 @@ const AuthContextProvider = ({
       setIsAuthResolved(true);
       return;
     }
+    if (hasExplicitlyLoggedOut()) {
+      setTokenHeader(undefined);
+      setUser(undefined);
+      setToken(undefined);
+      setIsAuthenticated(false);
+      setIsAuthResolved(true);
+      return;
+    }
     if (isExternalRedirectRef.current) {
       return;
     }
     refreshToken.mutate(undefined, {
       onSuccess: (data: t.TRefreshTokenResponse | undefined) => {
         if (isExternalRedirectRef.current) {
+          return;
+        }
+        if (hasExplicitlyLoggedOut()) {
+          setTokenHeader(undefined);
+          setUser(undefined);
+          setToken(undefined);
+          setIsAuthenticated(false);
+          setIsAuthResolved(true);
           return;
         }
         const { user, token = '' } = data ?? {};
@@ -273,6 +330,9 @@ const AuthContextProvider = ({
 
   useEffect(() => {
     const handleTokenUpdate = (event: CustomEvent<string>) => {
+      if (hasExplicitlyLoggedOut()) {
+        return;
+      }
       console.log('tokenUpdated event received event');
       setUserContext({
         token: event.detail,
@@ -303,6 +363,7 @@ const AuthContextProvider = ({
       },
       isAuthenticated,
       isAuthResolved,
+      isLoggingOut,
     }),
 
     [
@@ -310,6 +371,7 @@ const AuthContextProvider = ({
       error,
       isAuthenticated,
       isAuthResolved,
+      isLoggingOut,
       token,
       userRole,
       adminRole,

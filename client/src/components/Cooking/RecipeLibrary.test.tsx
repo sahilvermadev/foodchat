@@ -21,6 +21,9 @@ const mockSavedRecipe: SavedRecipeSummary = {
   title: 'Thai Iced Tea',
   documentType: 'recipe',
   saveList: 'want_to_cook',
+  collections: [],
+  favorite: false,
+  pinned: false,
   illustrationStatus: 'complete',
   categorizationStatus: 'complete',
   categorizationVersion: 1,
@@ -30,6 +33,7 @@ const mockSavedRecipe: SavedRecipeSummary = {
 
 jest.mock('~/data-provider', () => ({
   useDeleteSavedRecipeMutation: () => ({ isLoading: false, mutate: mockDeleteRecipe }),
+  useRecipeFacetsQuery: () => ({ data: undefined, isLoading: false }),
   useRecipesInfiniteQuery: (params: SavedRecipesQuery) => {
     mockInfiniteParams = params;
     return {
@@ -40,7 +44,7 @@ jest.mock('~/data-provider', () => ({
       isLoading: false,
     };
   },
-  useRecipesQuery: () => ({ data: { recipes: [mockSavedRecipe], total: 1 }, isLoading: false }),
+  useUpdateSavedRecipeMutation: () => ({ isLoading: false, mutate: jest.fn() }),
 }));
 
 jest.mock('~/hooks', () => ({
@@ -121,6 +125,7 @@ describe('RecipeLibrary actions', () => {
       'flex-nowrap',
       'overflow-x-auto',
     );
+    expect(screen.getByTestId('recipe-library-media')).toHaveClass('aspect-[3/2]', 'rounded-card');
     fireEvent.click(screen.getByRole('button', { name: 'com_recipes_load_more' }));
     expect(mockFetchNextPage).toHaveBeenCalledTimes(1);
   });
@@ -149,5 +154,21 @@ describe('RecipeLibrary actions', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'com_recipes_save_list_cooked_already' }));
 
     expect(mockInfiniteParams).toEqual(expect.objectContaining({ saveList: 'cooked_already' }));
+  });
+
+  test('keeps the sort focus treatment inside the scrolling filter row', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <RecipeLibrary />
+      </MemoryRouter>,
+    );
+
+    const sortSelect = screen.getByRole('combobox', { name: 'com_recipes_sort' });
+    const filterRow = screen.getByRole('tablist', { name: 'com_recipes_save_list_filter_label' });
+
+    expect(filterRow).toHaveClass('pt-1', 'sm:pr-1');
+    expect(sortSelect).toHaveClass('rekky-select');
+    fireEvent.change(sortSelect, { target: { value: 'recently_saved' } });
+    expect(mockInfiniteParams).toEqual(expect.objectContaining({ sort: 'recently_saved' }));
   });
 });

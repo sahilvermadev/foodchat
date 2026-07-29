@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { AppState, Platform, Pressable, Text, TextInput, View } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import { SymbolView } from 'expo-symbols';
@@ -10,17 +9,20 @@ import {
   deriveRecipeFacts,
   verifiedDietClaims,
 } from 'librechat-data-provider/mobile';
-import type { CookingTimer, StructuredRecipe } from 'librechat-data-provider';
+import type { CookingTimer, RecipeWorkspaceState, StructuredRecipe } from 'librechat-data-provider';
 import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
 import type { RecipeSupplement } from './content';
 import { AddIngredientsReview } from '@/features/shopping/review';
+import { useAuth } from '@/features/auth/provider';
+import { useConnectivity } from '@/features/connectivity/provider';
+import { cacheOfflineWorkspaceState, getOfflineWorkspaceState } from '@/features/offline/cooking';
 import { useAddShoppingItems } from '@/features/shopping/queries';
 import { fonts, radius, space } from '@/constants/theme';
 import { useTheme } from '@/features/theme/provider';
 import { createThemeStyles } from '@/features/theme/styles';
 import { useTranslation } from '@/lib/i18n';
 import type { UnitMode } from './workspace-format';
-import { ingredientParts, scaledYieldText } from './workspace-format';
+import { ingredientParts, restoredTimerState, scaledYieldText } from './workspace-format';
 
 type RecipeWorkspaceMetadata = {
   diet?: string[];
@@ -30,6 +32,7 @@ type RecipeWorkspaceMetadata = {
 };
 
 export type ActiveTimerState = {
+  endsAt?: number;
   id: string;
   label: string;
   remaining: number;
@@ -112,24 +115,35 @@ function RecipeTag({
 }
 
 function KitchenTimer({
+  initialState,
   onStateChange,
   timer,
 }: {
+  initialState?: ActiveTimerState;
   onStateChange?(state?: ActiveTimerState): void;
   timer: CookingTimer;
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useStyles();
-  const [remaining, setRemaining] = useState(timer.durationSeconds);
-  const [running, setRunning] = useState(false);
-  const endsAt = useRef<number | undefined>(undefined);
+  const initial = restoredTimerState(initialState, timer.durationSeconds);
+  const [remaining, setRemaining] = useState(initial.remaining);
+  const [running, setRunning] = useState(initial.running);
+  const endsAt = useRef<number | undefined>(initial.endsAt);
   const notificationId = useRef<string | undefined>(undefined);
   const onStateChangeRef = useRef(onStateChange);
 
   useEffect(() => {
     onStateChangeRef.current = onStateChange;
   }, [onStateChange]);
+
+  useEffect(() => {
+    if (!initialState) return;
+    const restored = restoredTimerState(initialState, timer.durationSeconds);
+    endsAt.current = restored.endsAt;
+    setRemaining(restored.remaining);
+    setRunning(restored.running);
+  }, [initialState, timer.durationSeconds]);
 
   const cancelNotification = () => {
     if (!notificationId.current) return;
@@ -190,6 +204,7 @@ function KitchenTimer({
       active
         ? {
             id: timer.id,
+            endsAt: endsAt.current,
             label: timer.label || t('canvas.timer'),
             remaining,
             running,
@@ -266,28 +281,34 @@ function KitchenTimer({
 
 export function RecipeWorkspace({
   initialNotes = '',
+  initialWorkspaceState,
   isCooked = false,
   metadata,
   onMarkCooked,
   onNotesChange,
   onTimerChange,
+  onWorkspaceStateChange,
   recipe,
   supplement,
   workspaceId,
   yieldText,
 }: {
   initialNotes?: string;
+  initialWorkspaceState?: RecipeWorkspaceState;
   isCooked?: boolean;
   metadata?: RecipeWorkspaceMetadata;
   onMarkCooked?(): void;
   onNotesChange?(notes: string): void;
   onTimerChange?(timerId: string, state?: ActiveTimerState): void;
+  onWorkspaceStateChange?(state: Omit<RecipeWorkspaceState, 'updatedAt'>): void;
   recipe: StructuredRecipe;
   supplement?: RecipeSupplement;
   workspaceId: string;
   yieldText?: string;
 }) {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const { isOnline } = useConnectivity();
   const { colors } = useTheme();
   const styles = useStyles();
   const [servings, setServings] = useState(Math.max(1, recipe.servings || 1));
@@ -299,9 +320,10 @@ export function RecipeWorkspace({
   const [focusedStepId, setFocusedStepId] = useState<string>();
   const [shoppingReviewOpen, setShoppingReviewOpen] = useState(false);
   const [shoppingNotice, setShoppingNotice] = useState<string>();
+  const [timers, setTimers] = useState<Record<string, ActiveTimerState>>({});
+  const onWorkspaceStateChangeRef = useRef(onWorkspaceStateChange);
+  onWorkspaceStateChangeRef.current = onWorkspaceStateChange;
   const addShoppingItems = useAddShoppingItems();
-  const notesKey = `recipe-notes:${workspaceId}`;
-  const checkedKey = `recipe-checked:${workspaceId}`;
   const originalServings = Math.max(1, recipe.servings || 1);
   const scale = servings / originalServings;
   const originalYield =
@@ -317,31 +339,88 @@ export function RecipeWorkspace({
 
   useEffect(() => {
     setShoppingReviewOpen(false);
-    setServings(Math.max(1, recipe.servings || 1));
-    setUnitMode('original');
     setEquipmentOpen(false);
-    void Promise.all([AsyncStorage.getItem(notesKey), AsyncStorage.getItem(checkedKey)]).then(
-      ([savedNotes, savedChecked]) => {
-        const initial = initialNotes || savedNotes || '';
+    void (user ? getOfflineWorkspaceState(user.id, workspaceId) : Promise.resolve(null)).then(
+      (saved) => {
+        const remoteUpdatedAt = initialWorkspaceState?.updatedAt
+          ? Date.parse(initialWorkspaceState.updatedAt)
+          : 0;
+        const localUpdatedAt = saved?.updatedAt ? Date.parse(saved.updatedAt) : 0;
+        const useLocal = Boolean(saved && localUpdatedAt > remoteUpdatedAt);
+        const selectedServings = useLocal ? saved?.servings : initialWorkspaceState?.servings;
+        const selectedUnitMode = useLocal ? saved?.unitMode : initialWorkspaceState?.unitMode;
+        const selectedChecked = useLocal
+          ? saved?.checked
+          : Object.fromEntries(
+              (initialWorkspaceState?.checkedIngredientIds ?? []).map((id) => [id, true]),
+            );
+        const selectedTimers = useLocal
+          ? saved?.timers
+          : Object.fromEntries(
+              (initialWorkspaceState?.timers ?? []).map((timer) => [timer.id, timer]),
+            );
+        const initial = initialNotes || saved?.notes || '';
         setNotes(initial);
         setNotesOpen(Boolean(initial));
-        if (!savedChecked) {
-          setChecked({});
-          return;
-        }
-        try {
-          setChecked(JSON.parse(savedChecked) as Record<string, boolean>);
-        } catch {
-          setChecked({});
+        setServings(Math.max(1, selectedServings ?? recipe.servings ?? 1));
+        setUnitMode(selectedUnitMode ?? 'original');
+        setChecked(selectedChecked ?? {});
+        setTimers(selectedTimers ?? {});
+        if (useLocal && saved) {
+          onWorkspaceStateChangeRef.current?.({
+            checkedIngredientIds: Object.entries(saved.checked)
+              .filter(([, value]) => value)
+              .map(([id]) => id),
+            servings: Math.max(1, saved.servings ?? recipe.servings ?? 1),
+            timers: Object.values(saved.timers ?? {}),
+            unitMode: saved.unitMode ?? 'original',
+          });
         }
       },
     );
-  }, [checkedKey, initialNotes, notesKey, recipe.servings]);
+  }, [
+    initialNotes,
+    initialWorkspaceState?.checkedIngredientIds,
+    initialWorkspaceState?.servings,
+    initialWorkspaceState?.timers,
+    initialWorkspaceState?.unitMode,
+    initialWorkspaceState?.updatedAt,
+    recipe.servings,
+    user,
+    workspaceId,
+  ]);
+
+  const persistWorkspace = (
+    nextNotes: string,
+    nextChecked: Record<string, boolean>,
+    nextTimers = timers,
+    nextServings = servings,
+    nextUnitMode = unitMode,
+  ) => {
+    if (!user) return;
+    const state = {
+      checked: nextChecked,
+      notes: nextNotes,
+      servings: nextServings,
+      timers: nextTimers,
+      unitMode: nextUnitMode,
+      updatedAt: new Date().toISOString(),
+    };
+    void cacheOfflineWorkspaceState(user.id, workspaceId, state);
+    onWorkspaceStateChangeRef.current?.({
+      servings: nextServings,
+      unitMode: nextUnitMode,
+      checkedIngredientIds: Object.entries(nextChecked)
+        .filter(([, value]) => value)
+        .map(([id]) => id),
+      timers: Object.values(nextTimers),
+    });
+  };
 
   const updateChecked = (ingredientId: string) => {
     setChecked((current) => {
       const next = { ...current, [ingredientId]: !current[ingredientId] };
-      void AsyncStorage.setItem(checkedKey, JSON.stringify(next));
+      persistWorkspace(notes, next);
       return next;
     });
   };
@@ -370,6 +449,9 @@ export function RecipeWorkspace({
       recipe,
     );
   const difficulty = metadata?.difficulty ?? recipe.difficulty;
+  let notesStatus = t('recipe.notesSaved');
+  if (onNotesChange && isOnline) notesStatus = t('recipe.notesSynced');
+  else if (onNotesChange) notesStatus = t('recipe.notesPending');
 
   return (
     <View style={styles.workspace}>
@@ -462,7 +544,13 @@ export function RecipeWorkspace({
               accessibilityState={{ disabled: servings <= 1 }}
               disabled={servings <= 1}
               hitSlop={4}
-              onPress={() => setServings((value) => Math.max(1, value - 1))}
+              onPress={() =>
+                setServings((value) => {
+                  const next = Math.max(1, value - 1);
+                  persistWorkspace(notes, checked, timers, next, unitMode);
+                  return next;
+                })
+              }
               style={[styles.stepperButton, servings <= 1 && styles.stepperButtonDisabled]}
             >
               <SymbolView
@@ -478,7 +566,13 @@ export function RecipeWorkspace({
               accessibilityLabel={t('recipe.increaseYield')}
               accessibilityRole="button"
               hitSlop={4}
-              onPress={() => setServings((value) => value + 1)}
+              onPress={() =>
+                setServings((value) => {
+                  const next = value + 1;
+                  persistWorkspace(notes, checked, timers, next, unitMode);
+                  return next;
+                })
+              }
               style={styles.stepperButton}
             >
               <SymbolView name={{ android: 'add', ios: 'plus' }} size={15} tintColor={colors.ink} />
@@ -490,7 +584,13 @@ export function RecipeWorkspace({
             <Text style={styles.scaleNoticeText}>
               {t('recipe.scaledTimingNote', { yield: originalYield })}
             </Text>
-            <Pressable accessibilityRole="button" onPress={() => setServings(originalServings)}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setServings(originalServings);
+                persistWorkspace(notes, checked, timers, originalServings, unitMode);
+              }}
+            >
               <Text style={styles.useOriginalAction}>{t('recipe.useOriginalYield')}</Text>
             </Pressable>
           </View>
@@ -501,7 +601,10 @@ export function RecipeWorkspace({
               accessibilityRole="tab"
               accessibilityState={{ selected: unitMode === mode }}
               key={mode}
-              onPress={() => setUnitMode(mode)}
+              onPress={() => {
+                setUnitMode(mode);
+                persistWorkspace(notes, checked, timers, servings, mode);
+              }}
               style={[styles.unitTab, unitMode === mode && styles.unitTabSelected]}
             >
               <Text style={[styles.unitText, unitMode === mode && styles.unitTextSelected]}>
@@ -519,7 +622,7 @@ export function RecipeWorkspace({
               accessibilityRole="button"
               onPress={() => {
                 setChecked({});
-                void AsyncStorage.removeItem(checkedKey);
+                persistWorkspace(notes, {});
               }}
             >
               <Text style={styles.uncheckAction}>{t('recipe.uncheckAll')}</Text>
@@ -602,8 +705,24 @@ export function RecipeWorkspace({
                 ) : null}
                 {step.timers?.map((timer) => (
                   <KitchenTimer
+                    initialState={timers[timer.id]}
                     key={timer.id}
-                    onStateChange={(state) => onTimerChange?.(timer.id, state)}
+                    onStateChange={(state) => {
+                      setTimers((current) => {
+                        const previous = current[timer.id];
+                        const next = { ...current };
+                        if (state) next[timer.id] = state;
+                        else delete next[timer.id];
+                        const stateChanged =
+                          (!previous && Boolean(state)) ||
+                          (Boolean(previous) && !state) ||
+                          previous?.running !== state?.running ||
+                          previous?.endsAt !== state?.endsAt;
+                        if (stateChanged) persistWorkspace(notes, checked, next);
+                        return next;
+                      });
+                      onTimerChange?.(timer.id, state);
+                    }}
                     timer={timer}
                   />
                 ))}
@@ -655,16 +774,14 @@ export function RecipeWorkspace({
               onBlur={() => onNotesChange?.(notes)}
               onChangeText={(value) => {
                 setNotes(value);
-                void AsyncStorage.setItem(notesKey, value);
+                persistWorkspace(value, checked);
               }}
               placeholder={t('recipe.personalNotesPlaceholder')}
               placeholderTextColor={colors.inkMuted}
               style={styles.notesInput}
               value={notes}
             />
-            <Text style={styles.savedLocally}>
-              {t(onNotesChange ? 'recipe.notesSynced' : 'recipe.notesSaved')}
-            </Text>
+            <Text style={styles.savedLocally}>{notesStatus}</Text>
           </>
         ) : (
           <Pressable

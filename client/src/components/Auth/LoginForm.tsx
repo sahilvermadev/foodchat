@@ -58,11 +58,14 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
 
   const renderError = (fieldName: string) => {
     const errorMessage = errors[fieldName]?.message;
-    return errorMessage ? (
-      <span role="alert" className="mt-1 font-mono text-sm text-red-600 dark:text-red-500">
-        {String(errorMessage)}
+    return (
+      <span
+        role={errorMessage ? 'alert' : undefined}
+        className="mt-1 block min-h-[1lh] font-mono text-sm text-status-danger"
+      >
+        {errorMessage ? String(errorMessage) : null}
       </span>
-    ) : null;
+    );
   };
 
   const handleResendEmail = () => {
@@ -76,11 +79,11 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
   return (
     <>
       {showResendLink && (
-        <div className="mt-2 rounded-md border border-green-500 bg-green-500/10 px-3 py-2 text-sm text-gray-600 dark:text-gray-200">
+        <div className="border-status-success/40 bg-status-success/10 mt-2 rounded-card border px-3 py-2 text-sm text-text-primary">
           {localize('com_auth_email_verification_resend_prompt')}
           <button
             type="button"
-            className="ml-2 text-blue-600 hover:underline"
+            className="ml-2 font-medium text-surface-submit hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
             onClick={handleResendEmail}
             disabled={resendLinkMutation.isLoading}
           >
@@ -90,7 +93,7 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
       )}
       <form
         className="mt-6"
-        aria-label="Login form"
+        aria-label={localize('com_auth_login')}
         method="POST"
         onSubmit={handleSubmit((data) => onSubmit(data))}
       >

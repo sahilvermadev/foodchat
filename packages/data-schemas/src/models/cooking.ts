@@ -3,6 +3,8 @@ import { applyTenantIsolation } from '~/models/plugins/tenantIsolation';
 import {
   cookingDraftSchema,
   savedRecipeSchema,
+  recipeTombstoneSchema,
+  socialImportTombstoneSchema,
   guestLimitSchema,
   socialImportSchema,
   socialImportJobSchema,
@@ -22,6 +24,22 @@ export function createSavedRecipeModel(mongoose: typeof import('mongoose')) {
   applyTenantIsolation(savedRecipeSchema);
   return (
     mongoose.models.SavedRecipe || mongoose.model<t.ISavedRecipe>('SavedRecipe', savedRecipeSchema)
+  );
+}
+
+export function createRecipeTombstoneModel(mongoose: typeof import('mongoose')) {
+  applyTenantIsolation(recipeTombstoneSchema);
+  return (
+    mongoose.models.RecipeTombstone ||
+    mongoose.model<t.IRecipeTombstone>('RecipeTombstone', recipeTombstoneSchema)
+  );
+}
+
+export function createSocialImportTombstoneModel(mongoose: typeof import('mongoose')) {
+  applyTenantIsolation(socialImportTombstoneSchema);
+  return (
+    mongoose.models.SocialImportTombstone ||
+    mongoose.model<t.ISocialImportTombstone>('SocialImportTombstone', socialImportTombstoneSchema)
   );
 }
 

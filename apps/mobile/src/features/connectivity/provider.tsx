@@ -3,35 +3,44 @@ import { onlineManager } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 import type { PropsWithChildren } from 'react';
+import { connectivityStatusFor } from './state';
+import type { ConnectivityStatus } from './state';
+
+export type { ConnectivityStatus } from './state';
 
 type ConnectivityContextValue = {
+  status: ConnectivityStatus;
   isOnline: boolean;
 };
 
-let online: boolean | null = null;
+let connectivityStatus: ConnectivityStatus = 'unknown';
+onlineManager.setOnline(false);
 
-const ConnectivityContext = createContext<ConnectivityContextValue>({ isOnline: true });
-
-const hasInternet = (connected: boolean | null, reachable: boolean | null) =>
-  connected !== false && reachable !== false;
+const ConnectivityContext = createContext<ConnectivityContextValue>({
+  status: 'unknown',
+  isOnline: false,
+});
 
 export function isOnlineNow() {
-  return online !== false;
+  return connectivityStatus === 'online';
+}
+
+export function connectivityStatusNow() {
+  return connectivityStatus;
 }
 
 export function ConnectivityProvider({ children }: PropsWithChildren) {
-  const [isOnline, setIsOnline] = useState(true);
+  const [status, setStatus] = useState<ConnectivityStatus>('unknown');
 
   useEffect(() => {
     return NetInfo.addEventListener((state) => {
-      const next = hasInternet(state.isConnected, state.isInternetReachable);
-      online = next;
-      onlineManager.setOnline(next);
-      setIsOnline(next);
+      connectivityStatus = connectivityStatusFor(state.isConnected, state.isInternetReachable);
+      onlineManager.setOnline(connectivityStatus === 'online');
+      setStatus(connectivityStatus);
     });
   }, []);
 
-  const value = useMemo(() => ({ isOnline }), [isOnline]);
+  const value = useMemo(() => ({ status, isOnline: status === 'online' }), [status]);
   return <ConnectivityContext.Provider value={value}>{children}</ConnectivityContext.Provider>;
 }
 

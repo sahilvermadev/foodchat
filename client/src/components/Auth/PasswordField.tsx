@@ -35,7 +35,7 @@ const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
           aria-pressed={visible}
           title={toggleLabel}
           onClick={() => setVisible((current) => !current)}
-          className="absolute end-3 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1121f]/35"
+          className="absolute end-3 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:bg-surface-active"
         >
           {visible ? (
             <EyeOff className="size-4" aria-hidden="true" />

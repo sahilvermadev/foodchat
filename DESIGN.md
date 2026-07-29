@@ -1,7 +1,7 @@
 # Rekky Design Guide
 
 Status: living product design reference  
-Last updated: 2026-06-04
+Last updated: 2026-07-28
 
 This document describes the current design language of Rekky and the rules new UI
 work should follow. It is intentionally practical: use it when building, reviewing,
@@ -55,32 +55,37 @@ in `client/tailwind.config.cjs`.
 
 ### Core Palette
 
-Rekky uses a warm culinary palette in light mode and a dark plum kitchen palette in
-dark mode.
+Rekky uses quiet, tinted mineral neutrals with one ember-coral signal. It should
+not read as a themed “food palette”: warmth is carried by trace chroma in the
+neutrals, while the accent is reserved for active state, focus, links, and primary
+emphasis. Its footprint should remain below roughly 5% of a viewport.
 
-| Token | Light | Dark | Use |
-| --- | --- | --- | --- |
-| `--presentation` | `--rekky-cream` | `--rekky-plum-950` | App/page background |
-| `--surface-primary` | `--rekky-alabaster` | `--rekky-plum-900` | Main raised surfaces |
-| `--surface-primary-alt` | `--rekky-cream` | `--rekky-plum-950` | Alternate panels/canvas |
-| `--surface-secondary` | `--rekky-soft-clay` | `--rekky-plum-850` | Secondary controls/panels |
-| `--surface-submit` | `--rekky-terracotta` | `--rekky-terracotta` | Primary actions |
-| `--text-primary` | `--rekky-charcoal` | white | Primary readable text |
-| `--text-secondary` | `--rekky-umber` | `--rekky-cream-muted` | Supporting text |
-| `--border-light` | `--rekky-linen` | `--rekky-plum-750` | Default dividers |
+Light and dark modes preserve the same relationships. Dark elevation becomes
+lighter as surfaces rise; the accent becomes lighter and slightly less chromatic.
 
-Core named colors:
+| Role                 | Light                   | Dark                    | Use                                   |
+| -------------------- | ----------------------- | ----------------------- | ------------------------------------- |
+| `--color-paper`      | `oklch(97.5% 0.006 55)` | `oklch(14.5% 0.008 35)` | App/page background                   |
+| `--color-paper-2`    | `oklch(95.2% 0.008 55)` | `oklch(18% 0.009 35)`   | Main raised surfaces                  |
+| `--color-paper-3`    | `oklch(92.5% 0.009 55)` | `oklch(22% 0.01 35)`    | Secondary controls and panels         |
+| `--color-ink`        | `oklch(19% 0.01 35)`    | `oklch(94% 0.008 55)`   | Primary readable text                 |
+| `--color-ink-2`      | `oklch(31% 0.01 35)`    | `oklch(79% 0.008 55)`   | Supporting text                       |
+| `--color-rule`       | `oklch(85.5% 0.008 50)` | `oklch(29% 0.01 35)`    | Quiet dividers                        |
+| `--color-rule-2`     | `oklch(77% 0.01 48)`    | `oklch(36% 0.01 35)`    | Stronger control boundaries           |
+| `--color-accent`     | `oklch(53% 0.17 32)`    | `oklch(70% 0.14 32)`    | Active state, links, primary emphasis |
+| `--color-accent-ink` | mineral paper           | smoked ink              | Text on accent fills                  |
+| `--color-focus`      | `oklch(55% 0.2 32)`     | `oklch(72% 0.18 32)`    | Visible keyboard focus                |
 
-- Terracotta: `#c85a32`, hover `#b24e2a`
-- Soft clay: `#f4ebe1`
-- Alabaster: `#fafaf7`
-- Stone: `#f3f1eb`
-- Linen: `#e6e3da`
-- Charcoal: `#1a1917`
-- Plum base: `#171217`
-- Leaf: `#75c46b`
-- Lemon: `#f2c94c`
-- Aubergine: `#6d3a6d`
+Functional status colors are subordinate and must always include text or an icon:
+
+- Success: restrained green, `--color-success`
+- Caution: restrained amber, `--color-caution`
+- Danger: signal red, `--color-danger`
+- Informational: mineral blue, `--color-info`
+
+Legacy `--rekky-*` names remain compatibility aliases only. New work uses semantic
+`--color-*` roles or the existing application roles such as `--surface-primary`,
+`--text-primary`, and `--border-light`.
 
 Use semantic Tailwind classes such as `bg-presentation`, `bg-surface-primary`,
 `text-text-primary`, `text-text-secondary`, `border-border-light`, and
@@ -101,7 +106,7 @@ Important classes:
 
 - `rekky-ui`: primary app UI wrapper.
 - `rekky-title`: large editorial title.
-- `rekky-section-title`: uppercase section heading.
+- `rekky-section-title`: roman editorial section heading with restrained tracking.
 - `rekky-sans-display-title`: large sans display title.
 - `rekky-body`: readable body copy.
 - `rekky-meta`: compact technical metadata label.
@@ -122,6 +127,17 @@ Rules:
 
 Default radius is `0.5rem`. Cards and controls are generally `rounded-lg` or smaller.
 Avoid large pill containers unless the control is intentionally chip-like.
+
+Use this fixed shape and elevation matrix; feature code must not invent local values:
+
+| Surface                   | Radius                                          | Elevation                                           |
+| ------------------------- | ----------------------------------------------- | --------------------------------------------------- |
+| Controls and cards        | `--radius-control` / `--radius-card` (`0.5rem`) | `--shadow-surface` only when separation requires it |
+| Menus and floating panels | `--radius-card`                                 | `--shadow-floating`                                 |
+| Sheets and dialogs        | `--radius-dialog` (`0.75rem`)                   | `--shadow-dialog`                                   |
+
+Stacking uses named layers only: `base`, `raised`, `dropdown`, `sticky`, `modal`,
+`toast`, and `tooltip`. Arbitrary numeric z-index values are not permitted in feature code.
 
 Use containers for:
 
@@ -382,6 +398,132 @@ If cuisine pages return to `main`, the preferred content model is:
 - UI renderer that is consistent with Rekky typography and spacing;
 - no page-specific font families or uncontrolled styling generated by agents.
 
+## Exports
+
+The runtime source of truth remains `client/src/style.css`. The root `tokens.css`
+file is a portable copy for design tooling and reuse.
+
+### tokens.css
+
+```css
+:root {
+  --color-paper: oklch(97.5% 0.006 55);
+  --color-paper-2: oklch(95.2% 0.008 55);
+  --color-paper-3: oklch(92.5% 0.009 55);
+  --color-ink: oklch(19% 0.01 35);
+  --color-ink-2: oklch(31% 0.01 35);
+  --color-muted: oklch(45% 0.01 45);
+  --color-rule: oklch(85.5% 0.008 50);
+  --color-rule-2: oklch(77% 0.01 48);
+  --color-accent: oklch(53% 0.17 32);
+  --color-accent-ink: oklch(97.5% 0.006 55);
+  --color-focus: oklch(55% 0.2 32);
+}
+
+.dark {
+  --color-paper: oklch(14.5% 0.008 35);
+  --color-paper-2: oklch(18% 0.009 35);
+  --color-paper-3: oklch(22% 0.01 35);
+  --color-ink: oklch(94% 0.008 55);
+  --color-ink-2: oklch(79% 0.008 55);
+  --color-muted: oklch(68% 0.008 50);
+  --color-rule: oklch(29% 0.01 35);
+  --color-rule-2: oklch(36% 0.01 35);
+  --color-accent: oklch(70% 0.14 32);
+  --color-accent-ink: oklch(16% 0.01 35);
+  --color-focus: oklch(72% 0.18 32);
+}
+```
+
+### Tailwind v4 `@theme`
+
+```css
+@theme {
+  --color-paper: oklch(97.5% 0.006 55);
+  --color-paper-2: oklch(95.2% 0.008 55);
+  --color-paper-3: oklch(92.5% 0.009 55);
+  --color-ink: oklch(19% 0.01 35);
+  --color-ink-2: oklch(31% 0.01 35);
+  --color-muted: oklch(45% 0.01 45);
+  --color-rule: oklch(85.5% 0.008 50);
+  --color-accent: oklch(53% 0.17 32);
+  --color-focus: oklch(55% 0.2 32);
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Space Grotesk', sans-serif;
+  --font-outlier: 'JetBrains Mono', monospace;
+  --spacing-3xs: 0.25rem;
+  --spacing-2xs: 0.5rem;
+  --spacing-xs: 0.75rem;
+  --spacing-sm: 1rem;
+  --spacing-md: 1.5rem;
+  --spacing-lg: 2rem;
+  --spacing-xl: 3rem;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --radius-card: 0.5rem;
+  --radius-input: 0.5rem;
+}
+```
+
+### DTCG `tokens.json`
+
+```json
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "color": {
+    "paper": { "$value": "oklch(97.5% 0.006 55)", "$type": "color" },
+    "paper-2": { "$value": "oklch(95.2% 0.008 55)", "$type": "color" },
+    "paper-3": { "$value": "oklch(92.5% 0.009 55)", "$type": "color" },
+    "ink": { "$value": "oklch(19% 0.01 35)", "$type": "color" },
+    "ink-2": { "$value": "oklch(31% 0.01 35)", "$type": "color" },
+    "muted": { "$value": "oklch(45% 0.01 45)", "$type": "color" },
+    "rule": { "$value": "oklch(85.5% 0.008 50)", "$type": "color" },
+    "accent": { "$value": "oklch(53% 0.17 32)", "$type": "color" },
+    "accent-ink": { "$value": "oklch(97.5% 0.006 55)", "$type": "color" },
+    "focus": { "$value": "oklch(55% 0.2 32)", "$type": "color" }
+  },
+  "font": {
+    "display": { "$value": "Space Grotesk, sans-serif", "$type": "fontFamily" },
+    "body": { "$value": "Space Grotesk, sans-serif", "$type": "fontFamily" },
+    "outlier": { "$value": "JetBrains Mono, monospace", "$type": "fontFamily" }
+  },
+  "space": {
+    "xs": { "$value": "0.75rem", "$type": "dimension" },
+    "sm": { "$value": "1rem", "$type": "dimension" },
+    "md": { "$value": "1.5rem", "$type": "dimension" },
+    "lg": { "$value": "2rem", "$type": "dimension" }
+  }
+}
+```
+
+### shadcn/ui CSS variables
+
+```css
+:root {
+  --background: 97.5% 0.006 55;
+  --foreground: 19% 0.01 35;
+  --primary: 53% 0.17 32;
+  --primary-foreground: 97.5% 0.006 55;
+  --muted: 92.5% 0.009 55;
+  --muted-foreground: 45% 0.01 45;
+  --border: 85.5% 0.008 50;
+  --input: 77% 0.01 48;
+  --ring: 55% 0.2 32;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 14.5% 0.008 35;
+  --foreground: 94% 0.008 55;
+  --primary: 70% 0.14 32;
+  --primary-foreground: 16% 0.01 35;
+  --muted: 22% 0.01 35;
+  --muted-foreground: 68% 0.008 50;
+  --border: 29% 0.01 35;
+  --input: 36% 0.01 35;
+  --ring: 72% 0.18 32;
+}
+```
+
 ## Engineering Rules for Design Work
 
 1. Use existing tokens before adding new colors.
@@ -407,4 +549,3 @@ Before merging a UI change, ask:
 - Are loading, empty, and error states handled?
 - Is the copy concrete and useful?
 - Did tests cover the changed behavior?
-

@@ -33,10 +33,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((part, index) =>
         queryTokens.has(part.toLocaleLowerCase()) ? (
-          <mark
-            key={`${part}-${index}`}
-            className="bg-[#c1121f]/15 text-inherit dark:bg-[#c1121f]/25"
-          >
+          <mark key={`${part}-${index}`} className="bg-surface-submit/15 text-inherit">
             {part}
           </mark>
         ) : (
@@ -152,7 +149,7 @@ export default function HistorySearch({
           role="combobox"
           aria-controls="chat-history-search-results"
           aria-expanded={isSearchActive}
-          className="rekky-history-search-input dark:hover:border-white/12 h-10 w-full rounded-xl border border-black/10 bg-white/45 pl-9 pr-9 text-sm text-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] outline-none transition-colors placeholder:text-text-secondary hover:bg-white/60 focus:border-black/10 focus:bg-white/60 dark:border-white/10 dark:bg-white/[0.055] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] dark:hover:bg-white/[0.075] dark:focus:border-white/10 dark:focus:bg-white/[0.075]"
+          className="rekky-history-search-input h-10 w-full rounded-control border border-border-light bg-surface-primary pl-9 pr-9 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary hover:border-border-medium hover:bg-surface-hover focus:border-border-medium focus:bg-surface-primary focus-visible:ring-2 focus-visible:ring-ring-primary"
         />
         {isSearchActive && (
           <button
@@ -160,7 +157,7 @@ export default function HistorySearch({
             title={localize('com_ui_clear_search')}
             aria-label={localize('com_ui_clear_search')}
             onClick={() => setQuery('')}
-            className="absolute right-5 top-[1.45rem] flex h-6 w-6 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-black/[0.045] hover:text-text-primary dark:hover:bg-white/10"
+            className="absolute right-5 top-[1.45rem] flex h-6 w-6 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
           >
             <X className="h-4 w-4" />
           </button>
@@ -190,7 +187,7 @@ export default function HistorySearch({
             </div>
           )}
           {debouncedQuery.length >= 2 && enabled && isError && (
-            <p className="px-3 py-4 text-sm text-red-600 dark:text-red-400">
+            <p className="px-3 py-4 text-sm text-text-destructive">
               {localize('com_ui_history_search_error')}
             </p>
           )}

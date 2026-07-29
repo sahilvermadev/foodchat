@@ -5,7 +5,12 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { TLoginResponse, TLoginUser } from 'librechat-data-provider';
 import type { TResError } from '~/common';
 import { useLoginUserMutation } from '~/data-provider';
-import { buildLoginRetryRedirect, buildTwoFactorRedirect, resolvePostLoginRedirect } from '~/utils';
+import {
+  buildLoginRetryRedirect,
+  buildTwoFactorRedirect,
+  clearExplicitLogout,
+  resolvePostLoginRedirect,
+} from '~/utils';
 import store from '~/store';
 
 type UsePublicLoginOptions = {
@@ -25,6 +30,7 @@ export default function usePublicLogin({ setError }: UsePublicLoginOptions = {})
         return;
       }
 
+      clearExplicitLogout();
       setError?.(undefined);
       setUser(user);
       setTokenHeader(token);

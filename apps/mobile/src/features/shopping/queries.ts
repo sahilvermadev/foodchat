@@ -6,16 +6,26 @@ import type {
   ShoppingList,
   UpdateShoppingItemRequest,
 } from 'librechat-data-provider';
+import {
+  shoppingClearPurchased,
+  shoppingContribution,
+  shoppingItem,
+  shoppingItems,
+  shoppingList,
+  shoppingMerge,
+} from 'librechat-data-provider/mobile';
 import { useAuth } from '@/features/auth/provider';
 import { isOnlineNow } from '@/features/connectivity/provider';
 import {
   cacheOfflineShoppingList,
-  countOfflineShoppingMutations,
   deleteOfflineShoppingMutation,
+  failOfflineShoppingMutation,
   getOfflineShoppingList,
   listOfflineShoppingMutations,
+  offlineShoppingMutationStatus,
   queueOfflineShoppingMutation,
 } from '@/features/offline/shopping';
+import { mutationFailureDisposition } from '@/features/offline/conflict';
 import { ApiError, apiFetch } from '@/lib/api/client';
 import { applyOfflineShoppingMutation } from './model';
 import type { OfflineShoppingMutation } from './model';
@@ -50,7 +60,7 @@ const withInputIds = (items: AddShoppingItemInput[], mutationId: string) =>
 
 async function executeMutation(mutation: OfflineShoppingMutation): Promise<ShoppingList> {
   if (mutation.type === 'add') {
-    return apiFetch<ShoppingList>('/api/shopping-list/items', {
+    return apiFetch<ShoppingList>(shoppingItems(), {
       body: mutation.request,
       method: 'POST',
     });
@@ -59,30 +69,28 @@ async function executeMutation(mutation: OfflineShoppingMutation): Promise<Shopp
     headers: { 'Idempotency-Key': mutation.id },
   };
   if (mutation.type === 'update') {
-    return apiFetch<ShoppingList>(
-      `/api/shopping-list/items/${encodeURIComponent(mutation.itemId)}`,
-      { ...request, body: mutation.patch, method: 'PATCH' },
-    );
+    return apiFetch<ShoppingList>(shoppingItem(mutation.itemId), {
+      ...request,
+      body: mutation.patch,
+      method: 'PATCH',
+    });
   }
   if (mutation.type === 'delete') {
-    return apiFetch<ShoppingList>(
-      `/api/shopping-list/items/${encodeURIComponent(mutation.itemId)}`,
-      { ...request, method: 'DELETE' },
-    );
+    return apiFetch<ShoppingList>(shoppingItem(mutation.itemId), { ...request, method: 'DELETE' });
   }
   if (mutation.type === 'remove_contribution') {
-    return apiFetch<ShoppingList>(
-      `/api/shopping-list/items/${encodeURIComponent(mutation.itemId)}/contributions/${encodeURIComponent(mutation.contributionId)}`,
-      { ...request, method: 'DELETE' },
-    );
+    return apiFetch<ShoppingList>(shoppingContribution(mutation.itemId, mutation.contributionId), {
+      ...request,
+      method: 'DELETE',
+    });
   }
   if (mutation.type === 'merge_items') {
-    return apiFetch<ShoppingList>(
-      `/api/shopping-list/items/${encodeURIComponent(mutation.targetId)}/merge/${encodeURIComponent(mutation.sourceId)}`,
-      { ...request, method: 'POST' },
-    );
+    return apiFetch<ShoppingList>(shoppingMerge(mutation.targetId, mutation.sourceId), {
+      ...request,
+      method: 'POST',
+    });
   }
-  return apiFetch<ShoppingList>('/api/shopping-list/clear-purchased', {
+  return apiFetch<ShoppingList>(shoppingClearPurchased(), {
     ...request,
     method: 'POST',
   });
@@ -92,9 +100,22 @@ export async function syncPendingShoppingMutations(userId: string) {
   const pending = await listOfflineShoppingMutations(userId);
   let latest: ShoppingList | null = null;
   for (const entry of pending) {
-    latest = await executeMutation(entry.mutation);
-    await cacheOfflineShoppingList(userId, latest);
-    await deleteOfflineShoppingMutation(entry.id);
+    try {
+      latest = await executeMutation(entry.mutation);
+      await cacheOfflineShoppingList(userId, latest);
+      await deleteOfflineShoppingMutation(entry.id);
+    } catch (error) {
+      await failOfflineShoppingMutation(
+        entry.id,
+        error instanceof Error ? error.message : 'Shopping synchronization failed',
+      );
+      const disposition = mutationFailureDisposition(
+        error instanceof ApiError ? error.status : undefined,
+        entry.mutation.type === 'delete',
+      );
+      if (disposition !== 'resolved') throw error;
+      await deleteOfflineShoppingMutation(entry.id);
+    }
   }
   return latest;
 }
@@ -106,7 +127,7 @@ async function mutateShoppingList(userId: string, mutation: OfflineShoppingMutat
       await cacheOfflineShoppingList(userId, list);
       return list;
     } catch (error) {
-      if (error instanceof ApiError) throw error;
+      if (error instanceof ApiError && error.status < 500) throw error;
     }
   }
   const current = (await getOfflineShoppingList(userId)) ?? emptyList();
@@ -125,7 +146,7 @@ export function useShoppingList() {
       if (!isOnlineNow()) return (await getOfflineShoppingList(user.id)) ?? emptyList();
       try {
         await syncPendingShoppingMutations(user.id);
-        const list = await apiFetch<ShoppingList>('/api/shopping-list');
+        const list = await apiFetch<ShoppingList>(shoppingList());
         await cacheOfflineShoppingList(user.id, list);
         return list;
       } catch (error) {
@@ -143,7 +164,7 @@ export function useShoppingPendingCount() {
   const { user } = useAuth();
   return useQuery({
     queryKey: shoppingKeys.pending,
-    queryFn: () => (user ? countOfflineShoppingMutations(user.id) : 0),
+    queryFn: () => (user ? offlineShoppingMutationStatus(user.id) : { failed: 0, pending: 0 }),
     enabled: Boolean(user),
     networkMode: 'always',
   });

@@ -2,7 +2,7 @@ export const ErrorMessage = ({ children }: { children: React.ReactNode }) => (
   <div
     role="alert"
     aria-live="assertive"
-    className="relative mt-6 rounded-xl border border-red-500/20 bg-red-50/50 px-6 py-4 font-mono text-sm leading-6 text-red-700 shadow-sm transition-all dark:bg-red-950/30 dark:text-red-100"
+    className="border-status-danger/30 bg-status-danger/10 relative mt-6 rounded-card border px-6 py-4 font-mono text-sm leading-6 text-status-danger shadow-surface"
   >
     {children}
   </div>

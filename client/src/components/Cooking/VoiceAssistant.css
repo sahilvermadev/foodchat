@@ -1,11 +1,17 @@
-/* Realtime Voice Mode CSS styling */
+/* Hallmark · component: voice mode · governed by DESIGN.md */
 :root {
-  --voice-accent: #c1121f; /* matching foodchat theme */
-  --voice-listening: #10b981; /* emerald listening */
-  --voice-processing: #f59e0b; /* amber thinking */
-  --voice-speaking: #8b5cf6; /* violet assistant speaking */
-  --voice-error: #ef4444; /* red error */
-  --voice-bg-blur: rgba(15, 15, 20, 0.72);
+  --voice-accent: var(--color-accent);
+  --voice-accent-hover: var(--color-accent-hover);
+  --voice-listening: var(--color-success);
+  --voice-processing: var(--color-caution);
+  --voice-speaking: var(--color-accent);
+  --voice-error: var(--color-danger);
+  --voice-queued: var(--color-voice-muted);
+  --voice-bg-blur: var(--color-overlay);
+  --voice-surface: var(--color-voice-surface);
+  --voice-surface-raised: var(--color-voice-surface-2);
+  --voice-text: var(--color-voice-text);
+  --voice-muted: var(--color-voice-muted);
 }
 
 .voice-overlay {
@@ -14,19 +20,23 @@
   background: var(--voice-bg-blur);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  z-index: 100;
+  z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  animation: fadeIn 0.3s ease-out;
-  color: #f8fafc;
+  animation: fadeIn var(--dur-short) var(--ease-out);
+  color: var(--voice-text);
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .voice-container {
@@ -62,13 +72,17 @@
   display: grid;
   place-items: center;
   color: var(--glow, var(--voice-accent));
-  transition: transform 0.18s ease, filter 0.18s ease;
+  transition:
+    transform var(--dur-micro) var(--ease-out),
+    filter var(--dur-micro) var(--ease-out);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
-.circle:hover {
-  filter: brightness(1.08);
+@media (hover: hover) and (pointer: fine) {
+  .circle:hover {
+    filter: brightness(1.08);
+  }
 }
 
 .circle:active {
@@ -80,11 +94,18 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: radial-gradient(circle at center, var(--glow, var(--voice-accent)) 0%, transparent 65%);
+  background: radial-gradient(
+    circle at center,
+    var(--glow, var(--voice-accent)) 0%,
+    transparent 65%
+  );
   filter: blur(24px);
   opacity: 0.42;
   transform: scale(1);
-  transition: opacity 0.25s, background 0.25s, transform 1.4s ease-in-out;
+  transition:
+    opacity var(--dur-short) var(--ease-out),
+    background-color var(--dur-short) var(--ease-out),
+    transform var(--dur-long) var(--ease-in-out);
   pointer-events: none;
 }
 
@@ -96,20 +117,23 @@
   border-radius: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  transition: opacity 0.4s ease, border-color 0.4s ease, transform 0.3s ease;
+  transition:
+    opacity var(--dur-long) var(--ease-out),
+    border-color var(--dur-long) var(--ease-out),
+    transform var(--dur-short) var(--ease-out);
 }
 
 .circle-ring {
   width: 82%;
   height: 82%;
-  border: 1.5px solid color-mix(in srgb, var(--glow, var(--voice-accent)) 35%, transparent);
+  border: 1.5px solid color-mix(in oklch, var(--glow, var(--voice-accent)) 35%, transparent);
   opacity: 0.35;
 }
 
 .circle-ring-outer {
   width: 94%;
   height: 94%;
-  border: 1px solid color-mix(in srgb, var(--glow, var(--voice-accent)) 22%, transparent);
+  border: 1px solid color-mix(in oklch, var(--glow, var(--voice-accent)) 22%, transparent);
   opacity: 0;
 }
 
@@ -120,17 +144,21 @@
   border-radius: 50%;
   background: radial-gradient(
     circle at 35% 28%,
-    color-mix(in srgb, var(--glow, var(--voice-accent)) 28%, transparent),
-    color-mix(in srgb, var(--glow, var(--voice-accent)) 10%, transparent) 55%,
-    color-mix(in srgb, var(--glow, var(--voice-accent)) 5%, transparent)
+    color-mix(in oklch, var(--glow, var(--voice-accent)) 28%, transparent),
+    color-mix(in oklch, var(--glow, var(--voice-accent)) 10%, transparent) 55%,
+    color-mix(in oklch, var(--glow, var(--voice-accent)) 5%, transparent)
   );
-  border: 2px solid color-mix(in srgb, var(--glow, var(--voice-accent)) 40%, transparent);
+  border: 2px solid color-mix(in oklch, var(--glow, var(--voice-accent)) 40%, transparent);
   display: grid;
   place-items: center;
   box-shadow:
-    0 0 32px color-mix(in srgb, var(--glow, var(--voice-accent)) 22%, transparent),
-    inset 0 0 28px color-mix(in srgb, var(--glow, var(--voice-accent)) 18%, transparent);
-  transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease, transform 0.4s ease;
+    0 0 32px color-mix(in oklch, var(--glow, var(--voice-accent)) 22%, transparent),
+    inset 0 0 28px color-mix(in oklch, var(--glow, var(--voice-accent)) 18%, transparent);
+  transition:
+    background-color var(--dur-long) var(--ease-out),
+    border-color var(--dur-long) var(--ease-out),
+    box-shadow var(--dur-long) var(--ease-out),
+    transform var(--dur-long) var(--ease-out);
 }
 
 .circle-indicator {
@@ -146,7 +174,9 @@
   grid-area: 1 / 1;
   opacity: 0;
   transform: scale(0.85);
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition:
+    opacity var(--dur-short) var(--ease-out),
+    transform var(--dur-short) var(--ease-out);
   pointer-events: none;
 }
 
@@ -180,12 +210,18 @@
   border-radius: 50%;
   background: currentColor;
   opacity: 0.3;
-  animation: thinking-dot 1.25s ease-in-out infinite;
+  animation: thinking-dot 1.25s var(--ease-in-out) infinite;
 }
 
-.ind-thinking .dot:nth-child(1) { animation-delay: 0s; }
-.ind-thinking .dot:nth-child(2) { animation-delay: 0.16s; }
-.ind-thinking .dot:nth-child(3) { animation-delay: 0.32s; }
+.ind-thinking .dot:nth-child(1) {
+  animation-delay: 0s;
+}
+.ind-thinking .dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.ind-thinking .dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
 
 .ind-bars {
   display: flex;
@@ -196,20 +232,33 @@
 
 .ind-bars .bar {
   width: 4px;
-  min-height: 4px;
+  height: 40px;
   border-radius: 3px;
   background: currentColor;
   opacity: 0.7;
   --h: var(--bar0, 0);
-  height: calc(4px + var(--h) * 36px);
-  transition: height 0.08s ease-out, opacity 0.08s ease-out;
+  transform: scaleY(calc(0.1 + var(--h) * 0.9));
+  transform-origin: center;
+  transition:
+    transform 0.08s var(--ease-out),
+    opacity 0.08s var(--ease-out);
 }
 
-.ind-bars .bar:nth-child(1) { --h: var(--bar0); }
-.ind-bars .bar:nth-child(2) { --h: var(--bar1); }
-.ind-bars .bar:nth-child(3) { --h: var(--bar2); }
-.ind-bars .bar:nth-child(4) { --h: var(--bar3); }
-.ind-bars .bar:nth-child(5) { --h: var(--bar4); }
+.ind-bars .bar:nth-child(1) {
+  --h: var(--bar0);
+}
+.ind-bars .bar:nth-child(2) {
+  --h: var(--bar1);
+}
+.ind-bars .bar:nth-child(3) {
+  --h: var(--bar2);
+}
+.ind-bars .bar:nth-child(4) {
+  --h: var(--bar3);
+}
+.ind-bars .bar:nth-child(5) {
+  --h: var(--bar4);
+}
 
 .ind-bars .bar {
   opacity: calc(0.55 + 0.45 * var(--h));
@@ -217,15 +266,19 @@
 
 .ind-voice .wave {
   transform-origin: 50% 50%;
-  animation: voice-wave 1.35s ease-out infinite;
+  animation: voice-wave 1.35s var(--ease-out) infinite;
 }
 
-.ind-voice .wave-1 { animation-delay: 0s; }
-.ind-voice .wave-2 { animation-delay: 0.35s; }
+.ind-voice .wave-1 {
+  animation-delay: 0s;
+}
+.ind-voice .wave-2 {
+  animation-delay: 0.35s;
+}
 
 .ind-connect,
 .ind-mic {
-  color: color-mix(in srgb, var(--glow, var(--voice-accent)) 85%, white);
+  color: color-mix(in oklch, var(--glow, var(--voice-accent)) 85%, var(--voice-text));
 }
 
 /* ─── State Activation mappings ───────────────────────────────── */
@@ -244,81 +297,158 @@
 
 /* ─── Keyframe Animations ─────────────────────────────────────── */
 @keyframes breathe {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
-  50%      { transform: translate(-50%, -50%) scale(1.06); opacity: 0.15; }
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.06);
+    opacity: 0.15;
+  }
 }
 
 @keyframes ring-out {
-  0%   { transform: translate(-50%, -50%) scale(1); opacity: 0.35; }
-  100% { transform: translate(-50%, -50%) scale(1.18); opacity: 0; }
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.18);
+    opacity: 0;
+  }
 }
 
 @keyframes core-breathe {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.04); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
 }
 
 @keyframes thinking {
-  0%, 100% { transform: scale(1); opacity: 0.7; }
-  50%      { transform: scale(0.96); opacity: 0.45; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(0.96);
+    opacity: 0.45;
+  }
 }
 
 @keyframes thinking-dot {
-  0%, 60%, 100% { transform: scale(0.7); opacity: 0.3; }
-  30%           { transform: scale(1.15); opacity: 1; }
+  0%,
+  60%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.3;
+  }
+  30% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
 }
 
 @keyframes voice-wave {
-  0%   { opacity: 0; transform: scale(0.7); }
-  30%  { opacity: 1; transform: scale(1); }
-  70%  { opacity: 0.2; transform: scale(1.12); }
-  100% { opacity: 0; transform: scale(0.7); }
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 0.2;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
 }
 
 @keyframes ind-spin {
-  from { transform: scale(1) rotate(0deg); }
-  to   { transform: scale(1) rotate(360deg); }
+  from {
+    transform: scale(1) rotate(0deg);
+  }
+  to {
+    transform: scale(1) rotate(360deg);
+  }
 }
 
 /* ─── State colors ───────────────────────────────────────────── */
-.circle.state-idle         { --glow: var(--voice-accent); }
-.circle.state-connecting   { --glow: var(--voice-processing); }
-.circle.state-connected    { --glow: var(--voice-processing); }
-.circle.state-queued       { --glow: #94a3b8; }
-.circle.state-queued .ind-spinner { animation-duration: 2.4s; }
-.circle.state-queued .circle-ring { animation: breathe 2.6s ease-in-out infinite; }
-.circle.state-your-turn    { --glow: var(--voice-accent); }
-.circle.state-your-turn .circle-ring { animation: breathe 1.6s ease-in-out infinite; }
+.circle.state-idle {
+  --glow: var(--voice-accent);
+}
+.circle.state-connecting {
+  --glow: var(--voice-processing);
+}
+.circle.state-connected {
+  --glow: var(--voice-processing);
+}
+.circle.state-queued {
+  --glow: var(--voice-queued);
+}
+.circle.state-queued .ind-spinner {
+  animation-duration: 2.4s;
+}
+.circle.state-queued .circle-ring {
+  animation: breathe 2.6s var(--ease-in-out) infinite;
+}
+.circle.state-your-turn {
+  --glow: var(--voice-accent);
+}
+.circle.state-your-turn .circle-ring {
+  animation: breathe 1.6s var(--ease-in-out) infinite;
+}
 .circle.state-listening,
-.circle.state-user-speaking { --glow: var(--voice-listening); }
-.circle.state-processing   { --glow: var(--voice-processing); }
-.circle.state-ai-speaking  { --glow: var(--voice-speaking); }
-.circle.state-error        { --glow: var(--voice-error); }
+.circle.state-user-speaking {
+  --glow: var(--voice-listening);
+}
+.circle.state-processing {
+  --glow: var(--voice-processing);
+}
+.circle.state-ai-speaking {
+  --glow: var(--voice-speaking);
+}
+.circle.state-error {
+  --glow: var(--voice-error);
+}
 
 .circle.state-idle .circle-ring {
-  animation: breathe 2.4s ease-in-out infinite;
+  animation: breathe 2.4s var(--ease-in-out) infinite;
 }
 
 .circle.state-connecting .circle-core,
 .circle.state-connected .circle-core {
-  animation: thinking 1.4s ease-in-out infinite;
+  animation: thinking 1.4s var(--ease-in-out) infinite;
 }
 
 .circle.state-user-speaking .circle-ring {
   animation: none;
   opacity: calc(0.25 + 0.55 * var(--audio-level, 0));
   transform: translate(-50%, -50%) scale(calc(1 + 0.08 * var(--audio-level, 0)));
-  transition: transform 0.08s linear, opacity 0.08s linear;
+  transition:
+    transform 0.08s linear,
+    opacity 0.08s linear;
 }
 
 .circle.state-user-speaking .circle-ring-outer {
   opacity: calc(0.1 + 0.35 * var(--audio-level, 0));
   transform: translate(-50%, -50%) scale(calc(1 + 0.12 * var(--audio-level, 0)));
-  transition: transform 0.08s linear, opacity 0.08s linear;
+  transition:
+    transform 0.08s linear,
+    opacity 0.08s linear;
 }
 
 .circle.state-listening .circle-ring {
-  animation: breathe 2s ease-in-out infinite;
+  animation: breathe 2s var(--ease-in-out) infinite;
 }
 
 .circle.state-ai-speaking .circle-core {
@@ -331,14 +461,18 @@
   animation: none;
   opacity: calc(0.3 + 0.5 * var(--ai-audio-level, 0));
   transform: translate(-50%, -50%) scale(calc(1 + 0.05 * var(--ai-audio-level, 0)));
-  transition: transform 0.08s linear, opacity 0.08s linear;
+  transition:
+    transform 0.08s linear,
+    opacity 0.08s linear;
 }
 
 .circle.state-ai-speaking .circle-ring-outer {
   animation: none;
   opacity: calc(0.15 + 0.55 * var(--ai-audio-level, 0));
   transform: translate(-50%, -50%) scale(calc(1 + 0.18 * var(--ai-audio-level, 0)));
-  transition: transform 0.08s linear, opacity 0.08s linear;
+  transition:
+    transform 0.08s linear,
+    opacity 0.08s linear;
 }
 
 .circle.state-ai-speaking .circle-glow {
@@ -348,12 +482,12 @@
 
 /* ─── Control Panels & Layout ────────────────────────────────── */
 .voice-caption {
-  font-family: monospace;
+  font-family: var(--font-technical);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: var(--voice-muted);
   margin: 0;
   min-height: 20px;
 }
@@ -366,9 +500,9 @@
   width: 100%;
   height: 120px;
   overflow-y: auto;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-card);
+  background: var(--voice-surface-raised);
+  border: 1px solid color-mix(in oklch, var(--voice-text) 10%, transparent);
   padding: 12px;
   text-align: left;
   font-size: 14px;
@@ -380,12 +514,18 @@
 }
 
 .voice-transcript-item {
-  animation: slideUp 0.2s ease-out;
+  animation: slideUp var(--dur-short) var(--ease-out);
 }
 
 @keyframes slideUp {
-  from { transform: translateY(4px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(4px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .voice-transcript-role {
@@ -397,11 +537,11 @@
 }
 
 .voice-transcript-role.user {
-  color: #38bdf8;
+  color: var(--color-info);
 }
 
 .voice-transcript-role.assistant {
-  color: #c084fc;
+  color: var(--voice-accent);
 }
 
 .voice-controls {
@@ -419,17 +559,46 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.08);
-  color: #f8fafc;
+  border: 1px solid color-mix(in oklch, var(--voice-text) 18%, transparent);
+  background: var(--voice-surface-raised);
+  color: var(--voice-text);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
 }
 
-.voice-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.3);
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .voice-btn:hover {
+    background: color-mix(in oklch, var(--voice-surface-raised) 82%, var(--voice-text));
+  }
+
+  .voice-btn.active-red:hover {
+    background: var(--voice-accent-hover);
+  }
+
+  .voice-btn.muted:hover {
+    background: color-mix(in oklch, var(--voice-processing) 86%, var(--voice-surface));
+  }
+
+  .voice-queue-btn:hover {
+    filter: brightness(1.08);
+  }
+}
+
+.voice-btn:focus-visible,
+.voice-queue-btn:focus-visible,
+.circle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+.voice-btn:disabled,
+.voice-queue-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .voice-btn.active-red {
@@ -437,17 +606,10 @@
   border-color: transparent;
 }
 
-.voice-btn.active-red:hover {
-  background: #a00f19;
-}
-
 .voice-btn.muted {
-  background: #f59e0b;
+  background: var(--voice-processing);
   border-color: transparent;
-  color: #0f172a;
-}
-.voice-btn.muted:hover {
-  background: #d97706;
+  color: var(--voice-surface);
 }
 
 /* ─── Queue your-turn countdown button ───────────────────────── */
@@ -457,12 +619,37 @@
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #0f172a;
+  color: var(--color-accent-ink);
   background: var(--voice-accent);
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill, 999px);
   cursor: pointer;
-  transition: transform 0.12s ease, filter 0.2s ease;
+  transition:
+    transform var(--dur-micro) var(--ease-out),
+    filter var(--dur-short) var(--ease-out);
 }
-.voice-queue-btn:hover { filter: brightness(1.08); }
-.voice-queue-btn:active { transform: scale(0.97); }
+.voice-queue-btn:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-overlay,
+  .voice-transcript-item,
+  .circle-ring,
+  .circle-ring-outer,
+  .circle-core,
+  .circle-glow,
+  .circle-indicator > .ind,
+  .ind-spinner,
+  .ind-thinking .dot,
+  .ind-voice .wave {
+    animation: none !important;
+    transition-duration: 0ms !important;
+  }
+
+  .circle,
+  .voice-btn,
+  .voice-queue-btn {
+    transform: none !important;
+  }
+}

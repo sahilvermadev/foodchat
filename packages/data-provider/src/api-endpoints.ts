@@ -212,6 +212,7 @@ export const resolvePreferenceIngredient = () => `${BASE_URL}/api/preferences/in
 const cookingRoot = `${BASE_URL}/api/cooking`;
 const recipesRoot = `${BASE_URL}/api/recipes`;
 const socialImportsRoot = `${BASE_URL}/api/social-imports`;
+const shoppingListRoot = `${BASE_URL}/api/shopping-list`;
 
 export const cookingDraftsGenerate = () => `${cookingRoot}/drafts/generate`;
 export const cookingDraftByConversation = (conversationId: string) =>
@@ -230,8 +231,21 @@ export const cookingVoiceTurns = () => `${cookingRoot}/voice/turns`;
 export const recipes = (query = '') => `${recipesRoot}${query ? `?${query}` : ''}`;
 export const recipeFacets = (query = '') => `${recipesRoot}/facets${query ? `?${query}` : ''}`;
 export const recipe = (recipeId: string) => `${recipesRoot}/${encodeURIComponent(recipeId)}`;
+export const offlineRecipes = (query = '') => `${recipesRoot}/offline${query ? `?${query}` : ''}`;
+export const publicRecipes = (query = '') => `${recipesRoot}/explore${query ? `?${query}` : ''}`;
+export const publicRecipe = (recipeId: string) =>
+  `${recipesRoot}/explore/${encodeURIComponent(recipeId)}`;
 export const recipeByDraft = (draftId: string) =>
   `${recipesRoot}/by-draft/${encodeURIComponent(draftId)}`;
+export const shoppingList = () => shoppingListRoot;
+export const shoppingItems = () => `${shoppingListRoot}/items`;
+export const shoppingItem = (itemId: string) =>
+  `${shoppingListRoot}/items/${encodeURIComponent(itemId)}`;
+export const shoppingContribution = (itemId: string, contributionId: string) =>
+  `${shoppingItem(itemId)}/contributions/${encodeURIComponent(contributionId)}`;
+export const shoppingMerge = (targetId: string, sourceId: string) =>
+  `${shoppingItem(targetId)}/merge/${encodeURIComponent(sourceId)}`;
+export const shoppingClearPurchased = () => `${shoppingListRoot}/clear-purchased`;
 export const socialImports = (query = '') => `${socialImportsRoot}${query ? `?${query}` : ''}`;
 export const socialImport = (importId: string) =>
   `${socialImportsRoot}/${encodeURIComponent(importId)}`;

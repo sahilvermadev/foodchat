@@ -12,6 +12,7 @@ import type {
   SavedRecipe,
   SavedRecipesQuery,
   SavedRecipesResponse,
+  SavedRecipeFacetsResponse,
   SocialImportJobsResponse,
   SocialPlaylistSubscriptionsResponse,
   SocialImportsQuery,
@@ -100,6 +101,19 @@ export const useRecipesQuery = (
     },
   );
 };
+
+export const useRecipeFacetsQuery = (
+  params: Pick<SavedRecipesQuery, 'q' | 'saveList'>,
+): QueryObserverResult<SavedRecipeFacetsResponse> =>
+  useQuery<SavedRecipeFacetsResponse>(
+    [QueryKeys.recipes, 'facets', params],
+    () => dataService.getRecipeFacets(params),
+    {
+      keepPreviousData: true,
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
+    },
+  );
 
 export const useRecipesInfiniteQuery = (
   params: SavedRecipesQuery,

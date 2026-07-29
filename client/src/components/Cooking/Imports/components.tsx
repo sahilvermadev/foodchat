@@ -1,6 +1,12 @@
+import { useState } from 'react';
 import * as Menu from '@ariakit/react/menu';
 import {
+  BookmarkCheck,
+  CheckCircle2,
+  ChevronDown,
+  CircleAlert,
   ExternalLink,
+  ImageOff,
   Inbox,
   ListVideo,
   LoaderCircle,
@@ -31,19 +37,23 @@ import {
   recipeCategories,
 } from './helpers';
 import { cn } from '~/utils';
+import {
+  collectionCard,
+  collectionCardBody,
+  collectionCardMedia,
+  collectionCardTitle,
+  collectionGrid,
+} from '../collection';
 
 export function SocialImportSkeleton() {
   return (
-    <div className="grid animate-pulse gap-4 md:grid-cols-2 2xl:grid-cols-3">
+    <div className={cn(collectionGrid, 'animate-pulse')}>
       {[0, 1, 2, 3, 4, 5].map((item) => (
-        <div key={item} className="rounded-lg border border-border-light bg-surface-primary p-5">
-          <div className="h-5 w-28 rounded-md bg-surface-hover" />
-          <div className="mt-5 h-7 w-4/5 rounded-md bg-surface-hover" />
-          <div className="mt-3 h-4 w-full rounded-md bg-surface-hover" />
-          <div className="mt-2 h-4 w-2/3 rounded-md bg-surface-hover" />
-          <div className="mt-6 flex gap-2">
-            <div className="h-9 w-28 rounded-lg bg-surface-hover" />
-            <div className="h-9 w-24 rounded-lg bg-surface-hover" />
+        <div key={item} className="overflow-hidden">
+          <div className="aspect-[3/2] w-full rounded-card bg-surface-hover" />
+          <div className="px-1 py-3">
+            <div className="h-3 w-20 rounded-full bg-surface-hover" />
+            <div className="mt-3 h-5 w-4/5 rounded-md bg-surface-hover" />
           </div>
         </div>
       ))}
@@ -113,86 +123,83 @@ export function PlaylistSyncSummary({
   const summaryMeta = [
     localize('com_social_imports_playlist_summary_saved', { count: totalSaved }),
     playlistSummaryStatus(subscriptions, localize),
-  ].join(' / ');
+  ].join(' · ');
 
   return (
-    <div className="mt-3 flex items-center gap-2 text-sm text-text-secondary">
-      <div className="flex size-5 shrink-0 items-center justify-center text-text-tertiary">
+    <div className="mt-3 flex max-w-fit items-center gap-2.5 text-sm text-text-secondary">
+      <div className="flex size-7 shrink-0 items-center justify-center text-surface-submit">
         <ListVideo className="size-4" aria-hidden="true" />
       </div>
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
-        <span className="truncate font-semibold text-text-primary">{summaryTitle}</span>
-        <span className="text-text-tertiary" aria-hidden="true">
-          /
-        </span>
-        <span className="truncate text-xs text-text-secondary sm:text-sm">{summaryMeta}</span>
-        <Menu.MenuProvider>
-          <Menu.MenuButton
-            aria-label={localize('com_social_imports_playlist_actions')}
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus:outline-none"
-          >
-            <MoreHorizontal className="size-4" aria-hidden="true" />
-          </Menu.MenuButton>
-          <Menu.Menu
-            portal
-            className="popover-ui z-[125] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-1 rounded-lg p-2"
-          >
-            {subscriptions.map((subscription) => (
-              <div key={subscription._id} className="border-border-light/70 rounded-md border p-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-text-primary">
-                    {subscription.title || subscription.playlistId}
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-text-secondary">
-                    {subscription.status === 'failed' && subscription.lastErrorMessage
-                      ? subscription.lastErrorMessage
-                      : localize(playlistStatusLabel(subscription), {
-                          count: subscription.importCount,
-                        })}
-                  </p>
-                </div>
-                <div className="mt-2 flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={syncDisabled}
-                    aria-label={localize('com_social_imports_playlist_sync')}
-                    className="inline-flex size-8 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => onSync(subscription)}
-                  >
-                    <RotateCcw className="size-4" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={updateDisabled}
-                    aria-label={localize(
-                      subscription.status === 'paused'
-                        ? 'com_social_imports_playlist_resume'
-                        : 'com_social_imports_playlist_pause',
-                    )}
-                    className="inline-flex size-8 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => onToggle(subscription)}
-                  >
-                    {subscription.status === 'paused' ? (
-                      <Play className="size-4" aria-hidden="true" />
-                    ) : (
-                      <Pause className="size-4" aria-hidden="true" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={deleteDisabled}
-                    aria-label={localize('com_social_imports_playlist_remove')}
-                    className="ml-auto inline-flex size-8 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => onRemove(subscription)}
-                  >
-                    <X className="size-4" aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </Menu.Menu>
-        </Menu.MenuProvider>
+      <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+        <span className="truncate text-sm font-medium text-text-primary">{summaryTitle}</span>
+        <span className="truncate text-xs text-text-secondary">{summaryMeta}</span>
       </div>
+      <Menu.MenuProvider>
+        <Menu.MenuButton
+          aria-label={localize('com_social_imports_playlist_actions')}
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+        >
+          <MoreHorizontal className="size-4" aria-hidden="true" />
+        </Menu.MenuButton>
+        <Menu.Menu
+          portal
+          className="popover-ui z-dropdown flex w-[min(380px,calc(100vw-2rem))] flex-col gap-1 rounded-card p-2 shadow-floating"
+        >
+          {subscriptions.map((subscription) => (
+            <div key={subscription._id} className="border-border-light/70 rounded-md border p-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-text-primary">
+                  {subscription.title || subscription.playlistId}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-text-secondary">
+                  {subscription.status === 'failed' && subscription.lastErrorMessage
+                    ? subscription.lastErrorMessage
+                    : localize(playlistStatusLabel(subscription), {
+                        count: subscription.importCount,
+                      })}
+                </p>
+              </div>
+              <div className="mt-2 flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={syncDisabled}
+                  aria-label={localize('com_social_imports_playlist_sync')}
+                  className="inline-flex size-8 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => onSync(subscription)}
+                >
+                  <RotateCcw className="size-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  disabled={updateDisabled}
+                  aria-label={localize(
+                    subscription.status === 'paused'
+                      ? 'com_social_imports_playlist_resume'
+                      : 'com_social_imports_playlist_pause',
+                  )}
+                  className="inline-flex size-8 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => onToggle(subscription)}
+                >
+                  {subscription.status === 'paused' ? (
+                    <Play className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Pause className="size-4" aria-hidden="true" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={deleteDisabled}
+                  aria-label={localize('com_social_imports_playlist_remove')}
+                  className="ml-auto inline-flex size-8 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => onRemove(subscription)}
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </Menu.Menu>
+      </Menu.MenuProvider>
     </div>
   );
 }
@@ -219,6 +226,51 @@ type FilterToolbarProps = {
   activeFiltersCount: number;
 };
 
+type ToolbarSelectProps = {
+  active?: boolean;
+  ariaLabel: string;
+  className?: string;
+  onChange: (value: string) => void;
+  options: Array<{ label: string; value: string }>;
+  value: string;
+};
+
+function ToolbarSelect({
+  active,
+  ariaLabel,
+  className,
+  onChange,
+  options,
+  value,
+}: ToolbarSelectProps) {
+  return (
+    <label className={cn('relative block', className)}>
+      <span className="sr-only">{ariaLabel}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={ariaLabel}
+        className={cn(
+          'h-10 w-full appearance-none rounded-control border bg-surface-primary px-3 pr-9 text-sm font-medium text-text-secondary shadow-surface transition-colors [color-scheme:light] hover:border-border-medium hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary dark:[color-scheme:dark]',
+          active
+            ? 'border-surface-submit/50 bg-surface-submit/5 text-surface-submit'
+            : 'border-border-light',
+        )}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary"
+        aria-hidden="true"
+      />
+    </label>
+  );
+}
+
 export function FilterToolbar({
   viewFilter,
   sourceFilter,
@@ -240,20 +292,69 @@ export function FilterToolbar({
   onClearAll,
   activeFiltersCount,
 }: FilterToolbarProps) {
-  const hiddenCountMobile = [
-    categoryFilter !== 'all',
-    creatorFilter !== 'all',
-    viewFilter !== 'all',
-    sortBy !== 'newest',
-  ].filter(Boolean).length;
-
-  const hiddenCountDesktop = [viewFilter !== 'all', sortBy !== 'newest'].filter(Boolean).length;
+  const categoryOptions = recipeCategories.map((category) => ({
+    value: category.id,
+    label: localize(category.labelKey),
+  }));
+  const creatorOptions = [
+    { value: 'all', label: localize('com_social_imports_filter_all_creators') },
+    ...creators.map((creator) => ({ value: creator, label: creator })),
+  ];
+  const statusOptions = viewFilters.map((filter) => ({
+    value: filter,
+    label: localize(viewLabelKeys[filter]),
+  }));
+  const sortOptions = [
+    { value: 'newest', label: localize('com_social_imports_sort_newest') },
+    { value: 'oldest', label: localize('com_social_imports_sort_oldest') },
+    { value: 'title_asc', label: localize('com_social_imports_sort_title_asc') },
+    { value: 'title_desc', label: localize('com_social_imports_sort_title_desc') },
+    { value: 'creator_asc', label: localize('com_social_imports_sort_creator_asc') },
+  ];
+  const activeFilterChips = [
+    ...(categoryFilter !== 'all'
+      ? [
+          {
+            id: 'category',
+            label: categoryOptions.find((option) => option.value === categoryFilter)?.label ?? '',
+            remove: () => onCategoryFilterChange('all'),
+          },
+        ]
+      : []),
+    ...(creatorFilter !== 'all'
+      ? [
+          {
+            id: 'creator',
+            label: creatorFilter,
+            remove: () => onCreatorFilterChange('all'),
+          },
+        ]
+      : []),
+    ...(viewFilter !== 'all'
+      ? [
+          {
+            id: 'status',
+            label: statusOptions.find((option) => option.value === viewFilter)?.label ?? '',
+            remove: () => onViewFilterChange('all'),
+          },
+        ]
+      : []),
+    ...(sortBy !== 'newest'
+      ? [
+          {
+            id: 'sort',
+            label: sortOptions.find((option) => option.value === sortBy)?.label ?? '',
+            remove: () => onSortByChange('newest'),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <div className="bg-surface-primary-alt/95 sticky top-0 z-20 -mx-4 mt-2 flex flex-col gap-2 px-4 py-2 backdrop-blur sm:-mx-8 sm:px-8 lg:-mx-14 lg:px-14">
-      <div className="flex items-center justify-between gap-2.5">
+    <div className="bg-surface-primary-alt/95 sticky top-0 z-sticky -mx-4 mt-4 flex flex-col gap-3 border-b border-border-light px-4 py-3 backdrop-blur sm:-mx-8 sm:px-8 lg:-mx-14 lg:px-14">
+      <div className="flex flex-col gap-2.5 md:flex-row md:items-center">
         {showSearch ? (
-          <div className="relative min-w-[150px] max-w-[420px] flex-1">
+          <div className="relative min-w-0 flex-1 md:max-w-[480px]">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary"
               aria-hidden="true"
@@ -263,76 +364,36 @@ export function FilterToolbar({
               onChange={(event) => onQueryChange(event.target.value)}
               placeholder={localize('com_social_imports_search_placeholder')}
               aria-label={localize('com_social_imports_search_placeholder')}
-              className="placeholder:text-text-secondary/70 min-h-9 rounded-lg border-border-light bg-surface-primary pl-9 text-xs shadow-none sm:text-sm"
+              className="placeholder:text-text-secondary/70 h-10 rounded-control border-border-light bg-surface-primary pl-10 text-sm shadow-surface transition-colors hover:border-border-medium focus-visible:ring-2 focus-visible:ring-ring-primary"
             />
           </div>
         ) : null}
 
-        <div className="flex items-center gap-2">
-          {/* Category Select Pill (Visible Outside on Desktop only) */}
-          <select
-            value={categoryFilter}
-            onChange={(e) => onCategoryFilterChange(e.target.value)}
-            aria-label={localize('com_social_imports_filter_category')}
-            className="rekky-select border-border-light/80 hidden h-9 rounded-lg border bg-surface-primary pl-3 pr-8 text-xs font-semibold text-text-secondary transition [color-scheme:light] hover:bg-surface-hover hover:text-text-primary focus:outline-none focus:ring-0 dark:[color-scheme:dark] md:inline-flex"
-          >
-            {recipeCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.id === 'all' ? localize('com_social_imports_filter_all_categories') : c.label}
-              </option>
-            ))}
-          </select>
-
-          {/* Creator Select Pill (Visible Outside on Desktop only) */}
-          <select
-            value={creatorFilter}
-            onChange={(e) => onCreatorFilterChange(e.target.value)}
-            aria-label={localize('com_social_imports_filter_creator')}
-            className="rekky-select border-border-light/80 hidden h-9 rounded-lg border bg-surface-primary pl-3 pr-8 text-xs font-semibold text-text-secondary transition [color-scheme:light] hover:bg-surface-hover hover:text-text-primary focus:outline-none focus:ring-0 dark:[color-scheme:dark] md:inline-flex"
-          >
-            <option value="all">{localize('com_social_imports_filter_all_creators')}</option>
-            {creators.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-
-          {/* Filters Toggle Button */}
+        <div className="flex min-w-0 items-center gap-2 md:ml-auto">
           <button
             type="button"
             onClick={onToggleFilters}
+            aria-expanded={filtersExpanded}
             className={cn(
-              'inline-flex h-9 items-center justify-center gap-2 rounded-lg border text-xs font-semibold transition-colors focus:outline-none focus:ring-1 focus:ring-ring-primary',
-              'px-3 md:px-4',
+              'relative ml-auto inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-control border px-3.5 text-sm font-medium shadow-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary md:ml-0',
               filtersExpanded
-                ? 'border-transparent bg-text-primary text-surface-primary-alt'
-                : 'border-border-light bg-surface-primary text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+                ? 'border-surface-submit/50 bg-surface-submit/10 text-surface-submit'
+                : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:bg-surface-hover hover:text-text-primary',
             )}
           >
             <SlidersHorizontal className="size-4" aria-hidden="true" />
-            <span className="hidden md:inline">{localize('com_social_imports_filter_more')}</span>
-
-            {/* Mobile Badge */}
-            {hiddenCountMobile > 0 ? (
-              <span className="inline-flex size-4 items-center justify-center rounded-full bg-surface-submit text-[9px] font-bold text-white md:hidden">
-                {hiddenCountMobile}
-              </span>
-            ) : null}
-
-            {/* Desktop Badge */}
-            {hiddenCountDesktop > 0 ? (
-              <span className="size-4.5 hidden items-center justify-center rounded-full bg-surface-submit text-[10px] font-bold text-white md:inline-flex">
-                {hiddenCountDesktop}
+            <span>{localize('com_social_imports_filters')}</span>
+            {activeFiltersCount > 0 ? (
+              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-surface-submit px-1.5 py-0.5 text-[10px] font-bold text-text-submit">
+                {activeFiltersCount}
               </span>
             ) : null}
           </button>
         </div>
       </div>
 
-      {/* Platform Chips Row (Horizontal Swipe on Mobile) */}
       <div
-        className="no-scrollbar -mx-4 flex flex-nowrap items-center gap-1.5 overflow-x-auto px-4 pb-1.5 pt-1 sm:-mx-8 sm:px-8 lg:-mx-14 lg:px-14"
+        className="no-scrollbar flex flex-nowrap items-center gap-2 overflow-x-auto py-0.5"
         role="tablist"
         aria-label={localize('com_social_imports_provider_filters')}
       >
@@ -346,10 +407,10 @@ export function FilterToolbar({
               aria-selected={active}
               onClick={() => onSourceFilterChange(val)}
               className={cn(
-                'h-7.5 shrink-0 rounded-full border px-3 text-[11px] font-semibold transition-colors focus:outline-none',
+                'h-8 shrink-0 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
                 active
-                  ? 'border-surface-submit bg-surface-submit text-white'
-                  : 'border-border-light bg-surface-primary text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+                  ? 'bg-surface-submit/10 border-transparent text-surface-submit'
+                  : 'border-transparent bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary',
               )}
             >
               {val === 'all'
@@ -360,8 +421,31 @@ export function FilterToolbar({
         })}
       </div>
 
+      {activeFilterChips.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {activeFilterChips.map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              onClick={filter.remove}
+              className="inline-flex items-center gap-1.5 rounded-full bg-surface-hover px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+            >
+              <span>{filter.label}</span>
+              <X className="size-3" aria-hidden="true" />
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={onClearAll}
+            className="px-2 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary"
+          >
+            {localize('com_social_imports_filter_clear')}
+          </button>
+        </div>
+      ) : null}
+
       {filtersExpanded ? (
-        <div className="mt-2 flex flex-col gap-4 rounded-xl border border-border-light bg-surface-primary p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-4 rounded-card border border-border-light bg-surface-primary p-4 shadow-surface sm:p-5">
           <div className="border-border-light/60 flex flex-wrap items-center justify-between gap-2 border-b pb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
               {localize('com_social_imports_filter_advanced')}
@@ -377,82 +461,57 @@ export function FilterToolbar({
             ) : null}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-2">
-            {/* Column 1: Status */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">
                 {localize('com_social_imports_filter_status')}
               </span>
-              <select
+              <ToolbarSelect
                 value={viewFilter}
-                onChange={(e) => onViewFilterChange(e.target.value as ViewFilter)}
-                className="rekky-select h-8.5 rounded-lg border border-border-light bg-surface-primary-alt px-3 text-xs text-text-primary [color-scheme:light] focus:outline-none dark:[color-scheme:dark]"
-              >
-                {viewFilters.map((val) => (
-                  <option key={val} value={val}>
-                    {localize(viewLabelKeys[val])}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => onViewFilterChange(value as ViewFilter)}
+                ariaLabel={localize('com_social_imports_filter_status')}
+                options={statusOptions}
+                active={viewFilter !== 'all'}
+              />
             </div>
 
-            {/* Column 2: Sort By */}
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">
                 {localize('com_social_imports_filter_sort')}
               </span>
-              <select
+              <ToolbarSelect
                 value={sortBy}
-                onChange={(e) => onSortByChange(e.target.value)}
-                className="rekky-select h-8.5 rounded-lg border border-border-light bg-surface-primary-alt px-3 text-xs text-text-primary [color-scheme:light] focus:outline-none dark:[color-scheme:dark]"
-              >
-                <option value="newest">{localize('com_social_imports_sort_newest')}</option>
-                <option value="oldest">{localize('com_social_imports_sort_oldest')}</option>
-                <option value="title_asc">{localize('com_social_imports_sort_title_asc')}</option>
-                <option value="title_desc">{localize('com_social_imports_sort_title_desc')}</option>
-                <option value="creator_asc">
-                  {localize('com_social_imports_sort_creator_asc')}
-                </option>
-              </select>
+                onChange={onSortByChange}
+                ariaLabel={localize('com_social_imports_filter_sort')}
+                options={sortOptions}
+                active={sortBy !== 'newest'}
+              />
             </div>
 
-            {/* Column 3: Category (Visible ONLY on Mobile/Tablet) */}
-            <div className="flex flex-col gap-1.5 md:hidden">
+            <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">
                 {localize('com_social_imports_filter_category')}
               </span>
-              <select
+              <ToolbarSelect
                 value={categoryFilter}
-                onChange={(e) => onCategoryFilterChange(e.target.value)}
-                className="rekky-select h-8.5 rounded-lg border border-border-light bg-surface-primary-alt px-3 text-xs text-text-primary [color-scheme:light] focus:outline-none dark:[color-scheme:dark]"
-              >
-                {recipeCategories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.id === 'all'
-                      ? localize('com_social_imports_filter_all_categories')
-                      : c.label}
-                  </option>
-                ))}
-              </select>
+                onChange={onCategoryFilterChange}
+                ariaLabel={localize('com_social_imports_filter_category')}
+                options={categoryOptions}
+                active={categoryFilter !== 'all'}
+              />
             </div>
 
-            {/* Column 4: Creator (Visible ONLY on Mobile/Tablet) */}
-            <div className="flex flex-col gap-1.5 md:hidden">
+            <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">
                 {localize('com_social_imports_filter_creator')}
               </span>
-              <select
+              <ToolbarSelect
                 value={creatorFilter}
-                onChange={(e) => onCreatorFilterChange(e.target.value)}
-                className="rekky-select h-8.5 rounded-lg border border-border-light bg-surface-primary-alt px-3 text-xs text-text-primary [color-scheme:light] focus:outline-none dark:[color-scheme:dark]"
-              >
-                <option value="all">{localize('com_social_imports_filter_all_creators')}</option>
-                {creators.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
+                onChange={onCreatorFilterChange}
+                ariaLabel={localize('com_social_imports_filter_creator')}
+                options={creatorOptions}
+                active={creatorFilter !== 'all'}
+              />
             </div>
           </div>
         </div>
@@ -494,10 +553,14 @@ export function SocialImportCard({
   onRetry,
   onDelete,
 }: SocialImportCardProps) {
+  const [imageState, setImageState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const title = displayTitle(socialImport, localize('com_social_imports_untitled'));
   const statusLabel = localize(statusLabelKeys[socialImport.status]);
   const providerLabel = localize(providerLabelKeys[socialImport.provider]);
   const source = sourceLabel(socialImport, providerLabel);
+  const showStatus = ['failed', 'needs_review', 'processing', 'saved_recipe'].includes(
+    socialImport.status,
+  );
   let actionLabel:
     | 'com_social_imports_draft_with_rekky'
     | 'com_social_imports_open_saved_recipe'
@@ -515,49 +578,91 @@ export function SocialImportCard({
     onOpen(socialImport, detailsValue, detailsDirty);
   };
 
+  let statusIcon = <CheckCircle2 className="size-3.5" aria-hidden="true" />;
+  if (socialImport.status === 'processing') {
+    statusIcon = <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />;
+  } else if (socialImport.status === 'failed' || socialImport.status === 'needs_review') {
+    statusIcon = <CircleAlert className="size-3.5" aria-hidden="true" />;
+  } else if (socialImport.status === 'saved_recipe') {
+    statusIcon = <BookmarkCheck className="size-3.5" aria-hidden="true" />;
+  }
+  let thumbnailContent = (
+    <span className="flex size-full items-center justify-center text-text-secondary">
+      <Video className="size-8" aria-hidden="true" />
+    </span>
+  );
+  if (socialImport.thumbnailUrl) {
+    const directThumbnail =
+      socialImport.thumbnailUrl.includes('ytimg.com') ||
+      socialImport.thumbnailUrl.includes('youtube.com');
+    const thumbnailSource = directThumbnail
+      ? socialImport.thumbnailUrl
+      : `/api/social-imports/image-proxy?url=${encodeURIComponent(socialImport.thumbnailUrl)}`;
+    thumbnailContent = (
+      <img
+        src={thumbnailSource}
+        alt=""
+        className={cn(
+          'absolute inset-0 block size-full object-cover transition-opacity duration-300',
+          imageState === 'loaded' ? 'opacity-100' : 'opacity-0',
+        )}
+        decoding="async"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onLoad={() => setImageState('loaded')}
+        onError={() => setImageState('failed')}
+      />
+    );
+  }
+  if (imageState === 'failed') {
+    thumbnailContent = (
+      <span className="flex size-full flex-col items-center justify-center gap-2 text-text-secondary">
+        <ImageOff className="size-7" aria-hidden="true" />
+        <span className="text-xs">{localize('com_social_imports_image_unavailable')}</span>
+      </span>
+    );
+  }
+
   return (
-    <article className="group flex min-h-[250px] flex-col overflow-hidden rounded-lg border border-border-light bg-surface-primary transition-colors hover:border-border-medium sm:min-h-[300px]">
-      <div className="relative aspect-video bg-surface-primary-alt">
+    <article className={collectionCard}>
+      <div
+        className={cn(collectionCardMedia, 'bg-surface-primary-alt')}
+        data-testid="social-import-media"
+      >
+        {imageState === 'loading' && socialImport.thumbnailUrl ? (
+          <div className="absolute inset-0 animate-pulse bg-surface-hover" aria-hidden="true" />
+        ) : null}
         <button
           type="button"
           aria-label={localize(actionLabel)}
-          className="block h-full w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring-primary"
+          className="absolute inset-0 block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring-primary"
           onClick={openImport}
         >
-          {socialImport.thumbnailUrl ? (
-            <img
-              src={
-                socialImport.thumbnailUrl.includes('ytimg.com') ||
-                socialImport.thumbnailUrl.includes('youtube.com')
-                  ? socialImport.thumbnailUrl
-                  : `/api/social-imports/image-proxy?url=${encodeURIComponent(socialImport.thumbnailUrl)}`
-              }
-              alt=""
-              className="h-full w-full object-cover"
-              loading="lazy"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <span className="flex h-full w-full items-center justify-center text-text-secondary">
-              <Video className="size-8" aria-hidden="true" />
-            </span>
-          )}
+          {thumbnailContent}
         </button>
-        {socialImport.status !== 'draft_ready' ? (
-          <div className="absolute left-2.5 top-2.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-medium leading-5 text-white">
-            {statusLabel}
+        {showStatus ? (
+          <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-overlay px-2.5 py-1 text-[11px] font-medium text-status-ink shadow-surface backdrop-blur-md">
+            {statusIcon}
+            <span>
+              {socialImport.status === 'saved_recipe'
+                ? localize('com_social_imports_in_cookbook')
+                : statusLabel}
+            </span>
           </div>
         ) : null}
         <Menu.MenuProvider>
           <Menu.MenuButton
             aria-label={localize('com_social_imports_source_actions')}
-            className="absolute right-2.5 top-2.5 inline-flex size-7 items-center justify-center rounded-md bg-black/50 text-white transition hover:bg-black/75 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100"
+            className="rekky-progressive-action absolute right-3 top-3 inline-flex size-8 items-center justify-center rounded-full bg-overlay text-status-ink shadow-surface backdrop-blur-md transition-colors hover:bg-surface-primary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => event.stopPropagation()}
           >
             <MoreHorizontal className="size-4" aria-hidden="true" />
           </Menu.MenuButton>
-          <Menu.Menu portal className="popover-ui z-[125] min-w-48 rounded-lg p-1">
+          <Menu.Menu
+            portal
+            className="popover-ui z-dropdown min-w-48 rounded-card p-1 shadow-floating"
+          >
             {socialImport.status !== 'inspiration' ? (
               <Menu.MenuItem
                 disabled={updateDisabled}
@@ -617,15 +722,20 @@ export function SocialImportCard({
         </Menu.MenuProvider>
       </div>
 
-      <div className="flex flex-1 flex-col p-3.5 sm:p-4">
+      <div className={collectionCardBody}>
         <div className="min-w-0">
-          <p className="truncate text-xs font-semibold uppercase text-text-secondary">{source}</p>
-          <h2 className="mt-1.5 line-clamp-2 text-base font-medium leading-snug text-text-primary sm:mt-2 sm:text-lg">
-            {title}
-          </h2>
+          <p className="truncate text-xs font-medium text-text-secondary">{source}</p>
+          <button
+            type="button"
+            aria-label={localize(actionLabel)}
+            className="mt-2 block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+            onClick={openImport}
+          >
+            <h2 className={collectionCardTitle}>{title}</h2>
+          </button>
         </div>
 
-        <div className="mt-auto flex flex-col gap-2 pt-3 sm:pt-4">
+        <div className="mt-auto flex flex-col gap-2 pt-2">
           {isDrafting || isRetrying ? (
             <div className="flex items-center gap-2 text-sm font-medium text-text-secondary">
               <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
@@ -688,7 +798,7 @@ export function ImportDialog({
             type="submit"
             form="social-import-form"
             disabled={!sourceUrl.trim() || loading}
-            className="flex h-10 items-center justify-center gap-2 rounded-lg border-none bg-surface-submit px-4 py-2 text-sm text-white transition-colors hover:bg-surface-submit-hover disabled:cursor-not-allowed disabled:opacity-70 max-sm:order-first max-sm:w-full"
+            className="flex h-10 items-center justify-center gap-2 rounded-lg border-none bg-surface-submit px-4 py-2 text-sm text-text-submit transition-colors hover:bg-surface-submit-hover disabled:cursor-not-allowed disabled:opacity-70 max-sm:order-first max-sm:w-full"
           >
             {loading ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : null}
             {localize('com_social_imports_save_source')}
@@ -733,7 +843,7 @@ export function DeleteImportDialog({
           <button
             type="button"
             disabled={loading}
-            className="flex h-10 items-center justify-center gap-2 rounded-lg border-none bg-surface-destructive px-4 py-2 text-sm text-white transition-colors hover:bg-surface-destructive-hover disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex h-10 items-center justify-center gap-2 rounded-control border-none bg-surface-destructive px-4 py-2 text-sm text-status-ink transition-colors hover:bg-surface-destructive-hover disabled:cursor-not-allowed disabled:opacity-70"
             onClick={onConfirm}
           >
             {loading ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : null}

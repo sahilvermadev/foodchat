@@ -283,17 +283,14 @@ const ChatForm = memo(function ChatForm({
             id="chat-input-container"
             onClick={handleContainerClick}
             className={cn(
-              'relative flex w-full flex-grow flex-col overflow-hidden border text-text-primary transition-all duration-200',
+              'relative flex w-full flex-grow flex-col overflow-hidden border text-text-primary shadow-sm outline outline-2 outline-offset-1 outline-transparent',
               isFreshLanding
                 ? 'rounded-[1.35rem] pb-0 min-[769px]:rounded-3xl'
                 : 'rounded-t-3xl pb-4 sm:rounded-3xl sm:pb-0',
-              isTextAreaFocused ? 'shadow-lg' : 'shadow-md',
               isTemporary
                 ? 'border-violet-800/60 bg-violet-950/10'
-                : 'border-black/10 bg-[var(--rekky-alabaster)] dark:border-border-light dark:bg-surface-chat',
-              isTextAreaFocused &&
-                !isTemporary &&
-                'border-[#c1121f]/35 shadow-[#c1121f]/10 dark:border-[#c1121f]/45',
+                : 'border-border-light bg-surface-primary dark:bg-surface-chat',
+              isTextAreaFocused && !isTemporary && 'outline-ring-primary',
             )}
           >
             <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} />
@@ -348,7 +345,7 @@ const ChatForm = memo(function ChatForm({
                   className={cn(
                     baseClasses,
                     removeFocusRings,
-                    'scrollbar-hover caret-[#c1121f] transition-[max-height] duration-200 disabled:cursor-not-allowed',
+                    'scrollbar-hover caret-surface-submit transition-[max-height] duration-200 disabled:cursor-not-allowed disabled:opacity-[0.55]',
                   )}
                 />
               </div>
@@ -441,7 +438,7 @@ const ChatForm = memo(function ChatForm({
           {guestComposerLocked ? (
             <div
               data-testid="guest-trial-cta"
-              className="mt-4 w-full rounded-2xl border border-[#c1121f]/20 bg-[#c1121f]/5 p-4 text-sm text-text-primary shadow-sm dark:border-[#e63946]/20 dark:bg-[#e63946]/10"
+              className="border-surface-submit/20 bg-surface-submit/5 mt-4 w-full rounded-2xl border p-4 text-sm text-text-primary shadow-sm"
             >
               <p className="font-medium">{localize('com_cooking_guest_trial_title')}</p>
               <p className="mt-1 text-text-secondary">{localize('com_cooking_guest_trial_body')}</p>
