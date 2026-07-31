@@ -1,5 +1,6 @@
 # Ignore backend workspaces and unrelated directories
 api/
+apps/mobile/
 packages/api/
 packages/data-schemas/
 redis-config/
