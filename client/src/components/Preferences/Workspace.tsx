@@ -42,6 +42,7 @@ import { cn } from '~/utils';
 import { ProtectedImage } from '~/components/ui';
 import {
   collectionPageContent,
+  collectionMobileHeader,
   collectionPageScroll,
   collectionPageTitle,
   collectionSecondaryAction,
@@ -798,7 +799,7 @@ function KitchenCheckboxEditor({
               role="tab"
               aria-selected={selected}
               className={cn(
-                'min-h-10 rounded-md px-2 text-xs font-medium transition-colors',
+                'min-h-11 rounded-md px-2 text-xs font-medium transition-colors',
                 selected ? 'bg-surface-primary text-text-primary shadow-sm' : 'text-text-secondary',
               )}
               onClick={() => setActiveCategory(category)}
@@ -1842,7 +1843,7 @@ function SpecialtyIngredientsPanel({
             id="specialty-ingredient-input"
             ref={inputRef}
             value={draft}
-            className="placeholder:text-text-secondary/70 h-10 w-full min-w-0 rounded-control border border-border-light bg-surface-primary pl-10 pr-10 text-sm text-text-primary shadow-surface transition-colors [color-scheme:light] hover:border-border-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary dark:[color-scheme:dark]"
+            className="placeholder:text-text-secondary/70 h-11 w-full min-w-0 rounded-control border border-border-light bg-surface-primary pl-10 pr-12 text-sm text-text-primary shadow-surface transition-colors [color-scheme:light] hover:border-border-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary dark:[color-scheme:dark]"
             placeholder={localize('com_preferences_specialty_search_placeholder')}
             disabled={isSaving || isResolving}
             onFocus={() => setAreSuggestionsOpen(true)}
@@ -1872,7 +1873,7 @@ function SpecialtyIngredientsPanel({
             <button
               type="button"
               aria-label={localize('com_preferences_specialty_clear')}
-              className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+              className="absolute right-0 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-md text-text-secondary hover:bg-surface-hover hover:text-text-primary"
               onClick={() => {
                 resetAddFlow();
                 inputRef.current?.focus();
@@ -2552,9 +2553,13 @@ export default function PreferencesWorkspace() {
   };
 
   return (
-    <main className="rekky-ui rekky-preferences-surface flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary">
+    <main
+      className="rekky-ui rekky-preferences-surface flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary"
+      data-testid="preferences-page"
+      aria-busy={preferencesQuery.isLoading}
+    >
       {/* Mobile Top Header Navbar */}
-      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-sticky flex h-12 shrink-0 items-center justify-center border-b px-5 backdrop-blur md:hidden">
+      <div className={collectionMobileHeader}>
         <span className="text-[1.05rem] font-medium tracking-normal text-text-primary">
           {localize('com_preferences_dashboard_title')}
         </span>

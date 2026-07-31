@@ -58,7 +58,7 @@ export default defineConfig({
     stdout: 'pipe',
     ignoreHTTPSErrors: true,
     // url: 'http://localhost:3080',
-    timeout: 30_000,
+    timeout: 120_000,
     reuseExistingServer: true,
     env: {
       ...process.env,

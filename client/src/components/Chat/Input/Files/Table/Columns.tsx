@@ -163,7 +163,7 @@ export const columns: ColumnDef<TFile>[] = [
       );
     },
     cell: ({ row }) => {
-      const isSmallScreen = useMediaQuery('(max-width: 768px)');
+      const isSmallScreen = useMediaQuery('(max-width: 767px)');
       return formatDate(row.original.updatedAt?.toString() ?? '', isSmallScreen);
     },
   },

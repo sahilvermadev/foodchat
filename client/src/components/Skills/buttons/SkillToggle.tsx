@@ -18,7 +18,7 @@ function SkillToggle({ enabled, onChange, ariaLabel }: SkillToggleProps) {
         e.stopPropagation();
         onChange();
       }}
-      className="inline-flex h-9 items-center justify-center rounded-md px-1 transition-colors hover:bg-surface-hover"
+      className="inline-flex h-11 items-center justify-center rounded-md px-1 transition-colors hover:bg-surface-hover"
     >
       <span
         className={cn(

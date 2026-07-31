@@ -40,10 +40,10 @@ function Header() {
     permission: Permissions.USE,
   });
 
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = useMediaQuery('(max-width: 767px)');
 
   return (
-    <div className="via-presentation/70 md:from-presentation/80 md:via-presentation/50 2xl:from-presentation/0 pointer-events-none absolute top-0 z-40 flex h-[calc(52px+env(safe-area-inset-top))] w-full items-end justify-between bg-gradient-to-b from-presentation to-transparent px-3 pb-1 font-semibold text-text-primary min-[769px]:items-center min-[769px]:justify-end min-[769px]:p-2 min-[769px]:pt-[env(safe-area-inset-top)] 2xl:via-transparent">
+    <div className="via-presentation/70 md:from-presentation/80 md:via-presentation/50 2xl:from-presentation/0 pointer-events-none absolute top-0 z-40 flex h-[calc(52px+env(safe-area-inset-top))] w-full items-end justify-between bg-gradient-to-b from-presentation to-transparent px-3 pb-1 font-semibold text-text-primary md:items-center md:justify-end md:p-2 md:pt-[env(safe-area-inset-top)] 2xl:via-transparent">
       <div
         className={`hide-scrollbar pointer-events-auto flex min-w-0 items-center justify-end gap-2 overflow-x-auto ${
           isGuestCookingChat ? 'pr-16 sm:pr-20' : ''

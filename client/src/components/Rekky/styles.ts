@@ -4,9 +4,9 @@
 export const rekkyControl =
   'whitespace-nowrap rounded-control transition-colors active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-55';
 
-export const rekkyPrimaryAction = `${rekkyControl} inline-flex h-10 shrink-0 items-center justify-center gap-2 bg-surface-submit px-4 text-sm font-semibold text-text-submit shadow-surface hover:bg-surface-submit-hover`;
+export const rekkyPrimaryAction = `${rekkyControl} inline-flex h-11 shrink-0 items-center justify-center gap-2 bg-surface-submit px-4 text-sm font-semibold text-text-submit shadow-surface hover:bg-surface-submit-hover`;
 
-export const rekkySecondaryAction = `${rekkyControl} inline-flex h-10 shrink-0 items-center justify-center gap-2 border border-border-light bg-surface-primary px-3.5 text-sm font-medium text-text-secondary shadow-surface hover:border-border-medium hover:bg-surface-hover hover:text-text-primary`;
+export const rekkySecondaryAction = `${rekkyControl} inline-flex h-11 shrink-0 items-center justify-center gap-2 border border-border-light bg-surface-primary px-3.5 text-sm font-medium text-text-secondary shadow-surface hover:border-border-medium hover:bg-surface-hover hover:text-text-primary`;
 
 export const rekkyStatusTag = {
   success: 'rounded-full border border-status-success/40 bg-status-success/10 text-status-success',

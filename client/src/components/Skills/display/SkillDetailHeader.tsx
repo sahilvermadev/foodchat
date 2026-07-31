@@ -94,7 +94,7 @@ const SkillDetailHeader = ({ skill, showActions = true }: SkillDetailHeaderProps
                   <Button
                     variant="outline"
                     size="icon"
-                    className="size-9"
+                    className="size-11"
                     aria-label={localize('com_ui_edit_skill')}
                     onClick={() => navigate(`/skills/${skill._id}/edit`)}
                   >

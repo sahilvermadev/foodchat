@@ -6,6 +6,9 @@ export const collectionPageScroll =
 export const collectionPageContent =
   'mx-auto flex max-w-[1400px] flex-col gap-5 pt-3 sm:gap-7 sm:pt-0';
 
+export const collectionMobileHeader =
+  'sticky top-0 z-sticky flex min-h-[calc(3rem+env(safe-area-inset-top))] shrink-0 items-end justify-center border-b border-border-light/10 bg-surface-primary-alt/85 px-12 pb-3 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden';
+
 export const collectionPageTitle =
   'hidden text-[1.9rem] font-medium leading-none text-text-primary min-[380px]:text-[2rem] sm:block sm:text-[2.5rem]';
 

@@ -24,6 +24,7 @@ import {
 import { useDebounce, useLocalize } from '~/hooks';
 import {
   collectionGrid,
+  collectionMobileHeader,
   collectionPageContent,
   collectionPageScroll,
   collectionPageTitle,
@@ -469,9 +470,13 @@ export default function SocialImports() {
   const isLoadingImports = importsQuery.isLoading || hasNextPage || isFetchingNextPage;
 
   return (
-    <main className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary">
+    <main
+      className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary"
+      data-testid="imports-page"
+      aria-busy={importsQuery.isLoading}
+    >
       {/* Mobile Top Header Navbar */}
-      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-sticky flex h-12 shrink-0 items-center justify-center border-b backdrop-blur md:hidden">
+      <div className={collectionMobileHeader}>
         <span className="text-[1.05rem] font-medium tracking-normal text-text-primary">
           {localize('com_social_imports_title')}
         </span>

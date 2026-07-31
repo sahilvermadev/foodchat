@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en-US">
   <head>
     <meta charset="utf-8" />
@@ -30,7 +30,10 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-rekky-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-rekky-16x16.png" />
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-rekky-180x180.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <style>
       html,
       body {
@@ -60,7 +63,8 @@
           display: flex;
           align-items: center;
           justify-content: center;
-          height: 100vh;
+          min-height: 100vh;
+          min-height: 100dvh;
           background-color: ${backgroundColor};
         }
       `;

@@ -1,5 +1,25 @@
 [
   {
+    "date": "2026-07-31",
+    "scope": "app",
+    "macrostructure": "Workbench app family",
+    "theme": "Rekky locked system",
+    "theme_axes": "light+dark / editorial-workbench / warm-mineral",
+    "vibe": "safe-area-aware responsive operational surfaces",
+    "enrichment": "none",
+    "brief": "Cross-screen mobile responsiveness, touch targets, and narrow-screen layout remediation"
+  },
+  {
+    "date": "2026-07-30",
+    "scope": "public landing page",
+    "macrostructure": "Warm photographic editorial diptych",
+    "theme": "Rekky locked system",
+    "theme_axes": "light / geometric-sans / oat-aubergine-coral",
+    "vibe": "bright, tactile, playful editorial home cooking",
+    "enrichment": "sunlit food photography with a subtle human moment and a real mobile app capture",
+    "brief": "A warm, lively landing page led by the cook’s kitchen, recipe adaptation, and hands-free help"
+  },
+  {
     "date": "2026-07-28",
     "scope": "app",
     "macrostructure": "Workbench app family",

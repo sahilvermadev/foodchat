@@ -32,7 +32,11 @@ export default function SkillsView() {
   const rolesLoaded = user?.role != null && roles?.[user.role] != null;
   if (!rolesLoaded) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-presentation">
+      <div
+        className="flex h-full w-full items-center justify-center bg-presentation"
+        data-testid="skills-page"
+        aria-busy="true"
+      >
         <Spinner className="text-text-secondary" aria-label={localize('com_ui_loading')} />
       </div>
     );
@@ -45,7 +49,11 @@ export default function SkillsView() {
   // No skill selected — empty state
   if (!skillId) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-presentation">
+      <div
+        className="flex h-full w-full flex-col items-center justify-center bg-presentation"
+        data-testid="skills-page"
+        aria-busy="false"
+      >
         <SkillState
           title={localize('com_ui_skill_no_selection')}
           description={localize('com_ui_skill_no_selection_desc')}

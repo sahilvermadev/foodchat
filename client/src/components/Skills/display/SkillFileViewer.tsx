@@ -62,12 +62,12 @@ function SkillFileViewer({ skillId, relativePath }: SkillFileViewerProps) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header — fixed h-10 prevents layout shift when toggle appears/disappears */}
-      <div className="flex h-10 items-center gap-2 border-b border-border-medium px-4">
+      {/* Header — fixed height prevents layout shift when toggle appears/disappears */}
+      <div className="flex h-12 items-center gap-1 border-b border-border-medium px-2 sm:gap-2 sm:px-4">
         <button
           type="button"
           onClick={() => navigate(`/skills/${skillId}`)}
-          className="rounded-md p-1 text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+          className="flex size-11 shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
           aria-label={localize('com_ui_back')}
         >
           <ArrowLeft className="size-4" />
@@ -87,7 +87,7 @@ function SkillFileViewer({ skillId, relativePath }: SkillFileViewerProps) {
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="rounded-md p-1 text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+                  className="flex size-11 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
                   aria-label={localize('com_ui_copy_to_clipboard')}
                 >
                   {isCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
@@ -100,13 +100,13 @@ function SkillFileViewer({ skillId, relativePath }: SkillFileViewerProps) {
           {isMarkdown && isText && (
             <div
               role="group"
-              className="inline-flex h-7 rounded-lg bg-surface-tertiary p-0.5 text-sm font-medium"
+              className="inline-flex h-11 rounded-lg bg-surface-tertiary p-0.5 text-sm font-medium"
             >
               <button
                 type="button"
                 onClick={() => setViewMode('rendered')}
                 className={cn(
-                  'flex items-center justify-center rounded-md px-1.5 transition-colors',
+                  'flex min-w-10 items-center justify-center rounded-md px-1.5 transition-colors',
                   viewMode === 'rendered'
                     ? 'bg-surface-primary text-text-primary shadow-sm'
                     : 'text-text-secondary hover:text-text-primary',
@@ -119,7 +119,7 @@ function SkillFileViewer({ skillId, relativePath }: SkillFileViewerProps) {
                 type="button"
                 onClick={() => setViewMode('source')}
                 className={cn(
-                  'flex items-center justify-center rounded-md px-1.5 transition-colors',
+                  'flex min-w-10 items-center justify-center rounded-md px-1.5 transition-colors',
                   viewMode === 'source'
                     ? 'bg-surface-primary text-text-primary shadow-sm'
                     : 'text-text-secondary hover:text-text-primary',
@@ -176,11 +176,13 @@ function SkillFileViewer({ skillId, relativePath }: SkillFileViewerProps) {
             {isText && isMarkdown && parsed && (
               <>
                 {viewMode === 'rendered' && parsed.fields.length > 0 && (
-                  <div className="mb-3 grid grid-cols-[max-content_1fr] items-baseline gap-x-8 gap-y-2">
+                  <div className="mb-3 grid min-w-0 grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-[max-content_minmax(0,1fr)] sm:items-baseline sm:gap-y-2">
                     {parsed.fields.map(({ key, value }) => (
                       <React.Fragment key={key}>
                         <span className="text-xs capitalize text-text-secondary">{key}</span>
-                        <span className="text-sm text-text-primary">{value}</span>
+                        <span className="min-w-0 break-words text-sm text-text-primary">
+                          {value}
+                        </span>
                       </React.Fragment>
                     ))}
                   </div>

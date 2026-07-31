@@ -67,7 +67,7 @@ export default function InvocationModePicker({ value, onChange }: InvocationMode
         trigger={
           <Ariakit.MenuButton
             aria-label={localize('com_ui_invocation_mode')}
-            className="flex w-fit items-center justify-between gap-2 rounded-xl border border-border-medium bg-transparent px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-tertiary"
+            className="flex min-h-11 w-fit max-w-full items-center justify-between gap-2 whitespace-nowrap rounded-control border border-border-medium bg-transparent px-3 py-2 text-sm text-text-primary transition-colors hover:bg-surface-tertiary"
           >
             <span className="font-medium text-text-primary">
               {localize(invocationLabels[value])}
@@ -76,7 +76,7 @@ export default function InvocationModePicker({ value, onChange }: InvocationMode
           </Ariakit.MenuButton>
         }
         items={menuItems}
-        className="w-[280px]"
+        className="w-[min(280px,calc(100vw-2rem))]"
         portal={true}
       />
     </div>

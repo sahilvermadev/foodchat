@@ -43,7 +43,7 @@ function SidebarChatProvider({ children }: { children: ReactNode }) {
 function UnifiedSidebar() {
   const localize = useLocalize();
   const location = useLocation();
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = useMediaQuery('(max-width: 767px)');
   const [expanded, setExpanded] = useRecoilState(store.sidebarExpanded);
   const [sidebarWidth, setSidebarWidth] = useState(getInitialWidth);
   const [isResizing, setIsResizing] = useState(false);
@@ -168,7 +168,7 @@ function UnifiedSidebar() {
       <>
         <div
           className={cn(
-            'fixed left-0 top-0 z-modal flex h-full bg-surface-primary-alt',
+            'fixed left-0 top-0 z-modal flex h-full bg-surface-primary-alt pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]',
             expanded ? 'translate-x-0' : '-translate-x-full',
           )}
           style={{

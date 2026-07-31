@@ -227,7 +227,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
 
   return (
     <div
-      className={`flex shrink-0 transform-gpu flex-col items-center justify-center pb-0 transition-all duration-200 min-[769px]:h-full min-[769px]:pb-16 ${centerFormOnLanding ? 'max-h-full min-[769px]:max-h-0' : 'max-h-full'} ${getDynamicMargin}`}
+      className={`flex shrink-0 transform-gpu flex-col items-center justify-center pb-0 transition-all duration-200 md:h-full md:pb-16 ${centerFormOnLanding ? 'max-h-full md:max-h-0' : 'max-h-full'} ${getDynamicMargin}`}
     >
       <div ref={contentRef} className="flex flex-col items-center gap-0 p-2">
         <div

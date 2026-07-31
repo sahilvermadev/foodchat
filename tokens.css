@@ -20,20 +20,30 @@
   --color-danger-hover: oklch(44% 0.17 25);
   --color-info: oklch(52% 0.11 245);
   --color-status-ink: var(--color-paper);
+  --color-photo-paper: oklch(97.5% 0.006 55);
+  --color-photo-ink: oklch(18% 0.01 35);
+  --color-photo-muted: oklch(88% 0.008 55);
+  --color-photo-scrim: oklch(12% 0.012 35);
+  --color-photo-rule: oklch(79% 0.012 55);
+  --color-landing-paper: oklch(95% 0.028 76);
+  --color-landing-ink: oklch(27% 0.052 335);
+  --color-landing-ink-2: oklch(42% 0.038 335);
+  --color-landing-rule: oklch(82.5% 0.035 70);
 
   --font-display: 'Space Grotesk', sans-serif;
+  --font-marketing-heading: 'Lora', serif;
   --font-body: 'Space Grotesk', sans-serif;
   --font-outlier: 'JetBrains Mono', monospace;
 
   --space-3xs: 0.25rem;
   --space-2xs: 0.5rem;
-  --space-xs: 0.75rem;
-  --space-sm: 1rem;
-  --space-md: 1.5rem;
-  --space-lg: 2rem;
-  --space-xl: 3rem;
-  --space-2xl: 4.5rem;
-  --space-3xl: 7rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --space-2xl: 4rem;
+  --space-3xl: 6rem;
   --space-4xl: 11rem;
 
   --text-xs: 0.75rem;

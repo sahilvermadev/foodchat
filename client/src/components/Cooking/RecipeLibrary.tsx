@@ -44,6 +44,7 @@ import {
   collectionCardMedia,
   collectionCardTitle,
   collectionGrid,
+  collectionMobileHeader,
   collectionPageContent,
   collectionPageScroll,
   collectionPageTitle,
@@ -342,9 +343,13 @@ export default function RecipeLibrary() {
       : localize('com_recipes_count_short_other', { count: total });
 
   return (
-    <main className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary">
+    <main
+      className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary"
+      data-testid="recipes-page"
+      aria-busy={recipesQuery.isLoading}
+    >
       {/* Mobile Top Header Navbar */}
-      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-sticky flex h-12 shrink-0 items-center justify-center border-b px-5 backdrop-blur md:hidden">
+      <div className={collectionMobileHeader}>
         <span className="text-[1.05rem] font-medium tracking-[-0.04em] text-text-primary">
           {localize('com_recipes_library')}
         </span>
@@ -379,7 +384,7 @@ export default function RecipeLibrary() {
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={localize('com_recipes_search_placeholder_short')}
                   aria-label={localize('com_recipes_search_placeholder')}
-                  className="rekky-library-search-input h-10 rounded-control border-border-light bg-surface-primary pl-10 text-sm shadow-surface transition-colors hover:border-border-medium focus-visible:ring-2 focus-visible:ring-ring-primary"
+                  className="rekky-library-search-input h-11 rounded-control border-border-light bg-surface-primary pl-10 text-sm shadow-surface transition-colors hover:border-border-medium focus-visible:ring-2 focus-visible:ring-ring-primary"
                 />
               </div>
               <button
@@ -406,7 +411,7 @@ export default function RecipeLibrary() {
                   <button
                     key={`${filter.key}:${filter.value}`}
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-full bg-surface-hover px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-surface-hover px-3 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                     onClick={() => removeFilter(filter.key, filter.value)}
                   >
                     <span>
@@ -417,7 +422,7 @@ export default function RecipeLibrary() {
                 ))}
                 <button
                   type="button"
-                  className="px-2 py-1 text-xs text-text-secondary hover:text-text-primary"
+                  className="min-h-11 px-2 text-xs text-text-secondary hover:text-text-primary"
                   onClick={clearFilters}
                 >
                   {localize('com_recipes_clear_filters')}
@@ -438,7 +443,7 @@ export default function RecipeLibrary() {
                     role="tab"
                     aria-selected={active}
                     className={cn(
-                      'h-8 shrink-0 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
+                      'h-11 shrink-0 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
                       active
                         ? 'bg-surface-submit/10 border-transparent text-surface-submit'
                         : 'border-transparent bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary',
@@ -453,7 +458,7 @@ export default function RecipeLibrary() {
                 type="button"
                 aria-pressed={favoriteOnly}
                 className={cn(
-                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
+                  'inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
                   favoriteOnly
                     ? 'bg-surface-submit/10 border-transparent text-surface-submit'
                     : 'border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary',
@@ -467,7 +472,7 @@ export default function RecipeLibrary() {
                 type="button"
                 aria-pressed={pinnedOnly}
                 className={cn(
-                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
+                  'inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
                   pinnedOnly
                     ? 'bg-surface-submit/10 border-transparent text-surface-submit'
                     : 'border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary',
@@ -477,12 +482,12 @@ export default function RecipeLibrary() {
                 <Pin className="size-3.5" aria-hidden="true" />
                 {localize('com_recipes_pinned')}
               </button>
-              <label className="ml-auto inline-flex h-8 shrink-0 items-center gap-2 text-xs text-text-secondary">
+              <label className="ml-auto inline-flex h-11 shrink-0 items-center gap-2 text-xs text-text-secondary">
                 {localize('com_recipes_sort')}
                 <select
                   value={sort}
                   onChange={(event) => setSort(event.target.value as SavedRecipesQuery['sort'])}
-                  className="rekky-select h-8 rounded-control border border-border-light bg-surface-primary px-3 text-xs text-text-primary shadow-surface transition-colors hover:border-border-medium hover:bg-surface-hover active:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-55"
+                  className="rekky-select h-11 rounded-control border border-border-light bg-surface-primary px-3 text-xs text-text-primary shadow-surface transition-colors hover:border-border-medium hover:bg-surface-hover active:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-55"
                 >
                   <option value="recently_updated">
                     {localize('com_recipes_sort_recently_updated')}

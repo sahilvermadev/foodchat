@@ -37,6 +37,7 @@ import { useLocalize } from '~/hooks';
 import { rekkyFloatingSurface, rekkyStatusTag } from '../Rekky/styles';
 import {
   collectionPageContent,
+  collectionMobileHeader,
   collectionPageScroll,
   collectionPageTitle,
   collectionPrimaryAction,
@@ -113,7 +114,7 @@ function ItemEditor({ item, onClose }: { item?: ShoppingListItem; onClose: () =>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-text-secondary hover:bg-surface-hover"
+            className="flex size-11 items-center justify-center rounded-full text-text-secondary hover:bg-surface-hover"
             aria-label={localize('com_shopping_cancel')}
           >
             <X className="size-5" />
@@ -231,13 +232,18 @@ function ShoppingItemRow({
           item.purchased ? 'com_shopping_mark_needed' : 'com_shopping_mark_purchased',
           { item: item.displayName },
         )}
-        className={`mt-0.5 flex size-5 items-center justify-center rounded border ${
-          item.purchased
-            ? 'border-status-success bg-status-success text-status-ink'
-            : 'border-border-heavy text-transparent'
-        }`}
+        className="mt-0.5 flex size-11 items-center justify-center rounded-lg hover:bg-surface-hover"
       >
-        <Check className="size-3.5" />
+        <span
+          className={`flex size-5 items-center justify-center rounded border ${
+            item.purchased
+              ? 'border-status-success bg-status-success text-status-ink'
+              : 'border-border-heavy text-transparent'
+          }`}
+          aria-hidden="true"
+        >
+          <Check className="size-3.5" />
+        </span>
       </button>
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-2">
@@ -270,7 +276,7 @@ function ShoppingItemRow({
                     aria-label={localize('com_shopping_remove_source', {
                       recipe: source.recipeTitle,
                     })}
-                    className="rounded-full p-1 hover:bg-surface-hover hover:text-status-danger"
+                    className="flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-surface-hover hover:text-status-danger"
                   >
                     <X className="size-3.5" />
                   </button>
@@ -298,7 +304,7 @@ function ShoppingItemRow({
       <button
         type="button"
         onClick={() => setActionsOpen((value) => !value)}
-        className="rounded-lg p-1.5 text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+        className="flex size-11 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
         aria-label={`${item.displayName} ${localize('com_shopping_edit')}`}
       >
         <MoreHorizontal className="size-5" />
@@ -393,8 +399,12 @@ export default function ShoppingList() {
   };
 
   return (
-    <main className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary">
-      <div className="border-border-light/10 bg-surface-primary-alt/85 sticky top-0 z-sticky flex h-12 shrink-0 items-center justify-center border-b px-5 backdrop-blur md:hidden">
+    <main
+      className="rekky-ui flex h-full min-h-0 flex-col bg-surface-primary-alt text-text-primary"
+      data-testid="shopping-page"
+      aria-busy={listQuery.isLoading}
+    >
+      <div className={collectionMobileHeader}>
         <span className="text-[1.05rem] font-medium tracking-normal text-text-primary">
           {localize('com_shopping_title')}
         </span>
@@ -428,14 +438,14 @@ export default function ShoppingList() {
             <button
               type="button"
               onClick={() => void copyList()}
-              className="flex h-8 items-center gap-2 rounded-lg px-3 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+              className="flex h-11 items-center gap-2 rounded-lg px-3 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
             >
               <Clipboard className="size-4" /> {localize('com_shopping_copy')}
             </button>
             <button
               type="button"
               onClick={() => void shareList()}
-              className="flex h-8 items-center gap-2 rounded-lg px-3 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+              className="flex h-11 items-center gap-2 rounded-lg px-3 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
             >
               <Share2 className="size-4" /> {localize('com_shopping_share')}
             </button>
@@ -443,7 +453,7 @@ export default function ShoppingList() {
               <button
                 type="button"
                 onClick={() => clearPurchased.mutate()}
-                className="flex h-8 items-center gap-2 rounded-lg px-3 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+                className="flex h-11 items-center gap-2 rounded-lg px-3 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
               >
                 <Trash2 className="size-4" /> {localize('com_shopping_clear_purchased')}
               </button>

@@ -45,7 +45,7 @@ function SidebarItem({ value, label, icon, active, onSelect }: SidebarItemProps)
       type="button"
       onClick={() => onSelect(value)}
       className={cn(
-        'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors',
+        'flex min-h-11 w-auto shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 text-left text-sm transition-colors sm:w-full',
         active
           ? 'bg-surface-active text-text-primary'
           : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
@@ -80,90 +80,80 @@ function SkillCard({
   localize,
 }: SkillCardProps) {
   return (
-    <button
-      type="button"
-      onClick={() => onToggle(skill._id)}
-      onMouseDown={(e) => e.preventDefault()}
-      aria-pressed={selected}
+    <div
       className={cn(
-        'group relative flex h-32 cursor-pointer flex-col rounded-xl border p-3.5 text-left transition-all duration-200',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
+        'group relative h-32 rounded-xl border transition-[border-color,background-color] duration-200',
         selected
           ? 'border-green-500/70 bg-green-500/[0.06]'
           : 'border-border-light hover:border-border-medium hover:bg-surface-tertiary',
       )}
     >
-      <div className="flex w-full items-start gap-2">
-        <p className="min-w-0 flex-1 truncate pr-1 text-sm font-semibold text-text-primary">
+      <button
+        type="button"
+        onClick={() => onToggle(skill._id)}
+        onMouseDown={(event) => event.preventDefault()}
+        aria-pressed={selected}
+        className="flex h-full w-full cursor-pointer flex-col rounded-xl p-3.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+      >
+        <p className="w-full min-w-0 truncate pr-10 text-sm font-semibold text-text-primary">
           {skill.name}
         </p>
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite(skill._id);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              e.stopPropagation();
-              onToggleFavorite(skill._id);
-            }
-          }}
-          className={cn(
-            'flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors',
-            isFavorite
-              ? 'text-yellow-500 hover:bg-yellow-500/10'
-              : 'text-text-tertiary opacity-0 hover:bg-surface-hover hover:text-text-primary group-hover:opacity-100 group-focus-visible:opacity-100',
+        {skill.description && (
+          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-text-secondary">
+            {skill.description}
+          </p>
+        )}
+        <div className="mt-auto flex w-full items-center gap-1.5 pt-2">
+          {skill.category && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface-tertiary px-2 py-0.5 text-[10px] text-text-tertiary">
+              <Tags className="size-2.5" aria-hidden="true" />
+              {skill.category}
+            </span>
           )}
-          aria-label={isFavorite ? localize('com_ui_unfavorite') : localize('com_ui_favorite')}
-          aria-pressed={isFavorite}
-        >
-          <Star className={cn('size-4', isFavorite && 'fill-current')} aria-hidden="true" />
-        </span>
-      </div>
-      {skill.description && (
-        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-text-secondary">
-          {skill.description}
-        </p>
-      )}
-      <div className="mt-auto flex w-full items-center gap-1.5 pt-2">
-        {skill.category && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-surface-tertiary px-2 py-0.5 text-[10px] text-text-tertiary">
-            <Tags className="size-2.5" aria-hidden="true" />
-            {skill.category}
-          </span>
-        )}
-        {isShared && (
-          <span
-            className="inline-flex items-center gap-1 rounded-full bg-surface-tertiary px-1.5 py-0.5 text-text-tertiary"
-            title={skill.authorName}
-            aria-label={skill.authorName}
-          >
-            <User className="size-2.5" aria-hidden="true" />
-          </span>
-        )}
-        {isPublic && (
-          <span
-            className="inline-flex items-center gap-1 rounded-full bg-surface-tertiary px-1.5 py-0.5 text-text-tertiary"
-            title={localize('com_ui_sr_public_skill')}
-            aria-label={localize('com_ui_sr_public_skill')}
-          >
-            <EarthIcon className="size-2.5" aria-hidden="true" />
-          </span>
-        )}
-        <span
-          className={cn(
-            'ml-auto flex size-5 shrink-0 items-center justify-center rounded-full transition-all duration-200',
-            selected ? 'scale-100 bg-green-500 text-white opacity-100' : 'scale-75 opacity-0',
+          {isShared && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-surface-tertiary px-1.5 py-0.5 text-text-tertiary"
+              title={skill.authorName}
+              aria-label={skill.authorName}
+            >
+              <User className="size-2.5" aria-hidden="true" />
+            </span>
           )}
-          aria-hidden="true"
-        >
-          <Check className="size-3" strokeWidth={3} />
-        </span>
-      </div>
-    </button>
+          {isPublic && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-surface-tertiary px-1.5 py-0.5 text-text-tertiary"
+              title={localize('com_ui_sr_public_skill')}
+              aria-label={localize('com_ui_sr_public_skill')}
+            >
+              <EarthIcon className="size-2.5" aria-hidden="true" />
+            </span>
+          )}
+          <span
+            className={cn(
+              'ml-auto flex size-5 shrink-0 items-center justify-center rounded-full transition-[opacity,transform] duration-200',
+              selected ? 'scale-100 bg-green-500 text-white opacity-100' : 'scale-75 opacity-0',
+            )}
+            aria-hidden="true"
+          >
+            <Check className="size-3" strokeWidth={3} />
+          </span>
+        </div>
+      </button>
+      <button
+        type="button"
+        onClick={() => onToggleFavorite(skill._id)}
+        className={cn(
+          'absolute right-1 top-1 flex size-11 shrink-0 items-center justify-center rounded-lg transition-[color,background-color,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
+          isFavorite
+            ? 'text-yellow-500 hover:bg-yellow-500/10'
+            : 'text-text-tertiary opacity-100 hover:bg-surface-hover hover:text-text-primary sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100',
+        )}
+        aria-label={isFavorite ? localize('com_ui_unfavorite') : localize('com_ui_favorite')}
+        aria-pressed={isFavorite}
+      >
+        <Star className={cn('size-4', isFavorite && 'fill-current')} aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
@@ -242,19 +232,19 @@ function SkillSelectDialog({ isOpen, setIsOpen }: SkillSelectDialogProps) {
   return (
     <OGDialog open={isOpen} onOpenChange={setIsOpen}>
       <OGDialogContent
-        className="w-11/12 max-w-[1024px] overflow-hidden rounded-2xl border-border-medium p-0 shadow-xl md:max-h-[85vh]"
+        className="h-[100dvh] w-full max-w-none overflow-hidden rounded-none border-border-medium p-0 shadow-dialog sm:h-auto sm:max-h-[85vh] sm:w-11/12 sm:max-w-[1024px] sm:rounded-dialog"
         showCloseButton={false}
       >
-        <div className="flex h-[80vh] max-h-[720px]">
-          <aside className="flex w-56 shrink-0 flex-col gap-1 border-r border-border-light bg-surface-primary-alt p-3">
-            <h2 className="px-2.5 pb-1.5 pt-1 text-base font-bold text-text-primary">
+        <div className="flex h-full flex-col sm:h-[80vh] sm:max-h-[720px] sm:flex-row">
+          <aside className="no-scrollbar flex w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-border-light bg-surface-primary-alt px-3 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] sm:w-56 sm:flex-col sm:items-stretch sm:overflow-y-auto sm:border-b-0 sm:border-r sm:p-3">
+            <h2 className="hidden px-2.5 pb-1.5 pt-1 text-base font-bold text-text-primary sm:block">
               {localize('com_ui_add_skills')}
             </h2>
             {hasCreateAccess && (
               <button
                 type="button"
                 onClick={handleCreate}
-                className="mb-1 flex w-full items-center justify-center gap-2 rounded-lg border border-border-light bg-transparent px-2.5 py-1.5 text-center text-sm text-text-primary transition-colors hover:border-border-medium hover:bg-surface-hover"
+                className="flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-border-light bg-transparent px-2.5 text-center text-sm text-text-primary transition-colors hover:border-border-medium hover:bg-surface-hover sm:mb-1 sm:w-full"
                 aria-label={localize('com_ui_create_skill')}
               >
                 <Plus className="size-4 shrink-0" aria-hidden="true" />
@@ -275,7 +265,7 @@ function SkillSelectDialog({ isOpen, setIsOpen }: SkillSelectDialogProps) {
               active={activeFilter === SKILL_FAVORITES}
               onSelect={setActiveFilter}
             />
-            <div className="my-2 h-px bg-border-light" />
+            <div className="mx-1 h-8 w-px shrink-0 bg-border-light sm:my-2 sm:h-px sm:w-full" />
             <SidebarItem
               value={SystemCategories.ALL}
               label={localize('com_ui_all_proper')}
@@ -301,7 +291,7 @@ function SkillSelectDialog({ isOpen, setIsOpen }: SkillSelectDialogProps) {
           </aside>
 
           <div className="flex min-w-0 flex-1 flex-col">
-            <div className="flex items-center gap-2 px-6 py-4">
+            <div className="flex items-center gap-2 px-3 py-3 sm:px-6 sm:py-4">
               <div className="relative flex-1">
                 <Search
                   className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-tertiary"
@@ -313,13 +303,13 @@ function SkillSelectDialog({ isOpen, setIsOpen }: SkillSelectDialogProps) {
                   onChange={(e) => setSearchValue(e.target.value)}
                   placeholder={localize('com_ui_search_skills')}
                   aria-label={localize('com_ui_search_skills')}
-                  className="h-10 w-full rounded-xl border border-border-light bg-transparent pl-9 pr-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-border-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
+                  className="h-11 w-full rounded-control border border-border-light bg-transparent pl-9 pr-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-border-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary"
                 />
               </div>
               <button
                 type="button"
                 onClick={handleClose}
-                className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border-light bg-transparent text-text-secondary transition-colors hover:border-border-medium hover:bg-surface-hover hover:text-text-primary"
+                className="flex size-11 shrink-0 items-center justify-center rounded-control border border-border-light bg-transparent text-text-secondary transition-colors hover:border-border-medium hover:bg-surface-hover hover:text-text-primary"
                 aria-label={localize('com_ui_close')}
               >
                 <X className="size-4" aria-hidden="true" />
@@ -327,12 +317,12 @@ function SkillSelectDialog({ isOpen, setIsOpen }: SkillSelectDialogProps) {
             </div>
 
             <div
-              className="flex-1 overflow-y-auto p-4"
+              className="flex-1 overflow-y-auto px-3 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-1 sm:p-4"
               role="group"
               aria-label={localize('com_ui_add_skills')}
             >
               {visibleSkills.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {visibleSkills.map((skill) => (
                     <SkillCard
                       key={skill._id}

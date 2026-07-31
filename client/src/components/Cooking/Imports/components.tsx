@@ -364,7 +364,7 @@ export function FilterToolbar({
               onChange={(event) => onQueryChange(event.target.value)}
               placeholder={localize('com_social_imports_search_placeholder')}
               aria-label={localize('com_social_imports_search_placeholder')}
-              className="placeholder:text-text-secondary/70 h-10 rounded-control border-border-light bg-surface-primary pl-10 text-sm shadow-surface transition-colors hover:border-border-medium focus-visible:ring-2 focus-visible:ring-ring-primary"
+              className="placeholder:text-text-secondary/70 h-11 rounded-control border-border-light bg-surface-primary pl-10 text-sm shadow-surface transition-colors hover:border-border-medium focus-visible:ring-2 focus-visible:ring-ring-primary"
             />
           </div>
         ) : null}
@@ -375,7 +375,7 @@ export function FilterToolbar({
             onClick={onToggleFilters}
             aria-expanded={filtersExpanded}
             className={cn(
-              'relative ml-auto inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-control border px-3.5 text-sm font-medium shadow-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary md:ml-0',
+              'relative ml-auto inline-flex h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-control border px-3.5 text-sm font-medium shadow-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary md:ml-0',
               filtersExpanded
                 ? 'border-surface-submit/50 bg-surface-submit/10 text-surface-submit'
                 : 'border-border-light bg-surface-primary text-text-secondary hover:border-border-medium hover:bg-surface-hover hover:text-text-primary',
@@ -407,7 +407,7 @@ export function FilterToolbar({
               aria-selected={active}
               onClick={() => onSourceFilterChange(val)}
               className={cn(
-                'h-8 shrink-0 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
+                'h-11 shrink-0 rounded-full border px-3.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary',
                 active
                   ? 'bg-surface-submit/10 border-transparent text-surface-submit'
                   : 'border-transparent bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary',

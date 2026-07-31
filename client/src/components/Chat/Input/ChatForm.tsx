@@ -224,7 +224,7 @@ const ChatForm = memo(function ChatForm({
     () =>
       cn(
         'm-0 w-full resize-none placeholder-black/60 bg-transparent dark:placeholder-white/60 md:py-3.5 [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.05)]',
-        isFreshLanding ? 'py-3 min-[769px]:py-[13px]' : 'py-[13px]',
+        isFreshLanding ? 'py-3 md:py-[13px]' : 'py-[13px]',
         'text-base',
         isCollapsed ? 'max-h-[52px]' : 'max-h-[45vh] md:max-h-[55vh]',
         isMoreThanThreeRows ? 'pl-5' : 'px-5',
@@ -247,7 +247,7 @@ const ChatForm = memo(function ChatForm({
         getChatFormLayoutClass(isFreshLanding),
         maximizeChatSpace ? 'max-w-full' : 'md:max-w-3xl xl:max-w-4xl',
         isFreshLanding
-          ? 'px-0 transition-all duration-200 min-[769px]:mb-28 min-[769px]:px-2'
+          ? 'px-0 transition-all duration-200 md:mb-28 md:px-2'
           : 'sm:mb-10 sm:px-2',
       )}
     >
@@ -285,7 +285,7 @@ const ChatForm = memo(function ChatForm({
             className={cn(
               'relative flex w-full flex-grow flex-col overflow-hidden border text-text-primary shadow-sm outline outline-2 outline-offset-1 outline-transparent',
               isFreshLanding
-                ? 'rounded-[1.35rem] pb-0 min-[769px]:rounded-3xl'
+                ? 'rounded-[1.35rem] pb-0 md:rounded-3xl'
                 : 'rounded-t-3xl pb-4 sm:rounded-3xl sm:pb-0',
               isTemporary
                 ? 'border-violet-800/60 bg-violet-950/10'
@@ -448,7 +448,7 @@ const ChatForm = memo(function ChatForm({
             </div>
           ) : null}
         </div>
-        <div className="order-1 min-[769px]:order-2">
+        <div className="order-1 md:order-2">
           <GenerativePrompts
             enabled={isFreshLanding}
             disabled={isInputUnavailable || filesLoading || isSubmitting || isNotAppendable}

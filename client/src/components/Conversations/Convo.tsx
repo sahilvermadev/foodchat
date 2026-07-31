@@ -90,7 +90,7 @@ export default function Conversation({
   const updateConvoMutation = useUpdateConversationMutation(currentConvoId ?? '');
   const activeConvos = useRecoilValue(store.allConversationsSelector);
   const setSidebarExpanded = useSetRecoilState(store.sidebarExpanded);
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = useMediaQuery('(max-width: 767px)');
   const isShiftHeld = useShiftKey();
   const { conversationId, title = '' } = conversation;
 

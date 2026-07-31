@@ -60,7 +60,7 @@ function DeleteSkill({ skillId, skillName, disabled, onDelete }: DeleteSkillProp
             <Button
               variant="destructive"
               size="icon"
-              className="size-9"
+              className="size-11"
               aria-label={localize('com_ui_delete')}
               disabled={triggerDisabled}
               onClick={(e) => e.stopPropagation()}

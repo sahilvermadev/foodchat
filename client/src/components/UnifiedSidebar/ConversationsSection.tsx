@@ -13,7 +13,7 @@ import store from '~/store';
 
 const ConversationsSection = memo(() => {
   const localize = useLocalize();
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = useMediaQuery('(max-width: 767px)');
   const setSidebarExpanded = useSetRecoilState(store.sidebarExpanded);
   const { isAuthenticated } = useAuthContext();
   useTitleGeneration(isAuthenticated);

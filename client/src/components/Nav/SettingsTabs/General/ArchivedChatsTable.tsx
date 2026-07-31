@@ -52,7 +52,7 @@ export default function ArchivedChatsTable({
   const { showToast } = useToastContext();
   const searchState = useRecoilValue(store.search);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = useMediaQuery('(max-width: 767px)');
   const [queryParams, setQueryParams] = useState<ConversationListParams>(DEFAULT_PARAMS);
   const [deleteConversation, setDeleteConversation] = useState<TConversation | null>(null);
 

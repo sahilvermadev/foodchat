@@ -141,7 +141,7 @@ export default function SkillDetail({ skill, onEdit, onDelete }: SkillDetailProp
             <button
               type="button"
               onClick={onEdit}
-              className="inline-flex h-9 items-center justify-center rounded-md border border-border-medium px-3 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-hover"
+              className="inline-flex h-11 items-center justify-center whitespace-nowrap rounded-md border border-border-medium px-3 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-hover"
             >
               {localize('com_ui_edit')}
             </button>
@@ -166,11 +166,11 @@ export default function SkillDetail({ skill, onEdit, onDelete }: SkillDetailProp
 
       {/* Frontmatter metadata */}
       {viewMode === 'rendered' && frontmatterFields.length > 0 && (
-        <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-8 gap-y-2 pb-2">
+        <div className="grid min-w-0 grid-cols-1 gap-x-8 gap-y-1 pb-2 sm:grid-cols-[max-content_minmax(0,1fr)] sm:items-baseline sm:gap-y-2">
           {frontmatterFields.map(({ key, value }) => (
             <React.Fragment key={key}>
               <span className="text-xs text-text-secondary">{key}</span>
-              <span className="text-sm text-text-primary">{value}</span>
+              <span className="min-w-0 break-words text-sm text-text-primary">{value}</span>
             </React.Fragment>
           ))}
         </div>

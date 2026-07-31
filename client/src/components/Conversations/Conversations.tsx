@@ -129,7 +129,7 @@ const Conversations: FC<ConversationsProps> = ({
   loadMoreConversations,
   isLoading,
 }) => {
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = useMediaQuery('(max-width: 767px)');
   const convoHeight = isSmallScreen ? 44 : 34;
 
   // Fetch active job IDs for showing generation indicators

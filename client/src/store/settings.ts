@@ -20,7 +20,7 @@ const localStorageAtoms = {
   autoScroll: atomWithLocalStorage('autoScroll', false),
   sidebarExpanded: atomWithLocalStorage(
     'unifiedSidebarExpanded',
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches ? false : true,
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? false : true,
   ),
   enableUserMsgMarkdown: atomWithLocalStorage<boolean>(
     LocalStorageKeys.ENABLE_USER_MSG_MARKDOWN,

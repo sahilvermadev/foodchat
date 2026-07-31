@@ -14,7 +14,7 @@ describe('landing layout', () => {
         isCookingChat: true,
         sidebarExpanded: false,
       }),
-    ).toContain('min-[769px]:-translate-x-[36px]');
+    ).toContain('md:-translate-x-[36px]');
   });
 
   test('does not offset the stage while the sidebar is expanded', () => {
@@ -24,12 +24,12 @@ describe('landing layout', () => {
         isCookingChat: true,
         sidebarExpanded: true,
       }),
-    ).not.toContain('min-[769px]:-translate-x-[36px]');
+    ).not.toContain('md:-translate-x-[36px]');
   });
 
   test('keeps landing-only composer positioning out of established conversations', () => {
     expect(getChatComposerClass(false)).toBe('w-full');
-    expect(getChatComposerClass(true)).toContain('min-[769px]:max-w-3xl');
+    expect(getChatComposerClass(true)).toContain('md:max-w-3xl');
   });
 
   test('stacks landing composer and suggestions instead of placing them side by side', () => {

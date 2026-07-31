@@ -70,17 +70,17 @@ function AuthLayout({
       <Link
         to="/cook"
         aria-label={localize('com_ui_app_name')}
-        className="absolute left-5 top-5 z-sticky rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary md:left-8 md:top-8"
+        className="absolute left-[max(1.25rem,env(safe-area-inset-left))] top-[calc(1.25rem+env(safe-area-inset-top))] z-sticky rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary md:left-[max(2rem,env(safe-area-inset-left))] md:top-[calc(2rem+env(safe-area-inset-top))]"
       >
         <span className="rekky-sidebar-wordmark text-surface-submit">
           {localize('com_ui_app_name')}
         </span>
       </Link>
-      <div className="fixed bottom-4 left-4 z-sticky">
+      <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] z-sticky">
         <ThemeSelector />
       </div>
 
-      <main className="relative flex flex-grow items-center justify-center px-5 py-20">
+      <main className="relative flex flex-grow items-center justify-center pb-[max(5rem,env(safe-area-inset-bottom))] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pt-[calc(5rem+env(safe-area-inset-top))]">
         <div
           data-testid="auth-card"
           className="w-full max-w-md rounded-dialog border border-border-light bg-surface-primary px-6 py-7 shadow-dialog sm:px-8 sm:py-8"

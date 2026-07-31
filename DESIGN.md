@@ -83,6 +83,18 @@ Functional status colors are subordinate and must always include text or an icon
 - Danger: signal red, `--color-danger`
 - Informational: mineral blue, `--color-info`
 
+Full-bleed photography uses a fixed light-on-dark contrast set—`--color-photo-paper`,
+`--color-photo-muted`, `--color-photo-scrim`, and `--color-photo-rule`—so captions and
+controls remain legible in both application themes. The photograph may change; this
+contrast pair does not.
+
+The public landing hero uses a fixed warm-light art direction in both application
+themes: `--color-landing-paper` is oat parchment, `--color-landing-ink` is smoked
+aubergine, and `--color-landing-rule` is a warm mineral divider. Ember coral remains
+the only interface accent; food photography supplies the green, red, and yellow.
+This exception keeps the acquisition surface lively without turning the product UI
+into a themed food palette.
+
 Legacy `--rekky-*` names remain compatibility aliases only. New work uses semantic
 `--color-*` roles or the existing application roles such as `--surface-primary`,
 `--text-primary`, and `--border-light`.
@@ -108,6 +120,7 @@ Important classes:
 - `rekky-title`: large editorial title.
 - `rekky-section-title`: roman editorial section heading with restrained tracking.
 - `rekky-sans-display-title`: large sans display title.
+- `--font-marketing-heading`: Lora for restrained public editorial and marketing headings.
 - `rekky-body`: readable body copy.
 - `rekky-meta`: compact technical metadata label.
 - `rekky-recipe-surface`: switches recipe typography to recipe heading/body fonts.
@@ -117,6 +130,9 @@ Important classes:
 Rules:
 
 - Use `Space Grotesk` for app UI and preference surfaces.
+- Public marketing pages may use `--font-marketing-heading` for a small number of
+  high-impact headings when photography carries the page; body copy and controls
+  remain in Space Grotesk.
 - Use recipe typography only inside recipe/cooking document surfaces.
 - Use `rekky-meta` sparingly for labels like category, timing, difficulty, status,
   and small section headers.
@@ -369,7 +385,15 @@ Rules:
 - Use `min-h-0`, `min-w-0`, and explicit overflow boundaries in flex layouts.
 - Use tabs or progressive disclosure when panes are too dense for mobile.
 - Text should wrap before shrinking.
-- Controls should remain large enough to tap.
+- Treat widths through `767px` as mobile; Tailwind's `md` layout begins at `768px`.
+  JavaScript media queries must use the same boundary so both modes never run together.
+- Interactive controls need at least a `44px` tap area on mobile. Compact visual marks
+  such as checkboxes may remain smaller inside that hit area.
+- Full-screen and edge-aligned mobile surfaces must account for
+  `env(safe-area-inset-top)` and `env(safe-area-inset-bottom)`.
+- Responsive verification covers `320px`, `375px`, `414px`, and `768px`. Tests wait for
+  route-level loading to settle before measuring, and include a deterministic populated
+  collection with a long title plus open collection-filter surfaces.
 
 ## Feature-Specific Notes
 
@@ -418,6 +442,7 @@ file is a portable copy for design tooling and reuse.
   --color-accent: oklch(53% 0.17 32);
   --color-accent-ink: oklch(97.5% 0.006 55);
   --color-focus: oklch(55% 0.2 32);
+  --font-marketing-heading: 'Lora', serif;
 }
 
 .dark {
@@ -450,6 +475,7 @@ file is a portable copy for design tooling and reuse.
   --color-focus: oklch(55% 0.2 32);
   --font-display: 'Space Grotesk', sans-serif;
   --font-body: 'Space Grotesk', sans-serif;
+  --font-marketing-heading: 'Lora', serif;
   --font-outlier: 'JetBrains Mono', monospace;
   --spacing-3xs: 0.25rem;
   --spacing-2xs: 0.5rem;
@@ -484,6 +510,7 @@ file is a portable copy for design tooling and reuse.
   "font": {
     "display": { "$value": "Space Grotesk, sans-serif", "$type": "fontFamily" },
     "body": { "$value": "Space Grotesk, sans-serif", "$type": "fontFamily" },
+    "marketing-heading": { "$value": "Lora, serif", "$type": "fontFamily" },
     "outlier": { "$value": "JetBrains Mono, monospace", "$type": "fontFamily" }
   },
   "space": {

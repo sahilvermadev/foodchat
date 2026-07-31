@@ -20,7 +20,7 @@ export default function Root() {
   const [bannerHeight, setBannerHeight] = useState(0);
   const sidebarExpanded = useRecoilValue(store.sidebarExpanded);
   const setSidebarExpanded = useSetRecoilState(store.sidebarExpanded);
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = useMediaQuery('(max-width: 767px)');
   const location = useLocation();
   const isCookingLandingRoute = location.pathname === '/cook';
   const isGuestEntryRoute = location.pathname === '/' || isCookingLandingRoute;
@@ -82,7 +82,7 @@ export default function Root() {
                 type="button"
                 onClick={() => setSidebarExpanded(true)}
                 aria-label={localize('com_nav_open_sidebar')}
-                className="absolute left-0 top-0 z-[80] inline-flex size-12 items-center justify-center text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-heavy"
+                className="absolute left-0 top-[env(safe-area-inset-top)] z-[80] inline-flex size-12 items-center justify-center text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-heavy"
               >
                 <Menu className="size-5" aria-hidden="true" />
               </button>
