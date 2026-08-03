@@ -3,6 +3,7 @@ import { Spinner, ThemeSelector } from '@librechat/client';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useVerifyEmailMutation, useResendVerificationEmail } from '~/data-provider';
 import { useLocalize } from '~/hooks';
+import { resolvePostLoginRedirect } from '~/utils';
 
 function RequestPasswordReset() {
   const navigate = useNavigate();
@@ -22,13 +23,13 @@ function RequestPasswordReset() {
       setCountdown((prevCountdown) => {
         if (prevCountdown <= 1) {
           clearInterval(timer);
-          navigate('/cook', { replace: true });
+          navigate(resolvePostLoginRedirect(params, '/cook') ?? '/cook', { replace: true });
           return 0;
         }
         return prevCountdown - 1;
       });
     }, 1000);
-  }, [navigate]);
+  }, [navigate, params]);
 
   const verifyEmailMutation = useVerifyEmailMutation({
     onSuccess: () => {

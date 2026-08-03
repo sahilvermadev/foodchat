@@ -1,12 +1,52 @@
 import { ArrowRight } from 'lucide-react';
-import { loginPage, registerPage } from 'librechat-data-provider';
 import { Link } from 'react-router-dom';
+import { useGetStartupConfig } from '~/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
+import { ContextualAuthLink } from '~/components/Auth/flow';
+import HeroCarousel from './HeroCarousel';
+import {
+  HeroIngredientIllustration,
+  KitchenAdjustmentGraphic,
+  VoiceSteamIllustration,
+  WebToPhoneIllustration,
+} from './Illustrations';
 import './LandingPage.css';
 
 export default function LandingPage() {
   const localize = useLocalize();
   const { isAuthenticated } = useAuthContext();
+  useGetStartupConfig();
+
+  const heroSlides = [
+    {
+      src: '/assets/landing/eggplant-table-1600.webp',
+      srcSet:
+        '/assets/landing/eggplant-table-960.webp 960w, /assets/landing/eggplant-table-1600.webp 1586w',
+      alt: localize('com_landing_hero_image_alt'),
+      caption: localize('com_landing_hero_caption'),
+    },
+    {
+      src: '/assets/landing/ginger-noodles-1536.webp',
+      srcSet:
+        '/assets/landing/ginger-noodles-960.webp 960w, /assets/landing/ginger-noodles-1536.webp 1536w',
+      alt: localize('com_landing_hero_noodles_alt'),
+      caption: localize('com_landing_hero_noodles_caption'),
+    },
+    {
+      src: '/assets/landing/tomato-beans-1536.webp',
+      srcSet:
+        '/assets/landing/tomato-beans-960.webp 960w, /assets/landing/tomato-beans-1536.webp 1536w',
+      alt: localize('com_landing_hero_beans_alt'),
+      caption: localize('com_landing_hero_beans_caption'),
+    },
+    {
+      src: '/assets/landing/citrus-cake-1536.webp',
+      srcSet:
+        '/assets/landing/citrus-cake-960.webp 960w, /assets/landing/citrus-cake-1536.webp 1536w',
+      alt: localize('com_landing_hero_cake_alt'),
+      caption: localize('com_landing_hero_cake_caption'),
+    },
+  ];
 
   return (
     <div className="rekky-landing rekky-ui" data-testid="landing-page">
@@ -27,7 +67,7 @@ export default function LandingPage() {
             {isAuthenticated ? (
               <Link to="/cook">{localize('com_landing_open')}</Link>
             ) : (
-              <a href={loginPage()}>{localize('com_auth_login')}</a>
+              <ContextualAuthLink mode="login">{localize('com_auth_login')}</ContextualAuthLink>
             )}
             <a className="rekky-landing-nav-cta" href="#get-the-app">
               {localize('com_landing_get_app')}
@@ -38,20 +78,15 @@ export default function LandingPage() {
 
       <main id="landing-main">
         <section className="rekky-landing-photo-hero" aria-labelledby="landing-title">
-          <picture className="rekky-landing-hero-media">
-            <source
-              srcSet="/assets/landing/eggplant-table-960.webp 960w, /assets/landing/eggplant-table-1600.webp 1586w"
-              sizes="100vw"
-              type="image/webp"
-            />
-            <img
-              src="/assets/landing/eggplant-table-1600.webp"
-              width="1586"
-              height="992"
-              loading="eager"
-              alt={localize('com_landing_hero_image_alt')}
-            />
-          </picture>
+          <HeroCarousel
+            slides={heroSlides}
+            label={localize('com_landing_carousel_label')}
+            previousLabel={localize('com_landing_carousel_previous')}
+            nextLabel={localize('com_landing_carousel_next')}
+            pauseLabel={localize('com_landing_carousel_pause')}
+            playLabel={localize('com_landing_carousel_play')}
+            slideLabel={localize('com_landing_carousel_slide')}
+          />
           <div className="rekky-landing-hero-copy">
             <h1 id="landing-title">{localize('com_landing_title')}</h1>
             <p>{localize('com_landing_lede')}</p>
@@ -60,6 +95,7 @@ export default function LandingPage() {
               {localize('com_landing_no_link')}
               <ArrowRight size={16} aria-hidden="true" />
             </Link>
+            <HeroIngredientIllustration />
           </div>
         </section>
 
@@ -75,19 +111,26 @@ export default function LandingPage() {
 
           <div className="rekky-landing-change-proof">
             <blockquote>{localize('com_landing_change_request')}</blockquote>
-            <figure className="rekky-landing-product-proof">
-              <img
-                src="/assets/landing/rekky-mobile-recipe.webp"
-                width="842"
-                height="1869"
-                loading="lazy"
-                alt={localize('com_landing_mobile_canvas_alt')}
-              />
-              <figcaption>
-                <strong>{localize('com_landing_mobile_canvas_caption')}</strong>
-                <span>{localize('com_landing_mobile_canvas_detail')}</span>
-              </figcaption>
-            </figure>
+            <KitchenAdjustmentGraphic
+              equipment={{
+                label: localize('com_landing_change_equipment'),
+                before: localize('com_landing_change_equipment_before'),
+                after: localize('com_landing_change_equipment_after'),
+              }}
+              ingredient={{
+                label: localize('com_landing_change_ingredient'),
+                before: localize('com_landing_change_ingredient_before'),
+                after: localize('com_landing_change_ingredient_after'),
+              }}
+              servings={{
+                label: localize('com_landing_change_servings'),
+                before: localize('com_landing_change_servings_before'),
+                after: localize('com_landing_change_servings_after'),
+              }}
+              imageAlt={localize('com_landing_mobile_canvas_alt')}
+              caption={localize('com_landing_mobile_canvas_caption')}
+              detail={localize('com_landing_mobile_canvas_detail')}
+            />
           </div>
         </section>
 
@@ -111,6 +154,7 @@ export default function LandingPage() {
             />
           </picture>
           <div className="rekky-landing-photo-scrim" aria-hidden="true" />
+          <VoiceSteamIllustration />
           <div className="rekky-landing-voice-copy">
             <h2 id="landing-voice-title">{localize('com_landing_voice_title')}</h2>
             <p>{localize('com_landing_voice_body')}</p>
@@ -126,11 +170,12 @@ export default function LandingPage() {
             <h2 id="landing-close-title">{localize('com_landing_close_title')}</h2>
             <p>{localize('com_landing_close_body')}</p>
           </div>
+          <WebToPhoneIllustration />
           <div className="rekky-landing-close-actions">
-            <a href={registerPage()}>
+            <ContextualAuthLink mode="register">
               {localize('com_landing_close_action')}
               <ArrowRight size={20} aria-hidden="true" />
-            </a>
+            </ContextualAuthLink>
           </div>
         </section>
       </main>

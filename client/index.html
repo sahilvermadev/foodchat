@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <base href="/" />
-    <meta name="theme-color" content="#171217" />
+    <meta name="theme-color" content="#1d1421" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -27,6 +27,7 @@
       content="Import any recipe, adapt it to your ingredients and equipment, and cook hands-free."
     />
     <title>Rekky — Every recipe, adapted to your kitchen</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon-rekky.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-rekky-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-rekky-16x16.png" />
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-rekky-180x180.png" />
@@ -48,14 +49,14 @@
       let backgroundColor;
 
       if (theme === 'dark') {
-        backgroundColor = '#171217';
+        backgroundColor = '#1d1421';
       } else if (theme === 'light') {
-        backgroundColor = '#ffffff';
+        backgroundColor = '#f2f5f9';
       } else if (theme === 'system') {
         const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        backgroundColor = prefersDarkScheme ? '#171217' : '#fff8ef';
+        backgroundColor = prefersDarkScheme ? '#1d1421' : '#f2f5f9';
       } else {
-        backgroundColor = '#fff8ef';
+        backgroundColor = '#f2f5f9';
       }
 
       loadingContainerStyle.innerHTML = `

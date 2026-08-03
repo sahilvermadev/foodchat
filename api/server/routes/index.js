@@ -2,6 +2,7 @@ const accessPermissions = require('./accessPermissions');
 const categories = require('./categories');
 const cooking = require('./cooking');
 const recipes = require('./recipes');
+const publicRoutes = require('./public');
 const social = require('./social');
 const shopping = require('./shopping');
 const adminAuth = require('./admin/auth');
@@ -64,6 +65,7 @@ module.exports = {
   categories,
   cooking,
   recipes,
+  publicRoutes,
   social,
   shopping,
   staticRoute,

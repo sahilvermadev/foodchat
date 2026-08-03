@@ -1,11 +1,10 @@
 import { useForm } from 'react-hook-form';
 import { Spinner, Button } from '@librechat/client';
-import { useOutletContext } from 'react-router-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useResetPasswordMutation } from 'librechat-data-provider/react-query';
 import type { TResetPassword } from 'librechat-data-provider';
-import type { TLoginLayoutContext } from '~/common';
 import { useLocalize } from '~/hooks';
+import { useAuthFlow } from './flow';
 
 function ResetPassword() {
   const localize = useLocalize();
@@ -19,7 +18,7 @@ function ResetPassword() {
   const [params] = useSearchParams();
   const password = watch('password');
   const resetPassword = useResetPasswordMutation();
-  const { setError, setHeaderText, startupConfig } = useOutletContext<TLoginLayoutContext>();
+  const { setError, setHeaderText, startupConfig } = useAuthFlow();
 
   const onSubmit = (data: TResetPassword) => {
     resetPassword.mutate(data, {

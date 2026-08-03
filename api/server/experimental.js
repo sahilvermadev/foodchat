@@ -329,6 +329,8 @@ if (cluster.isMaster) {
     app.use('/api/convos', routes.convos);
     app.use('/api/skills', routes.skills);
     app.use('/api/categories', routes.categories);
+    app.use('/api/public', routes.publicRoutes);
+    app.use('/api/recipes', routes.recipes);
     app.use('/api/social-imports', routes.social);
     app.use('/api/shopping-list', routes.shopping);
     app.use('/api/endpoints', routes.endpoints);

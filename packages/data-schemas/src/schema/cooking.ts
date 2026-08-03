@@ -233,6 +233,25 @@ export const savedRecipeSchema = new Schema<ISavedRecipe>(
     },
     categorizationAttempts: { type: Number, default: 0, min: 0 },
     categorizationVersion: { type: Number, default: 1, required: true },
+    lineage: {
+      type: {
+        parentRecipeId: { type: String, required: true },
+        rootRecipeId: { type: String, required: true },
+        parentAuthor: {
+          type: {
+            id: { type: String, required: true },
+            name: { type: String, required: true },
+            username: { type: String },
+            avatar: { type: String },
+          },
+          required: true,
+          _id: false,
+        },
+        copiedAt: { type: String, required: true },
+        sourceVersion: { type: Number, required: true },
+      },
+      _id: false,
+    },
     tenantId: { type: String, index: true },
   },
   { timestamps: true },
@@ -255,6 +274,13 @@ savedRecipeSchema.index({ user: 1, 'categorization.difficulty': 1, tenantId: 1 }
 savedRecipeSchema.index({ user: 1, 'categorization.timeBucket': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.mainIngredients': 1, tenantId: 1 });
 savedRecipeSchema.index({ user: 1, 'categorization.equipment': 1, tenantId: 1 });
+savedRecipeSchema.index(
+  { user: 1, 'lineage.parentRecipeId': 1, tenantId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { 'lineage.parentRecipeId': { $type: 'string' } },
+  },
+);
 
 export const recipeTombstoneSchema = new Schema<IRecipeTombstone>(
   {

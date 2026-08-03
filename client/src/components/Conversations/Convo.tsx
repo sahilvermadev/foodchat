@@ -22,11 +22,11 @@ interface ConversationProps {
 }
 
 const categoryDotClasses: Record<CookingChatCategory, string> = {
-  ideas: 'bg-[#d97706] dark:bg-[#f59e0b]',
-  recipes: 'bg-[#c1121f] dark:bg-[#e63946]',
-  saved_recipe: 'bg-[#7c3aed] dark:bg-[#a78bfa]',
-  adjustments: 'bg-[#2563eb] dark:bg-[#60a5fa]',
-  cooking_help: 'bg-[#15803d] dark:bg-[#4ade80]',
+  ideas: 'bg-[var(--color-caution)]',
+  recipes: 'bg-surface-submit',
+  saved_recipe: 'bg-[var(--color-accent)]',
+  adjustments: 'bg-[var(--color-info)]',
+  cooking_help: 'bg-[var(--color-success)]',
 };
 
 const categoryLabelKeys: Record<CookingChatCategory, TranslationKeys> = {
@@ -243,8 +243,8 @@ export default function Conversation({
       className={cn(
         'group relative flex h-11 w-full items-center rounded-md outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring-primary md:h-8',
         isActiveConvo || isPopoverActive
-          ? 'bg-[#c1121f]/[0.08] text-[#c1121f] before:absolute before:bottom-1 before:left-0 before:top-1 before:w-0.5 before:rounded-full before:bg-[#c1121f] dark:bg-[#c1121f]/10 dark:text-[#e63946]'
-          : 'hover:bg-black/[0.035] dark:hover:bg-surface-active-alt',
+          ? 'bg-surface-active text-surface-submit before:absolute before:bottom-1 before:left-0 before:top-1 before:w-0.5 before:rounded-full before:bg-surface-submit'
+          : 'hover:bg-surface-hover',
       )}
       role="button"
       tabIndex={renaming ? -1 : 0}

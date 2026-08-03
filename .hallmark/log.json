@@ -1,5 +1,65 @@
 [
   {
+    "date": "2026-08-01",
+    "scope": "app",
+    "macrostructure": "Workbench app family",
+    "theme": "Rekky locked system",
+    "theme_axes": "light+dark / geometric-sans / chromatic-berry",
+    "vibe": "cool porcelain, black grape, restrained mulberry",
+    "enrichment": "none",
+    "brief": "Carry the landing palette and interaction voice through signed-in Rekky surfaces"
+  },
+  {
+    "date": "2026-08-01",
+    "scope": "landing hero",
+    "macrostructure": "Photographic editorial diptych",
+    "theme": "custom",
+    "theme_axes": "light+dark / geometric-sans / chromatic-berry",
+    "vibe": "seasonal cookbook cover in motion",
+    "enrichment": "Four-frame responsive editorial food carousel",
+    "brief": "Broaden the hero from one dish to a restrained carousel of high-quality Rekky food photography"
+  },
+  {
+    "date": "2026-08-01",
+    "scope": "public landing page",
+    "macrostructure": "Photographic editorial diptych",
+    "theme": "custom",
+    "theme_axes": "light+dark / geometric-sans / chromatic-berry",
+    "vibe": "cookbook marginalia, real food, restrained play",
+    "enrichment": "Tier-B ingredient still life, adjustment diagram, voice steam, and web-to-drawn-phone transfer",
+    "brief": "Use eggplant, lemon, mint, and pomegranate marginalia to tie the hero directly to its food photography"
+  },
+  {
+    "date": "2026-08-01",
+    "scope": "public landing page",
+    "macrostructure": "Photographic editorial diptych",
+    "theme": "custom",
+    "theme_axes": "light+dark / geometric-sans / chromatic-berry",
+    "vibe": "cool porcelain, black grape, restrained mulberry",
+    "enrichment": "existing food photography and real mobile app capture",
+    "brief": "Pilot a non-orange landing palette without changing the signed-in Rekky application"
+  },
+  {
+    "date": "2026-08-01",
+    "scope": "public sharing",
+    "macrostructure": "Catalogue + Long Document",
+    "theme": "Rekky locked system",
+    "theme_axes": "light+dark / editorial / warm-mineral",
+    "vibe": "personal cookbook discovery and practical recipe reading",
+    "enrichment": "existing recipe photography",
+    "brief": "Unify public profiles and shared recipes around clear authorship, utility, and copy ownership"
+  },
+  {
+    "date": "2026-08-01",
+    "scope": "cook landing",
+    "macrostructure": "Workbench app family",
+    "theme": "Rekky locked system",
+    "theme_axes": "light+dark / editorial-workbench / warm-mineral",
+    "vibe": "composer-anchored responsive conversational workspace",
+    "enrichment": "none",
+    "brief": "Anchor the cook composer to the viewport center with headline and suggestions arranged around it"
+  },
+  {
     "date": "2026-07-31",
     "scope": "app",
     "macrostructure": "Workbench app family",

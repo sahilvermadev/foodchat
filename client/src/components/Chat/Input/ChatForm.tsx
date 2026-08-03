@@ -223,7 +223,7 @@ const ChatForm = memo(function ChatForm({
   const baseClasses = useMemo(
     () =>
       cn(
-        'm-0 w-full resize-none placeholder-black/60 bg-transparent dark:placeholder-white/60 md:py-3.5 [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.05)]',
+        'm-0 w-full resize-none bg-transparent placeholder:text-text-tertiary md:py-3.5',
         isFreshLanding ? 'py-3 md:py-[13px]' : 'py-[13px]',
         'text-base',
         isCollapsed ? 'max-h-[52px]' : 'max-h-[45vh] md:max-h-[55vh]',
@@ -246,9 +246,7 @@ const ChatForm = memo(function ChatForm({
       className={cn(
         getChatFormLayoutClass(isFreshLanding),
         maximizeChatSpace ? 'max-w-full' : 'md:max-w-3xl xl:max-w-4xl',
-        isFreshLanding
-          ? 'px-0 transition-all duration-200 md:mb-28 md:px-2'
-          : 'sm:mb-10 sm:px-2',
+        isFreshLanding && 'px-0',
       )}
     >
       <div className="relative flex min-w-0 flex-1 flex-col items-stretch">
@@ -283,10 +281,10 @@ const ChatForm = memo(function ChatForm({
             id="chat-input-container"
             onClick={handleContainerClick}
             className={cn(
-              'relative flex w-full flex-grow flex-col overflow-hidden border text-text-primary shadow-sm outline outline-2 outline-offset-1 outline-transparent',
+              'relative flex w-full flex-grow flex-col overflow-hidden border text-text-primary shadow-surface outline outline-2 outline-offset-1 outline-transparent',
               isFreshLanding
-                ? 'rounded-[1.35rem] pb-0 md:rounded-3xl'
-                : 'rounded-t-3xl pb-4 sm:rounded-3xl sm:pb-0',
+                ? 'rounded-dialog pb-0'
+                : 'rounded-t-dialog pb-4 sm:rounded-dialog sm:pb-0',
               isTemporary
                 ? 'border-violet-800/60 bg-violet-950/10'
                 : 'border-border-light bg-surface-primary dark:bg-surface-chat',
@@ -401,9 +399,9 @@ const ChatForm = memo(function ChatForm({
                   onClick={() => setIsVoiceActive(!isVoiceActive)}
                   aria-label={localize('com_cooking_voice_button_label')}
                   className={cn(
-                    'flex h-8 items-center gap-1.5 self-center rounded-full border border-border-light px-3 py-1 text-xs font-semibold shadow-sm transition-all duration-200 focus:outline-none',
+                    'flex min-h-11 items-center gap-1.5 self-center whitespace-nowrap rounded-full border border-border-light px-3 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px',
                     isVoiceActive
-                      ? 'border-transparent bg-emerald-600 text-white hover:bg-emerald-700'
+                      ? 'border-transparent bg-surface-submit text-text-submit hover:bg-surface-submit-hover'
                       : 'bg-surface-primary text-text-secondary hover:bg-surface-hover hover:text-text-primary dark:border-border-heavy',
                   )}
                 >
@@ -418,7 +416,7 @@ const ChatForm = memo(function ChatForm({
                   >
                     <path d="M12 2v20M17 5v14M22 9v6M7 5v14M2 9v6" />
                   </svg>
-                  <span>{localize('com_cooking_voice_button_label') || 'Voice'}</span>
+                  <span>{localize('com_cooking_voice_button_label')}</span>
                 </button>
               )}
               <div className={`${isRTL ? 'ml-2' : 'mr-2'}`}>

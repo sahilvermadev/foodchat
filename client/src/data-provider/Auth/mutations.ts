@@ -6,6 +6,7 @@ import type * as t from 'librechat-data-provider';
 import useClearStates from '~/hooks/Config/useClearStates';
 import { clearAllConversationStorage } from '~/utils';
 import store from '~/store';
+import { startupConfigKey } from '../Endpoints/queries';
 
 /* login/logout */
 export const useLogoutUserMutation = (
@@ -28,10 +29,16 @@ export const useLoginUserMutation = (
     mutationFn: (payload: t.TLoginUser) => dataService.login(payload),
     ...(options || {}),
     onMutate: (vars) => {
+      const publicStartupConfig = queryClient.getQueryData<t.TStartupConfig>(
+        startupConfigKey(false),
+      );
       setQueriesEnabled(false);
       resetDefaultPreset();
       clearStates();
       queryClient.removeQueries();
+      if (publicStartupConfig) {
+        queryClient.setQueryData(startupConfigKey(false), publicStartupConfig);
+      }
       options?.onMutate?.(vars);
     },
     // Queries re-enabled in setUserContext (AuthContext) after setTokenHeader runs
@@ -53,7 +60,13 @@ export const useRefreshTokenMutation = (
     mutationFn: () => request.refreshToken(),
     ...(options || {}),
     onMutate: (vars) => {
+      const publicStartupConfig = queryClient.getQueryData<t.TStartupConfig>(
+        startupConfigKey(false),
+      );
       queryClient.removeQueries();
+      if (publicStartupConfig) {
+        queryClient.setQueryData(startupConfigKey(false), publicStartupConfig);
+      }
       options?.onMutate?.(vars);
     },
   });

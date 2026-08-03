@@ -92,6 +92,21 @@ export type RecipeWorkspaceState = {
   updatedAt: string;
 };
 
+export type RecipeAttribution = {
+  id: string;
+  name: string;
+  username?: string;
+  avatar?: string;
+};
+
+export type RecipeLineage = {
+  parentRecipeId: string;
+  rootRecipeId: string;
+  parentAuthor: RecipeAttribution;
+  copiedAt: string;
+  sourceVersion: number;
+};
+
 export type CookingDocument = {
   _id: string;
   user: string;
@@ -170,6 +185,7 @@ export type SavedRecipe = {
   categorizationStatus: RecipeCategorizationStatus;
   categorizationAttempts?: number;
   categorizationVersion: number;
+  lineage?: RecipeLineage;
   createdAt: string;
   updatedAt: string;
 };
@@ -406,14 +422,26 @@ export type PublicRecipeSummary = Pick<
   | 'illustrationStatus'
   | 'categorization'
   | 'servings'
+  | 'totalMinutes'
   | 'yield'
   | 'updatedAt'
-> & { author: PublicRecipeAuthor };
+> & {
+  author: PublicRecipeAuthor;
+  lineage?: RecipeLineage;
+  sourceUrl?: string;
+};
 
 export type PublicRecipe = PublicRecipeSummary & Pick<SavedRecipe, 'documentMarkdown' | 'recipe'>;
 
 export type PublicRecipesResponse = {
   recipes: PublicRecipeSummary[];
+};
+
+export type PublicProfile = {
+  author: PublicRecipeAuthor;
+  recipes: PublicRecipeSummary[];
+  total: number;
+  nextCursor?: string;
 };
 
 export type SocialImportProvider = 'youtube' | 'instagram' | 'tiktok' | 'web' | 'unknown';

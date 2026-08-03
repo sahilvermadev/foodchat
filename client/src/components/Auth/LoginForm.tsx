@@ -4,7 +4,7 @@ import { Turnstile } from '@marsidev/react-turnstile';
 import { ThemeContext, Spinner, Button, isDark } from '@librechat/client';
 import type { TLoginUser, TStartupConfig } from 'librechat-data-provider';
 import type { TAuthContext } from '~/common';
-import { useResendVerificationEmail, useGetStartupConfig } from '~/data-provider';
+import { useResendVerificationEmail } from '~/data-provider';
 import { validateEmail } from '~/utils';
 import { useLocalize } from '~/hooks';
 import {
@@ -14,6 +14,7 @@ import {
   authPrimaryButtonClass,
 } from './styles';
 import PasswordField from './PasswordField';
+import { AuthModeLink } from './flow';
 
 type TLoginFormProps = {
   onSubmit: (data: TLoginUser) => void;
@@ -34,8 +35,7 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
   const [showResendLink, setShowResendLink] = useState<boolean>(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
-  const { data: config } = useGetStartupConfig();
-  const useUsernameLogin = config?.ldap?.username;
+  const useUsernameLogin = startupConfig.ldap?.username;
   const validTheme = isDark(theme) ? 'dark' : 'light';
   const requireCaptcha = Boolean(startupConfig.turnstile?.siteKey);
 
@@ -51,10 +51,6 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
       setShowResendLink(false);
     },
   });
-
-  if (!startupConfig) {
-    return null;
-  }
 
   const renderError = (fieldName: string) => {
     const errorMessage = errors[fieldName]?.message;
@@ -142,9 +138,9 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error, 
           {renderError('password')}
         </div>
         {startupConfig.passwordResetEnabled && (
-          <a href="/forgot-password" className={authInlineLinkClass}>
+          <AuthModeLink mode="forgot" className={authInlineLinkClass}>
             {localize('com_auth_password_forgot')}
-          </a>
+          </AuthModeLink>
         )}
 
         {requireCaptcha && (

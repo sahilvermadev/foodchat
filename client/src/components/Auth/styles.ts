@@ -11,7 +11,7 @@ export const authLabelClass =
   'pointer-events-none absolute start-3 top-0 z-raised origin-[0] -translate-y-1/2 scale-75 transform rounded-md bg-surface-primary-alt px-2 text-sm text-text-secondary transition-colors duration-200 peer-focus:bg-surface-primary peer-focus:text-surface-submit';
 
 export const authPrimaryButtonClass =
-  'h-12 w-full whitespace-nowrap rounded-control bg-surface-submit font-medium text-text-submit shadow-surface transition-colors hover:bg-surface-submit-hover active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-primary disabled:cursor-not-allowed disabled:translate-y-0 disabled:bg-surface-secondary disabled:text-text-secondary disabled:opacity-55';
+  'auth-primary-action h-12 w-full whitespace-nowrap rounded-control bg-surface-submit font-medium text-text-submit shadow-surface transition-colors hover:bg-surface-submit-hover active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-primary disabled:cursor-not-allowed disabled:translate-y-0 disabled:bg-surface-secondary disabled:text-text-secondary disabled:opacity-55';
 
 export const authInlineLinkClass =
   'inline-flex whitespace-nowrap rounded-sm p-1 text-sm font-medium text-surface-submit underline decoration-transparent transition-colors hover:text-surface-submit-hover hover:decoration-current active:text-surface-submit-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary';

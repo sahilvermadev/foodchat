@@ -3,14 +3,17 @@
  */
 import React from 'react';
 import { render, act } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
+import { RecoilRoot, useRecoilValue } from 'recoil';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 
+import type { TStartupConfig } from 'librechat-data-provider';
 import type { TAuthConfig } from '~/common';
 
 import { AuthContextProvider, useAuthContext } from '../AuthContext';
+import { startupConfigKey } from '~/data-provider';
 import { EXPLICIT_LOGOUT_KEY, SESSION_KEY, markExplicitLogout } from '~/utils';
+import store from '~/store';
 
 const mockNavigate = jest.fn();
 jest.mock('react-router-dom', () => ({
@@ -40,6 +43,7 @@ const mockRefreshMutate = jest.fn();
 const mockLogoutMutate = jest.fn();
 
 jest.mock('~/data-provider', () => ({
+  startupConfigKey: (isAuthenticated: boolean) => ['startupConfig', isAuthenticated],
   useLoginUserMutation: jest.fn(
     (options: {
       onSuccess: (...args: unknown[]) => void;
@@ -72,12 +76,14 @@ const authConfig: TAuthConfig = { loginRedirect: '/login', test: true };
 
 function TestConsumer() {
   const ctx = useAuthContext();
+  const queriesEnabled = useRecoilValue(store.queriesEnabled);
   return (
     <div
       data-testid="consumer"
       data-authenticated={ctx.isAuthenticated}
       data-auth-resolved={ctx.isAuthResolved}
       data-logging-out={ctx.isLoggingOut}
+      data-queries-enabled={queriesEnabled}
       data-roles={JSON.stringify(ctx.roles ?? {})}
     >
       <button data-testid="logout" type="button" onClick={() => ctx.logout()} />
@@ -90,7 +96,7 @@ function renderProvider() {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  return render(
+  const result = render(
     <QueryClientProvider client={queryClient}>
       <RecoilRoot>
         <MemoryRouter>
@@ -101,6 +107,8 @@ function renderProvider() {
       </RecoilRoot>
     </QueryClientProvider>,
   );
+
+  return { ...result, queryClient };
 }
 
 /** Renders without test:true so silentRefresh actually runs */
@@ -277,6 +285,31 @@ describe('AuthContextProvider — logout onSuccess/onError handling', () => {
     expect(getByTestId('consumer')).toHaveAttribute('data-logging-out', 'true');
     expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
     expect(mockLogoutMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('immediately restores public queries and preserves startup config for landing auth', () => {
+    jest.useFakeTimers();
+    const { getByTestId, queryClient } = renderProvider();
+    const startupConfig = {
+      emailLoginEnabled: true,
+      registrationEnabled: true,
+    } as TStartupConfig;
+
+    act(() => {
+      mockCapturedLoginOptions.onSuccess({
+        user: { id: '1', role: 'USER' },
+        token: 'token',
+      });
+      jest.advanceTimersByTime(100);
+    });
+    queryClient.setQueryData(startupConfigKey(false), startupConfig);
+
+    act(() => {
+      getByTestId('logout').click();
+    });
+
+    expect(getByTestId('consumer')).toHaveAttribute('data-queries-enabled', 'true');
+    expect(queryClient.getQueryData(startupConfigKey(false))).toBe(startupConfig);
   });
 
   it('signs out this tab when another tab broadcasts an explicit logout', () => {

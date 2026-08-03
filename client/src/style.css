@@ -1,6 +1,6 @@
-/* Hallmark · genre: editorial · macrostructure: Workbench app family · design-system: DESIGN.md · designed-as-app
- * theme: custom · vibe: "quiet mineral neutrals, ember signal" · axes: light+dark / geometric-sans / warm
- * contrast: pass (40–41) · tokens: pass (48) · palette-slop: pass
+/* Hallmark · genre: playful · macrostructure: Workbench app family · design-system: DESIGN.md · designed-as-app
+ * theme: custom · vibe: "cool porcelain, black grape, mulberry" · axes: light+dark / geometric-sans / chromatic-other
+ * contrast: pass (40–41) · tokens: pass (48) · mobile: pass (34, 49–57) · slop: pass (58/58)
  */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
 @tailwind base;
@@ -61,19 +61,19 @@
 
 /* Custom Variables */
 :root {
-  --color-paper: oklch(97.5% 0.006 55);
-  --color-paper-2: oklch(95.2% 0.008 55);
-  --color-paper-3: oklch(92.5% 0.009 55);
-  --color-ink: oklch(19% 0.01 35);
-  --color-ink-2: oklch(31% 0.01 35);
-  --color-muted: oklch(45% 0.01 45);
-  --color-neutral: oklch(38% 0.01 40);
-  --color-rule: oklch(85.5% 0.008 50);
-  --color-rule-2: oklch(77% 0.01 48);
-  --color-accent: oklch(53% 0.17 32);
-  --color-accent-hover: oklch(48% 0.17 32);
-  --color-accent-ink: oklch(97.5% 0.006 55);
-  --color-focus: oklch(55% 0.2 32);
+  --color-paper: oklch(97% 0.006 255);
+  --color-paper-2: oklch(94.5% 0.009 255);
+  --color-paper-3: oklch(91.5% 0.012 255);
+  --color-ink: oklch(21% 0.028 315);
+  --color-ink-2: oklch(35% 0.022 305);
+  --color-muted: oklch(47% 0.018 295);
+  --color-neutral: oklch(40% 0.02 300);
+  --color-rule: oklch(84% 0.012 260);
+  --color-rule-2: oklch(76% 0.015 260);
+  --color-accent: oklch(46% 0.16 345);
+  --color-accent-hover: oklch(40% 0.16 345);
+  --color-accent-ink: oklch(98% 0.004 255);
+  --color-focus: oklch(62% 0.19 350);
   --color-success: oklch(49% 0.11 150);
   --color-caution: oklch(52% 0.12 78);
   --color-danger: oklch(50% 0.18 25);
@@ -85,16 +85,32 @@
   --color-photo-muted: oklch(88% 0.008 55);
   --color-photo-scrim: oklch(12% 0.012 35);
   --color-photo-rule: oklch(79% 0.012 55);
-  --color-landing-paper: oklch(95% 0.028 76);
-  --color-landing-ink: oklch(27% 0.052 335);
-  --color-landing-ink-2: oklch(42% 0.038 335);
-  --color-landing-rule: oklch(82.5% 0.035 70);
-  --color-voice-surface: oklch(18% 0.012 35);
-  --color-voice-surface-2: oklch(23% 0.012 35);
-  --color-voice-text: oklch(95% 0.008 55);
-  --color-voice-muted: oklch(73% 0.008 50);
-  --color-overlay: oklch(15% 0.01 35 / 0.72);
-  --shadow-color: oklch(19% 0.01 35 / 0.14);
+  --color-landing-paper: oklch(97% 0.006 255);
+  --color-landing-paper-2: oklch(94.5% 0.009 255);
+  --color-landing-paper-3: oklch(91.5% 0.012 255);
+  --color-landing-ink: oklch(21% 0.028 315);
+  --color-landing-ink-2: oklch(43% 0.018 300);
+  --color-landing-rule: oklch(84% 0.012 260);
+  --color-landing-rule-2: oklch(76% 0.015 260);
+  --color-landing-accent: oklch(46% 0.16 345);
+  --color-landing-accent-hover: oklch(40% 0.16 345);
+  --color-landing-accent-ink: oklch(98% 0.004 255);
+  --color-landing-focus: oklch(62% 0.19 350);
+  --color-landing-illustration-herb: oklch(59% 0.13 145);
+  --color-landing-illustration-butter: oklch(86% 0.14 95);
+  --color-landing-dark-paper: oklch(14% 0.018 285);
+  --color-landing-dark-paper-2: oklch(18% 0.02 285);
+  --color-landing-dark-ink: oklch(94% 0.008 255);
+  --color-landing-dark-ink-2: oklch(76% 0.012 270);
+  --color-landing-dark-rule: oklch(32% 0.022 285);
+  --color-landing-shadow: oklch(21% 0.028 315 / 0.14);
+  --shadow-landing-surface: 0 1px 2px var(--color-landing-shadow);
+  --color-voice-surface: oklch(18% 0.02 285);
+  --color-voice-surface-2: oklch(23% 0.022 285);
+  --color-voice-text: oklch(95% 0.008 255);
+  --color-voice-muted: oklch(73% 0.012 270);
+  --color-overlay: oklch(15% 0.02 300 / 0.72);
+  --shadow-color: oklch(21% 0.028 315 / 0.14);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
@@ -187,16 +203,16 @@
   --rekky-leaf: var(--color-success);
   --rekky-lemon: var(--color-caution);
   --rekky-aubergine: var(--color-accent);
-  --rekky-plum-950: oklch(14.5% 0.008 35);
-  --rekky-plum-925: oklch(16.5% 0.009 35);
-  --rekky-plum-900: oklch(18% 0.009 35);
-  --rekky-plum-850: oklch(22% 0.01 35);
-  --rekky-plum-800: oklch(25% 0.01 35);
-  --rekky-plum-750: oklch(29% 0.01 35);
-  --rekky-plum-700: oklch(36% 0.01 35);
-  --rekky-cream-text: oklch(94% 0.008 55);
-  --rekky-cream-muted: oklch(79% 0.008 55);
-  --rekky-mushroom-muted: oklch(68% 0.008 50);
+  --rekky-plum-950: oklch(14% 0.018 285);
+  --rekky-plum-925: oklch(16% 0.019 285);
+  --rekky-plum-900: oklch(18% 0.02 285);
+  --rekky-plum-850: oklch(22% 0.022 285);
+  --rekky-plum-800: oklch(25% 0.022 285);
+  --rekky-plum-750: oklch(29% 0.022 285);
+  --rekky-plum-700: oklch(36% 0.024 285);
+  --rekky-cream-text: oklch(94% 0.008 255);
+  --rekky-cream-muted: oklch(79% 0.012 270);
+  --rekky-mushroom-muted: oklch(68% 0.014 275);
   --brand-purple: var(--color-accent);
   --gizmo-gray-500: #999;
   --gizmo-gray-600: #666;
@@ -255,28 +271,28 @@ html {
   --border-light: var(--rekky-linen);
   --border-medium-alt: var(--color-rule-2);
   --border-medium: var(--color-rule-2);
-  --border-heavy: oklch(67% 0.01 45);
+  --border-heavy: color-mix(in oklab, var(--color-rule-2), var(--color-ink-2) 25%);
   --border-xheavy: var(--rekky-umber);
   --border-destructive: var(--color-danger);
   /* These are test styles */
 
-  --background: 97.5% 0.006 55;
-  --foreground: 19% 0.01 35;
-  --card: 95.2% 0.008 55;
-  --card-foreground: 19% 0.01 35;
-  --primary: 53% 0.17 32;
-  --primary-foreground: 97.5% 0.006 55;
-  --secondary: 92.5% 0.009 55;
-  --secondary-foreground: 19% 0.01 35;
-  --muted: 92.5% 0.009 55;
-  --muted-foreground: 45% 0.01 45;
-  --accent: 92.5% 0.009 55;
-  --accent-foreground: 19% 0.01 35;
+  --background: 97% 0.006 255;
+  --foreground: 21% 0.028 315;
+  --card: 94.5% 0.009 255;
+  --card-foreground: 21% 0.028 315;
+  --primary: 46% 0.16 345;
+  --primary-foreground: 98% 0.004 255;
+  --secondary: 91.5% 0.012 255;
+  --secondary-foreground: 21% 0.028 315;
+  --muted: 91.5% 0.012 255;
+  --muted-foreground: 47% 0.018 295;
+  --accent: 91.5% 0.012 255;
+  --accent-foreground: 21% 0.028 315;
   --destructive: 50% 0.18 25;
-  --destructive-foreground: 97.5% 0.006 55;
-  --border: 85.5% 0.008 50;
-  --input: 77% 0.01 48;
-  --ring: 55% 0.2 32;
+  --destructive-foreground: 98% 0.004 255;
+  --border: 84% 0.012 260;
+  --input: 76% 0.015 260;
+  --ring: 62% 0.19 350;
   --radius: 0.5rem;
   --chart-1: 16 60% 49%;
   --chart-2: 173 58% 39%;
@@ -286,26 +302,26 @@ html {
   --switch-unchecked: 67% 0.01 45;
 }
 .dark {
-  --color-paper: oklch(14.5% 0.008 35);
-  --color-paper-2: oklch(18% 0.009 35);
-  --color-paper-3: oklch(22% 0.01 35);
-  --color-ink: oklch(94% 0.008 55);
-  --color-ink-2: oklch(79% 0.008 55);
-  --color-muted: oklch(68% 0.008 50);
-  --color-neutral: oklch(60% 0.009 45);
-  --color-rule: oklch(29% 0.01 35);
-  --color-rule-2: oklch(36% 0.01 35);
-  --color-accent: oklch(70% 0.14 32);
-  --color-accent-hover: oklch(76% 0.13 32);
-  --color-accent-ink: oklch(16% 0.01 35);
-  --color-focus: oklch(72% 0.18 32);
+  --color-paper: oklch(14% 0.018 285);
+  --color-paper-2: oklch(18% 0.02 285);
+  --color-paper-3: oklch(22% 0.022 285);
+  --color-ink: oklch(94% 0.008 255);
+  --color-ink-2: oklch(79% 0.012 270);
+  --color-muted: oklch(68% 0.014 275);
+  --color-neutral: oklch(60% 0.016 280);
+  --color-rule: oklch(29% 0.022 285);
+  --color-rule-2: oklch(36% 0.024 285);
+  --color-accent: oklch(66% 0.14 345);
+  --color-accent-hover: oklch(72% 0.12 345);
+  --color-accent-ink: oklch(15% 0.02 300);
+  --color-focus: oklch(76% 0.16 350);
   --color-success: oklch(74% 0.11 150);
   --color-caution: oklch(80% 0.13 78);
   --color-danger: oklch(72% 0.16 25);
   --color-danger-hover: oklch(78% 0.14 25);
   --color-info: oklch(76% 0.1 245);
   --color-status-ink: var(--color-paper);
-  --shadow-color: oklch(8% 0.008 35 / 0.38);
+  --shadow-color: oklch(8% 0.014 285 / 0.38);
   --brand-purple: var(--rekky-aubergine);
   --presentation: var(--rekky-plum-950);
   --text-primary: var(--rekky-cream-text);
@@ -339,34 +355,34 @@ html {
   --border-light: var(--rekky-plum-750);
   --border-medium-alt: var(--rekky-plum-700);
   --border-medium: var(--rekky-plum-700);
-  --border-heavy: oklch(46% 0.01 35);
+  --border-heavy: color-mix(in oklab, var(--color-rule-2), var(--color-ink-2) 25%);
   --border-xheavy: var(--rekky-mushroom-muted);
   --border-destructive: var(--color-danger);
   /* These are test styles */
 
-  --background: 14.5% 0.008 35;
-  --foreground: 94% 0.008 55;
-  --card: 18% 0.009 35;
-  --card-foreground: 94% 0.008 55;
-  --primary: 70% 0.14 32;
-  --primary-foreground: 16% 0.01 35;
-  --secondary: 22% 0.01 35;
-  --secondary-foreground: 94% 0.008 55;
-  --muted: 22% 0.01 35;
-  --muted-foreground: 68% 0.008 50;
-  --accent: 25% 0.01 35;
-  --accent-foreground: 94% 0.008 55;
+  --background: 14% 0.018 285;
+  --foreground: 94% 0.008 255;
+  --card: 18% 0.02 285;
+  --card-foreground: 94% 0.008 255;
+  --primary: 66% 0.14 345;
+  --primary-foreground: 15% 0.02 300;
+  --secondary: 22% 0.022 285;
+  --secondary-foreground: 94% 0.008 255;
+  --muted: 22% 0.022 285;
+  --muted-foreground: 68% 0.014 275;
+  --accent: 25% 0.022 285;
+  --accent-foreground: 94% 0.008 255;
   --destructive: 72% 0.16 25;
-  --destructive-foreground: 16% 0.01 35;
-  --border: 29% 0.01 35;
-  --input: 36% 0.01 35;
-  --ring: 72% 0.18 32;
+  --destructive-foreground: 15% 0.02 300;
+  --border: 29% 0.022 285;
+  --input: 36% 0.024 285;
+  --ring: 76% 0.16 350;
   --chart-1: 16 60% 49%;
   --chart-2: 116 41% 59%;
   --chart-3: 45 86% 62%;
   --chart-4: 300 31% 33%;
   --chart-5: 333 22% 57%;
-  --switch-unchecked: 46% 0.01 35;
+  --switch-unchecked: 46% 0.022 285;
 }
 .gizmo {
   --text-primary: var(--color-ink);
@@ -377,7 +393,7 @@ html {
   --surface-tertiary: var(--color-paper-3);
   --border-light: var(--color-rule);
   --border-medium: var(--color-rule-2);
-  --border-heavy: oklch(67% 0.01 45);
+  --border-heavy: color-mix(in oklab, var(--color-rule-2), var(--color-ink-2) 25%);
   --border-xheavy: var(--color-ink-2);
 }
 .gizmo.dark {
@@ -389,7 +405,7 @@ html {
   --surface-tertiary: var(--color-paper-3);
   --border-light: var(--color-rule);
   --border-medium: var(--color-rule-2);
-  --border-heavy: oklch(46% 0.01 35);
+  --border-heavy: color-mix(in oklab, var(--color-rule-2), var(--color-ink-2) 25%);
   --border-xheavy: var(--color-muted);
 }
 
@@ -404,6 +420,10 @@ html {
 .text-token-text-tertiary {
   color: #8e8ea0;
   color: var(--text-tertiary);
+}
+
+.rekky-ease-out {
+  transition-timing-function: var(--ease-out);
 }
 
 .rekky-title {

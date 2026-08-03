@@ -202,7 +202,7 @@ router.get('/facets', async (req, res) => {
 
 router.get('/explore', async (req, res) => {
   try {
-    const recipes = await listPublicRecipes(userId(req), req.query.limit);
+    const recipes = await listPublicRecipes(req.query.limit);
     res.json(recipes);
   } catch (error) {
     handleError(res, error);
@@ -212,7 +212,6 @@ router.get('/explore', async (req, res) => {
 router.get('/explore/:id/illustration', async (req, res) => {
   try {
     const illustration = await getPublicRecipeIllustration(
-      userId(req),
       req.params.id,
       req.query.variant === 'thumbnail',
     );
@@ -224,7 +223,7 @@ router.get('/explore/:id/illustration', async (req, res) => {
 
 router.get('/explore/:id', async (req, res) => {
   try {
-    const recipe = await getPublicRecipe(userId(req), req.params.id);
+    const recipe = await getPublicRecipe(req.params.id);
     if (!recipe) return res.sendStatus(404);
     res.json(recipe);
   } catch (error) {

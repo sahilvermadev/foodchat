@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useSetRecoilState } from 'recoil';
 import type { TStartupConfig } from 'librechat-data-provider';
-import { TranslationKeys, useLocalize } from '~/hooks';
+import type { TranslationKeys } from '~/hooks';
+import type { AuthMode } from '~/utils';
+import { useLocalize } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
 import AuthLayout from '~/components/Auth/AuthLayout';
+import { AuthFlowProvider } from '~/components/Auth/flow';
 import { REDIRECT_PARAM, SESSION_KEY } from '~/utils';
 import store from '~/store';
 
@@ -14,6 +17,21 @@ const headerMap: Record<string, TranslationKeys> = {
   '/forgot-password': 'com_auth_reset_password',
   '/reset-password': 'com_auth_reset_password',
   '/login/2fa': 'com_auth_verify_your_identity',
+};
+
+const pathModes: Record<string, AuthMode | 'reset'> = {
+  '/login': 'login',
+  '/register': 'register',
+  '/forgot-password': 'forgot',
+  '/reset-password': 'reset',
+  '/login/2fa': '2fa',
+};
+
+const modePaths: Record<AuthMode, string> = {
+  login: '/login',
+  register: '/register',
+  forgot: '/forgot-password',
+  '2fa': '/login/2fa',
 };
 
 export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: boolean }) {
@@ -31,6 +49,7 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
   const localize = useLocalize();
   const navigate = useNavigate();
   const location = useLocation();
+  const mode = pathModes[location.pathname] ?? 'login';
 
   useEffect(() => {
     setQueriesEnabled(true);
@@ -60,6 +79,12 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
   }, [location.pathname]);
 
   const contextValue = {
+    mode: mode === 'reset' ? 'forgot' : mode,
+    setMode: (nextMode: AuthMode) =>
+      navigate(
+        { pathname: modePaths[nextMode], search: location.search, hash: location.hash },
+        { replace: true },
+      ),
     error,
     setError,
     headerText,
@@ -67,18 +92,21 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
     startupConfigError,
     startupConfig,
     isFetching,
+    presentation: 'standalone' as const,
   };
 
   return (
-    <AuthLayout
-      header={headerText ? localize(headerText) : localize(headerMap[location.pathname])}
-      isFetching={isFetching}
-      startupConfig={startupConfig}
-      startupConfigError={startupConfigError}
-      pathname={location.pathname}
-      error={error}
-    >
-      <Outlet context={contextValue} />
-    </AuthLayout>
+    <AuthFlowProvider value={contextValue}>
+      <AuthLayout
+        header={headerText ? localize(headerText) : localize(headerMap[location.pathname])}
+        isFetching={isFetching}
+        startupConfig={startupConfig}
+        startupConfigError={startupConfigError}
+        mode={mode}
+        error={error}
+      >
+        <Outlet />
+      </AuthLayout>
+    </AuthFlowProvider>
   );
 }

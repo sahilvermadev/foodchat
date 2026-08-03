@@ -39,10 +39,9 @@ function Sidebar({
         />
         <nav
           className={cn(
-            'min-h-0 flex-1 overflow-hidden bg-surface-primary-alt',
+            'rekky-ease-out min-h-0 flex-1 overflow-hidden bg-surface-primary-alt transition-opacity duration-200',
             expanded ? 'opacity-100' : 'pointer-events-none opacity-0',
           )}
-          style={{ transition: expanded ? 'opacity 200ms ease 80ms' : 'opacity 150ms ease' }}
           aria-hidden={!expanded}
         >
           <SidePanelNav links={links} />
@@ -54,10 +53,9 @@ function Sidebar({
         aria-label="Resize sidebar"
         tabIndex={expanded ? 0 : -1}
         className={cn(
-          'absolute right-0 top-0 z-raised h-full w-1 cursor-col-resize transition-colors hover:bg-border-medium active:bg-border-heavy',
+          'rekky-ease-out absolute right-0 top-0 z-raised h-full w-1 cursor-col-resize transition-[background-color,opacity] duration-150 hover:bg-border-medium active:bg-border-heavy',
           expanded ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
-        style={{ transition: expanded ? 'opacity 200ms ease 80ms' : 'opacity 150ms ease' }}
         onMouseDown={onResizeStart}
         onKeyDown={(e) => {
           if (e.key === 'ArrowLeft') {

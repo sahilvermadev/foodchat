@@ -9,6 +9,7 @@ import { useLocalize, useAuthContext } from '~/hooks';
 import type { TranslationKeys } from '~/hooks/useLocalize';
 import { useCookingChat } from '~/components/Cooking/CookingChatContext';
 import { getIconEndpoint, getEntity } from '~/utils';
+import { getChatLandingIntroClass } from './landingLayout';
 
 const containerClassName =
   'shadow-stroke relative flex h-full items-center justify-center rounded-full bg-white dark:bg-presentation dark:text-white text-black dark:after:shadow-none ';
@@ -226,9 +227,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
   }, [greetingText, handleLineCountChange, isCookingChat, name, user?.name]);
 
   return (
-    <div
-      className={`flex shrink-0 transform-gpu flex-col items-center justify-center pb-0 transition-all duration-200 md:h-full md:pb-16 ${centerFormOnLanding ? 'max-h-full md:max-h-0' : 'max-h-full'} ${getDynamicMargin}`}
-    >
+    <div className={`${getChatLandingIntroClass(centerFormOnLanding)} ${getDynamicMargin}`}>
       <div ref={contentRef} className="flex flex-col items-center gap-0 p-2">
         <div
           className={`flex ${textHasMultipleLines ? 'flex-col' : 'flex-col md:flex-row'} items-center justify-center gap-2`}

@@ -4,9 +4,15 @@ import {
   markExplicitLogout,
   buildLoginRetryRedirect,
   buildTwoFactorRedirect,
+  buildContextualTwoFactorRedirect,
+  clearAuthParams,
+  getAuthMode,
+  getPublicReturnTarget,
+  setAuthMode,
   persistRedirectToSession,
   getPostLoginRedirect,
   isSafeRedirect,
+  resolveAuthSuccessRedirect,
   resolvePostLoginRedirect,
   SESSION_KEY,
 } from '../redirect';
@@ -36,6 +42,10 @@ describe('isSafeRedirect', () => {
     expect(isSafeRedirect('//evil.com')).toBe(false);
   });
 
+  it('rejects a backslash-based authority URL', () => {
+    expect(isSafeRedirect('/\\evil.com')).toBe(false);
+  });
+
   it('rejects a bare domain', () => {
     expect(isSafeRedirect('evil.com')).toBe(false);
   });
@@ -62,6 +72,40 @@ describe('isSafeRedirect', () => {
 
   it('accepts the root path', () => {
     expect(isSafeRedirect('/')).toBe(true);
+  });
+});
+
+describe('contextual auth query state', () => {
+  it('adds auth while preserving encoded queries', () => {
+    expect(setAuthMode('?q=lime%20pie&filter=a%2Fb', 'login')).toBe(
+      '?q=lime+pie&filter=a%2Fb&auth=login',
+    );
+  });
+
+  it('replaces modes and removes a stale 2FA token', () => {
+    expect(setAuthMode('?view=grid&auth=2fa&auth_token=secret', 'register')).toBe(
+      '?view=grid&auth=register',
+    );
+  });
+
+  it('scopes the temporary 2FA token to the public URL', () => {
+    expect(buildContextualTwoFactorRedirect('?sort=new&auth=login', 'a+b/c')).toBe(
+      '?sort=new&auth=2fa&auth_token=a%2Bb%2Fc',
+    );
+  });
+
+  it('removes only auth-owned parameters', () => {
+    expect(clearAuthParams('?auth=forgot&q=beans&auth_token=x')).toBe('?q=beans');
+  });
+
+  it('preserves pathname, unrelated query, and hash in the return target', () => {
+    expect(getPublicReturnTarget('/rekky/r/42', '?auth=login&q=a%2Fb', '#method')).toBe(
+      '/rekky/r/42?q=a%2Fb#method',
+    );
+  });
+
+  it('ignores invalid auth modes', () => {
+    expect(getAuthMode(new URLSearchParams('auth=delete-account'))).toBeNull();
   });
 });
 
@@ -172,6 +216,33 @@ describe('resolvePostLoginRedirect', () => {
     expect(
       resolvePostLoginRedirect(new URLSearchParams('redirect_to=https%3A%2F%2Fevil.com'), '/cook'),
     ).toBe('/cook');
+  });
+});
+
+describe('resolveAuthSuccessRedirect', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it('sends contextual authentication to the new chat screen', () => {
+    sessionStorage.setItem(SESSION_KEY, '/?campaign=summer');
+
+    expect(
+      resolveAuthSuccessRedirect(
+        new URLSearchParams('auth=login&redirect_to=%2Frecipes%2Frecipe-1'),
+      ),
+    ).toBe('/cook');
+    expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
+  });
+
+  it('preserves safe deep links for standalone authentication', () => {
+    expect(
+      resolveAuthSuccessRedirect(new URLSearchParams('redirect_to=%2Fc%2Fabc123%3Fmodel%3Dclaude')),
+    ).toBe('/c/abc123?model=claude');
+  });
+
+  it('uses the new chat screen when standalone auth has no safe deep link', () => {
+    expect(resolveAuthSuccessRedirect(new URLSearchParams())).toBe('/cook');
   });
 });
 

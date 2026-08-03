@@ -1,0 +1,114 @@
+/* Hallmark · component: contextual authentication modal · genre: editorial/playful · theme: Rekky landing
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: pass (40–41)
+ */
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
+
+.rekky-public-auth {
+  --presentation: var(--color-landing-paper);
+  --text-primary: var(--color-landing-ink);
+  --text-secondary: var(--color-landing-ink-2);
+  --text-secondary-alt: var(--color-landing-ink-2);
+  --text-submit: var(--color-landing-accent-ink);
+  --ring-primary: var(--color-landing-focus);
+  --surface-active: var(--color-landing-paper-3);
+  --surface-hover: var(--color-landing-paper-2);
+  --surface-primary: var(--color-landing-paper);
+  --surface-primary-alt: var(--color-landing-paper);
+  --surface-secondary: var(--color-landing-paper-2);
+  --surface-secondary-alt: var(--color-landing-paper-3);
+  --surface-submit: var(--color-landing-accent);
+  --surface-submit-hover: var(--color-landing-accent-hover);
+  --border-light: var(--color-landing-rule);
+  --border-medium: var(--color-landing-rule-2);
+  --border-medium-alt: var(--color-landing-rule-2);
+
+  background: var(--color-landing-paper) !important;
+  color: var(--color-landing-ink);
+  display: block !important;
+  font-family: var(--font-body);
+}
+
+.rekky-public-auth-overlay {
+  background: color-mix(in oklab, var(--color-landing-ink) 38%, transparent) !important;
+  backdrop-filter: none !important;
+}
+
+.rekky-public-auth-card {
+  background: var(--color-landing-paper);
+  color: var(--color-landing-ink);
+}
+
+.rekky-public-auth .auth-card-heading {
+  color: var(--color-landing-ink);
+  font-family: var(--font-marketing-heading);
+  font-size: clamp(1.875rem, 5vw, 2.25rem);
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  text-align: start;
+}
+
+.rekky-public-auth .auth-input {
+  background: var(--color-landing-paper);
+  border-color: var(--color-landing-rule-2);
+  color: var(--color-landing-ink);
+  box-shadow: none;
+}
+
+.rekky-public-auth .auth-label {
+  background: var(--color-landing-paper);
+  color: var(--color-landing-ink-2);
+}
+
+.rekky-public-auth .auth-input:focus {
+  background: var(--color-landing-paper);
+  border-color: var(--color-landing-ink-2);
+}
+
+.rekky-public-auth .auth-primary-action {
+  box-shadow: var(--shadow-landing-surface);
+}
+
+.rekky-public-auth-close {
+  background: var(--color-landing-paper);
+  border-color: var(--color-landing-rule);
+  color: var(--color-landing-ink);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rekky-public-auth-close:hover {
+    background: var(--color-landing-paper-2);
+    border-color: var(--color-landing-rule-2);
+  }
+}
+
+.rekky-public-auth-close:active {
+  background: var(--color-landing-paper-3);
+  transform: translateY(1px);
+}
+
+.rekky-public-auth-close:focus-visible {
+  outline: 2px solid var(--color-landing-focus);
+  outline-offset: 2px;
+}
+
+@media (min-width: 40rem) {
+  .rekky-public-auth {
+    background: transparent !important;
+    color: var(--color-landing-ink);
+  }
+
+  .rekky-public-auth-card {
+    border-color: var(--color-landing-rule);
+    box-shadow: var(--shadow-dialog);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rekky-public-auth,
+  .rekky-public-auth * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

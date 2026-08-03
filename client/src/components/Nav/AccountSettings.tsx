@@ -40,7 +40,7 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
         className={
           collapsed
             ? 'flex h-12 w-12 items-center justify-center rounded-lg transition-colors hover:bg-surface-active-alt aria-[expanded=true]:bg-surface-active-alt'
-            : 'mt-text-sm flex h-auto w-full items-center gap-2 rounded-xl p-2 text-sm transition-all duration-200 ease-in-out hover:bg-surface-active-alt aria-[expanded=true]:bg-surface-active-alt'
+            : 'mt-text-sm flex h-auto w-full items-center gap-2 rounded-lg p-2 text-sm transition-colors duration-150 hover:bg-surface-active-alt aria-[expanded=true]:bg-surface-active-alt'
         }
       >
         <div

@@ -176,7 +176,7 @@ function ChatView({
                   })}
                 >
                   {content}
-                  <div className={getChatComposerClass(isLandingPage)}>
+                  <div className={getChatComposerClass(isLandingPage, centerFormOnLanding)}>
                     <ChatForm index={index} />
                     {isLandingPage ? <ConversationStarters /> : <Footer />}
                   </div>

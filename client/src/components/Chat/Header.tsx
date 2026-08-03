@@ -20,7 +20,7 @@ function GuestAuthControl() {
         data-guest-auth-login="true"
         data-testid="guest-auth-login"
         onClick={() => setOpen(true)}
-        className="pointer-events-auto fixed right-16 top-[calc(0.5rem+env(safe-area-inset-top))] z-[100] rounded-full bg-[#c1121f] px-4 py-1.5 text-sm font-medium text-white shadow-sm shadow-[#c1121f]/20 transition-colors hover:bg-[#a30f1a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e63946]/50 sm:right-20"
+        className="pointer-events-auto fixed right-16 top-[calc(0.5rem+env(safe-area-inset-top))] z-modal min-h-11 whitespace-nowrap rounded-full bg-surface-submit px-4 py-1.5 text-sm font-medium text-text-submit shadow-surface transition-colors hover:bg-surface-submit-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-presentation active:translate-y-px sm:right-20"
       >
         {localize('com_auth_login')}
       </button>

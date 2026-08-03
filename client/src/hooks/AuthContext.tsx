@@ -26,6 +26,7 @@ import {
   useLoginUserMutation,
   useLogoutUserMutation,
   useRefreshTokenMutation,
+  startupConfigKey,
 } from '~/data-provider';
 import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
 import {
@@ -52,7 +53,13 @@ function getCurrentClientPath() {
 }
 
 function allowsGuestAuthPath(path: string) {
-  return path === '/' || path === '/cook' || path === '/chat';
+  return (
+    path === '/' ||
+    path === '/cook' ||
+    path === '/chat' ||
+    path.startsWith('/r/') ||
+    path.startsWith('/cooks/')
+  );
 }
 
 const AuthContext = (import.meta.hot?.data?.__AuthContext ??
@@ -163,6 +170,9 @@ const AuthContextProvider = ({
 
   const clearLocalSession = useCallback(
     (broadcast = true) => {
+      /** Startup configuration is public and is needed immediately by the landing auth modal. */
+      const startupConfig = queryClient.getQueryData<t.TStartupConfig>(startupConfigKey(false));
+
       if (broadcast) {
         markExplicitLogout();
       }
@@ -175,6 +185,11 @@ const AuthContextProvider = ({
       void clearStates();
       setTokenHeader(undefined);
       setUser(undefined);
+      if (startupConfig) {
+        queryClient.setQueryData(startupConfigKey(false), startupConfig);
+      }
+      /** Authenticated queries are purged; public landing-page queries can run again now. */
+      setQueriesEnabled(true);
       setToken(undefined);
       setError(undefined);
       setIsAuthenticated(false);
@@ -259,7 +274,7 @@ const AuthContextProvider = ({
           const storedRedirect = sessionStorage.getItem(SESSION_KEY);
           sessionStorage.removeItem(SESSION_KEY);
           const strippedPath = getCurrentClientPath();
-          const currentUrl = `${strippedPath}${window.location.search}`;
+          const currentUrl = `${strippedPath}${window.location.search}${window.location.hash}`;
           const fallbackRedirect = isSafeRedirect(currentUrl) ? currentUrl : '/cook';
           const redirect =
             storedRedirect && isSafeRedirect(storedRedirect) ? storedRedirect : fallbackRedirect;
@@ -329,15 +344,16 @@ const AuthContextProvider = ({
   ]);
 
   useEffect(() => {
-    const handleTokenUpdate = (event: CustomEvent<string>) => {
+    const handleTokenUpdate = (event: CustomEvent<string | { token: string; user: t.TUser }>) => {
       if (hasExplicitlyLoggedOut()) {
         return;
       }
       console.log('tokenUpdated event received event');
+      const detail = event.detail;
       setUserContext({
-        token: event.detail,
+        token: typeof detail === 'string' ? detail : detail.token,
         isAuthenticated: true,
-        user: user,
+        user: typeof detail === 'string' ? user : detail.user,
       });
     };
 

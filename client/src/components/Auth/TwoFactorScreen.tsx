@@ -1,11 +1,15 @@
 import React, { useState, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSetRecoilState } from 'recoil';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useToastContext } from '@librechat/client';
 import { useForm, Controller } from 'react-hook-form';
+import { setTokenHeader } from 'librechat-data-provider';
 import { REGEXP_ONLY_DIGITS, REGEXP_ONLY_DIGITS_AND_CHARS } from 'input-otp';
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot, Label } from '@librechat/client';
 import { useVerifyTwoFactorTempMutation } from '~/data-provider';
 import { useLocalize } from '~/hooks';
+import { AUTH_TOKEN_PARAM, clearExplicitLogout, resolveAuthSuccessRedirect } from '~/utils';
+import store from '~/store';
 
 interface VerifyPayload {
   tempToken: string;
@@ -20,7 +24,10 @@ type TwoFactorFormInputs = {
 
 const TwoFactorScreen: React.FC = React.memo(() => {
   const [searchParams] = useSearchParams();
-  const tempTokenRaw = searchParams.get('tempToken');
+  const navigate = useNavigate();
+  const setUser = useSetRecoilState(store.user);
+  const setQueriesEnabled = useSetRecoilState<boolean>(store.queriesEnabled);
+  const tempTokenRaw = searchParams.get(AUTH_TOKEN_PARAM) ?? searchParams.get('tempToken');
   const tempToken = tempTokenRaw !== null && tempTokenRaw !== '' ? tempTokenRaw : '';
 
   const {
@@ -35,7 +42,16 @@ const TwoFactorScreen: React.FC = React.memo(() => {
   const { mutate: verifyTempMutate } = useVerifyTwoFactorTempMutation({
     onSuccess: (result) => {
       if (result.token != null && result.token !== '') {
-        window.location.href = '/';
+        clearExplicitLogout();
+        setTokenHeader(result.token);
+        setUser(result.user);
+        setQueriesEnabled(true);
+        window.dispatchEvent(
+          new CustomEvent('tokenUpdated', {
+            detail: result.user ? { token: result.token, user: result.user } : result.token,
+          }),
+        );
+        navigate(resolveAuthSuccessRedirect(searchParams), { replace: true });
       }
     },
     onMutate: () => {

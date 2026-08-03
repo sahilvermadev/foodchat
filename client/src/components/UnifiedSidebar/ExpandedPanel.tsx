@@ -140,9 +140,9 @@ const NavIconButton = memo(function NavIconButton({
           aria-label={localize(link.title)}
           aria-pressed={isActive}
           className={cn(
-            'h-11 w-11 rounded-lg',
+            'relative h-11 w-11 rounded-lg transition-colors',
             isActive
-              ? 'bg-surface-submit/10 hover:bg-surface-submit/15 text-surface-submit'
+              ? 'bg-surface-active text-surface-submit before:absolute before:start-0 before:h-5 before:w-0.5 before:rounded-full before:bg-surface-submit hover:bg-surface-hover'
               : 'text-text-secondary hover:text-text-primary',
           )}
           onClick={handleClick}

@@ -1,7 +1,7 @@
 # Rekky Design Guide
 
 Status: living product design reference  
-Last updated: 2026-07-28
+Last updated: 2026-08-01
 
 This document describes the current design language of Rekky and the rules new UI
 work should follow. It is intentionally practical: use it when building, reviewing,
@@ -55,26 +55,26 @@ in `client/tailwind.config.cjs`.
 
 ### Core Palette
 
-Rekky uses quiet, tinted mineral neutrals with one ember-coral signal. It should
-not read as a themed “food palette”: warmth is carried by trace chroma in the
-neutrals, while the accent is reserved for active state, focus, links, and primary
-emphasis. Its footprint should remain below roughly 5% of a viewport.
+Rekky uses cool porcelain and mineral surfaces, black-grape ink, and one mulberry
+signal. It should not read as a themed “food palette”: food photography carries the
+culinary warmth, while mulberry is reserved for active state, focus, links, and
+primary emphasis. Its footprint should remain below roughly 5% of a viewport.
 
 Light and dark modes preserve the same relationships. Dark elevation becomes
 lighter as surfaces rise; the accent becomes lighter and slightly less chromatic.
 
 | Role                 | Light                   | Dark                    | Use                                   |
 | -------------------- | ----------------------- | ----------------------- | ------------------------------------- |
-| `--color-paper`      | `oklch(97.5% 0.006 55)` | `oklch(14.5% 0.008 35)` | App/page background                   |
-| `--color-paper-2`    | `oklch(95.2% 0.008 55)` | `oklch(18% 0.009 35)`   | Main raised surfaces                  |
-| `--color-paper-3`    | `oklch(92.5% 0.009 55)` | `oklch(22% 0.01 35)`    | Secondary controls and panels         |
-| `--color-ink`        | `oklch(19% 0.01 35)`    | `oklch(94% 0.008 55)`   | Primary readable text                 |
-| `--color-ink-2`      | `oklch(31% 0.01 35)`    | `oklch(79% 0.008 55)`   | Supporting text                       |
-| `--color-rule`       | `oklch(85.5% 0.008 50)` | `oklch(29% 0.01 35)`    | Quiet dividers                        |
-| `--color-rule-2`     | `oklch(77% 0.01 48)`    | `oklch(36% 0.01 35)`    | Stronger control boundaries           |
-| `--color-accent`     | `oklch(53% 0.17 32)`    | `oklch(70% 0.14 32)`    | Active state, links, primary emphasis |
-| `--color-accent-ink` | mineral paper           | smoked ink              | Text on accent fills                  |
-| `--color-focus`      | `oklch(55% 0.2 32)`     | `oklch(72% 0.18 32)`    | Visible keyboard focus                |
+| `--color-paper`      | `oklch(97% 0.006 255)`   | `oklch(14% 0.018 285)`  | App/page background                   |
+| `--color-paper-2`    | `oklch(94.5% 0.009 255)` | `oklch(18% 0.02 285)`   | Main raised surfaces                  |
+| `--color-paper-3`    | `oklch(91.5% 0.012 255)` | `oklch(22% 0.022 285)`  | Secondary controls and panels         |
+| `--color-ink`        | `oklch(21% 0.028 315)`   | `oklch(94% 0.008 255)`  | Primary readable text                 |
+| `--color-ink-2`      | `oklch(35% 0.022 305)`   | `oklch(79% 0.012 270)`  | Supporting text                       |
+| `--color-rule`       | `oklch(84% 0.012 260)`   | `oklch(29% 0.022 285)`  | Quiet dividers                        |
+| `--color-rule-2`     | `oklch(76% 0.015 260)`   | `oklch(36% 0.024 285)`  | Stronger control boundaries           |
+| `--color-accent`     | `oklch(46% 0.16 345)`    | `oklch(66% 0.14 345)`   | Active state, links, primary emphasis |
+| `--color-accent-ink` | cool porcelain           | black-grape ink          | Text on accent fills                  |
+| `--color-focus`      | `oklch(62% 0.19 350)`    | `oklch(76% 0.16 350)`   | Visible keyboard focus                |
 
 Functional status colors are subordinate and must always include text or an icon:
 
@@ -88,12 +88,27 @@ Full-bleed photography uses a fixed light-on-dark contrast set—`--color-photo-
 controls remain legible in both application themes. The photograph may change; this
 contrast pair does not.
 
-The public landing hero uses a fixed warm-light art direction in both application
-themes: `--color-landing-paper` is oat parchment, `--color-landing-ink` is smoked
-aubergine, and `--color-landing-rule` is a warm mineral divider. Ember coral remains
-the only interface accent; food photography supplies the green, red, and yellow.
-This exception keeps the acquisition surface lively without turning the product UI
-into a themed food palette.
+The landing page established the product palette now shared by the signed-in app.
+Its `--color-landing-*` names remain scoped aliases for public-page art direction,
+not a separate brand system. Light mode uses cool porcelain and black-grape ink;
+dark mode uses aubergine-tinted mineral surfaces. Mulberry is the single interaction
+signal in both modes, while food photography supplies the warm culinary color.
+
+Landing-page illustrations use a small “kitchen marginalia” system: black-grape
+outlines, mulberry transformation marks, parsley-green organic details, and
+butter-yellow highlights. Illustration colours are not UI status colours. Graphics
+must explain a real cooking action—adjustment, voice, saving, timing, or shopping—and
+must not replace food photography where the dish itself needs to be inspected. In
+the landing hero, marginalia should occupy the copy panel's negative space and echo
+recognizable foods or ingredients from the adjacent dish rather than repeat the
+adaptation diagram shown later on the page.
+The landing hero photography may rotate through a small set of finished dishes, but
+the frame remains fixed. Use a slow dissolve, direct navigation, an explicit pause
+control, and pause on hover or focus; reduced-motion visitors receive manual
+navigation only. Keep captions concise and treat the first photograph as the LCP
+asset while later frames load lazily.
+Web-to-mobile continuity must use a directional transfer mark and an unmistakable
+hand-drawn phone; a plate alone does not communicate cross-device access.
 
 Legacy `--rekky-*` names remain compatibility aliases only. New work uses semantic
 `--color-*` roles or the existing application roles such as `--surface-primary`,
@@ -431,32 +446,32 @@ file is a portable copy for design tooling and reuse.
 
 ```css
 :root {
-  --color-paper: oklch(97.5% 0.006 55);
-  --color-paper-2: oklch(95.2% 0.008 55);
-  --color-paper-3: oklch(92.5% 0.009 55);
-  --color-ink: oklch(19% 0.01 35);
-  --color-ink-2: oklch(31% 0.01 35);
-  --color-muted: oklch(45% 0.01 45);
-  --color-rule: oklch(85.5% 0.008 50);
-  --color-rule-2: oklch(77% 0.01 48);
-  --color-accent: oklch(53% 0.17 32);
-  --color-accent-ink: oklch(97.5% 0.006 55);
-  --color-focus: oklch(55% 0.2 32);
+  --color-paper: oklch(97% 0.006 255);
+  --color-paper-2: oklch(94.5% 0.009 255);
+  --color-paper-3: oklch(91.5% 0.012 255);
+  --color-ink: oklch(21% 0.028 315);
+  --color-ink-2: oklch(35% 0.022 305);
+  --color-muted: oklch(47% 0.018 295);
+  --color-rule: oklch(84% 0.012 260);
+  --color-rule-2: oklch(76% 0.015 260);
+  --color-accent: oklch(46% 0.16 345);
+  --color-accent-ink: oklch(98% 0.004 255);
+  --color-focus: oklch(62% 0.19 350);
   --font-marketing-heading: 'Lora', serif;
 }
 
 .dark {
-  --color-paper: oklch(14.5% 0.008 35);
-  --color-paper-2: oklch(18% 0.009 35);
-  --color-paper-3: oklch(22% 0.01 35);
-  --color-ink: oklch(94% 0.008 55);
-  --color-ink-2: oklch(79% 0.008 55);
-  --color-muted: oklch(68% 0.008 50);
-  --color-rule: oklch(29% 0.01 35);
-  --color-rule-2: oklch(36% 0.01 35);
-  --color-accent: oklch(70% 0.14 32);
-  --color-accent-ink: oklch(16% 0.01 35);
-  --color-focus: oklch(72% 0.18 32);
+  --color-paper: oklch(14% 0.018 285);
+  --color-paper-2: oklch(18% 0.02 285);
+  --color-paper-3: oklch(22% 0.022 285);
+  --color-ink: oklch(94% 0.008 255);
+  --color-ink-2: oklch(79% 0.012 270);
+  --color-muted: oklch(68% 0.014 275);
+  --color-rule: oklch(29% 0.022 285);
+  --color-rule-2: oklch(36% 0.024 285);
+  --color-accent: oklch(66% 0.14 345);
+  --color-accent-ink: oklch(15% 0.02 300);
+  --color-focus: oklch(76% 0.16 350);
 }
 ```
 
@@ -464,15 +479,15 @@ file is a portable copy for design tooling and reuse.
 
 ```css
 @theme {
-  --color-paper: oklch(97.5% 0.006 55);
-  --color-paper-2: oklch(95.2% 0.008 55);
-  --color-paper-3: oklch(92.5% 0.009 55);
-  --color-ink: oklch(19% 0.01 35);
-  --color-ink-2: oklch(31% 0.01 35);
-  --color-muted: oklch(45% 0.01 45);
-  --color-rule: oklch(85.5% 0.008 50);
-  --color-accent: oklch(53% 0.17 32);
-  --color-focus: oklch(55% 0.2 32);
+  --color-paper: oklch(97% 0.006 255);
+  --color-paper-2: oklch(94.5% 0.009 255);
+  --color-paper-3: oklch(91.5% 0.012 255);
+  --color-ink: oklch(21% 0.028 315);
+  --color-ink-2: oklch(35% 0.022 305);
+  --color-muted: oklch(47% 0.018 295);
+  --color-rule: oklch(84% 0.012 260);
+  --color-accent: oklch(46% 0.16 345);
+  --color-focus: oklch(62% 0.19 350);
   --font-display: 'Space Grotesk', sans-serif;
   --font-body: 'Space Grotesk', sans-serif;
   --font-marketing-heading: 'Lora', serif;
@@ -496,16 +511,16 @@ file is a portable copy for design tooling and reuse.
 {
   "$schema": "https://design-tokens.github.io/community-group/format/",
   "color": {
-    "paper": { "$value": "oklch(97.5% 0.006 55)", "$type": "color" },
-    "paper-2": { "$value": "oklch(95.2% 0.008 55)", "$type": "color" },
-    "paper-3": { "$value": "oklch(92.5% 0.009 55)", "$type": "color" },
-    "ink": { "$value": "oklch(19% 0.01 35)", "$type": "color" },
-    "ink-2": { "$value": "oklch(31% 0.01 35)", "$type": "color" },
-    "muted": { "$value": "oklch(45% 0.01 45)", "$type": "color" },
-    "rule": { "$value": "oklch(85.5% 0.008 50)", "$type": "color" },
-    "accent": { "$value": "oklch(53% 0.17 32)", "$type": "color" },
-    "accent-ink": { "$value": "oklch(97.5% 0.006 55)", "$type": "color" },
-    "focus": { "$value": "oklch(55% 0.2 32)", "$type": "color" }
+    "paper": { "$value": "oklch(97% 0.006 255)", "$type": "color" },
+    "paper-2": { "$value": "oklch(94.5% 0.009 255)", "$type": "color" },
+    "paper-3": { "$value": "oklch(91.5% 0.012 255)", "$type": "color" },
+    "ink": { "$value": "oklch(21% 0.028 315)", "$type": "color" },
+    "ink-2": { "$value": "oklch(35% 0.022 305)", "$type": "color" },
+    "muted": { "$value": "oklch(47% 0.018 295)", "$type": "color" },
+    "rule": { "$value": "oklch(84% 0.012 260)", "$type": "color" },
+    "accent": { "$value": "oklch(46% 0.16 345)", "$type": "color" },
+    "accent-ink": { "$value": "oklch(98% 0.004 255)", "$type": "color" },
+    "focus": { "$value": "oklch(62% 0.19 350)", "$type": "color" }
   },
   "font": {
     "display": { "$value": "Space Grotesk, sans-serif", "$type": "fontFamily" },
@@ -526,28 +541,28 @@ file is a portable copy for design tooling and reuse.
 
 ```css
 :root {
-  --background: 97.5% 0.006 55;
-  --foreground: 19% 0.01 35;
-  --primary: 53% 0.17 32;
-  --primary-foreground: 97.5% 0.006 55;
-  --muted: 92.5% 0.009 55;
-  --muted-foreground: 45% 0.01 45;
-  --border: 85.5% 0.008 50;
-  --input: 77% 0.01 48;
-  --ring: 55% 0.2 32;
+  --background: 97% 0.006 255;
+  --foreground: 21% 0.028 315;
+  --primary: 46% 0.16 345;
+  --primary-foreground: 98% 0.004 255;
+  --muted: 91.5% 0.012 255;
+  --muted-foreground: 47% 0.018 295;
+  --border: 84% 0.012 260;
+  --input: 76% 0.015 260;
+  --ring: 62% 0.19 350;
   --radius: 0.5rem;
 }
 
 .dark {
-  --background: 14.5% 0.008 35;
-  --foreground: 94% 0.008 55;
-  --primary: 70% 0.14 32;
-  --primary-foreground: 16% 0.01 35;
-  --muted: 22% 0.01 35;
-  --muted-foreground: 68% 0.008 50;
-  --border: 29% 0.01 35;
-  --input: 36% 0.01 35;
-  --ring: 72% 0.18 32;
+  --background: 14% 0.018 285;
+  --foreground: 94% 0.008 255;
+  --primary: 66% 0.14 345;
+  --primary-foreground: 15% 0.02 300;
+  --muted: 22% 0.022 285;
+  --muted-foreground: 68% 0.014 275;
+  --border: 29% 0.022 285;
+  --input: 36% 0.024 285;
+  --ring: 76% 0.16 350;
 }
 ```
 

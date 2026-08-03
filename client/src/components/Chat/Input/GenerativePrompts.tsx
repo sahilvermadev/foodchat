@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { ArrowUpRight } from 'lucide-react';
 import { createSpecStreamCompiler, resolveAction } from '@json-render/core';
 import { useRecoilValue } from 'recoil';
 import {
@@ -227,22 +228,26 @@ function SuggestionLink({
       }}
       className={cn(
         'bg-surface-secondary/60 group inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border border-border-light px-3 py-2 text-left transition-colors duration-150',
-        'md:mx-auto md:block md:min-h-0 md:w-full md:max-w-xl md:whitespace-normal md:rounded-none md:border-0 md:bg-transparent md:px-0 md:py-0 dark:md:bg-transparent',
-        'hover:bg-surface-hover md:hover:bg-transparent md:hover:underline md:hover:decoration-surface-submit md:hover:underline-offset-4',
-        'focus-visible:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary md:focus-visible:bg-transparent',
-        'active:bg-surface-active md:active:bg-transparent',
+        'min-[769px]:relative min-[769px]:mx-auto min-[769px]:block min-[769px]:min-h-0 min-[769px]:w-full min-[769px]:max-w-xl min-[769px]:whitespace-normal min-[769px]:rounded-none min-[769px]:border-0 min-[769px]:border-b min-[769px]:border-border-light min-[769px]:bg-transparent min-[769px]:py-4 min-[769px]:pe-8 min-[769px]:ps-0 dark:min-[769px]:bg-transparent',
+        'min-[769px]:hover:bg-surface-hover/50 hover:bg-surface-hover',
+        'focus-visible:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary min-[769px]:focus-visible:bg-transparent',
+        'active:bg-surface-active min-[769px]:active:bg-transparent',
         disabled && 'cursor-not-allowed opacity-50 hover:no-underline',
       )}
     >
-      <span className="hidden text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary md:mb-1 md:block">
+      <span className="hidden text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary min-[769px]:mb-1 min-[769px]:block">
         {useTitleLabel ? title : slotLabels[element.props.slot]}
       </span>
-      <span className="block text-[11px] font-medium leading-4 text-text-secondary transition-colors duration-150 group-hover:text-text-primary md:hidden">
+      <span className="block min-w-0 text-[11px] font-medium leading-4 text-text-secondary transition-colors duration-150 group-hover:text-text-primary min-[769px]:text-sm min-[769px]:font-semibold min-[769px]:leading-5 min-[769px]:text-text-primary">
         {title}
       </span>
-      <span className="mt-1 hidden min-w-0 text-[14px] leading-6 text-text-secondary transition-colors duration-150 group-hover:text-text-primary md:block">
+      <span className="mt-1 hidden min-w-0 text-[13px] leading-5 text-text-secondary transition-colors duration-150 group-hover:text-text-primary min-[769px]:block">
         {text}
       </span>
+      <ArrowUpRight
+        className="absolute end-1 top-1/2 hidden size-4 -translate-y-1/2 text-text-tertiary transition-[transform,color] duration-150 group-hover:translate-x-0.5 group-hover:text-surface-submit min-[769px]:block"
+        aria-hidden="true"
+      />
     </button>
   );
 }
@@ -268,12 +273,12 @@ function PromptSkeleton() {
       {[0, 1, 2].map((index) => (
         <div
           key={index}
-          className="h-8 w-20 rounded-full border border-black/10 bg-black/[0.02] px-2.5 py-1.5 dark:border-white/10 dark:bg-white/[0.025] md:h-auto md:w-full md:max-w-xl md:rounded-none md:border-0 md:bg-transparent md:px-0 md:py-0 dark:md:bg-transparent xl:max-w-none"
+          className="h-8 w-20 rounded-full border border-border-light bg-surface-secondary px-2.5 py-1.5 min-[769px]:h-auto min-[769px]:w-full min-[769px]:max-w-xl min-[769px]:rounded-none min-[769px]:border-0 min-[769px]:border-b min-[769px]:border-border-light min-[769px]:bg-transparent min-[769px]:px-0 min-[769px]:py-4 xl:max-w-none"
           aria-hidden="true"
         >
-          <span className="mx-auto block h-3 w-16 rounded-full bg-black/10 dark:bg-gray-400/10 md:mx-0 md:mb-2 md:h-2 md:w-12" />
-          <span className="hidden h-3 w-full rounded-full bg-black/10 dark:bg-gray-400/10 md:block" />
-          <span className="mt-2 hidden h-3 w-4/5 rounded-full bg-black/10 dark:bg-gray-400/10 md:block" />
+          <span className="mx-auto block h-3 w-16 rounded-full bg-surface-tertiary min-[769px]:mx-0 min-[769px]:mb-2 min-[769px]:h-2 min-[769px]:w-12" />
+          <span className="hidden h-3 w-full rounded-full bg-surface-tertiary min-[769px]:block" />
+          <span className="mt-2 hidden h-3 w-4/5 rounded-full bg-surface-tertiary min-[769px]:block" />
         </div>
       ))}
     </PromptRail>

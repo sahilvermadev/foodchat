@@ -26,6 +26,8 @@ import type {
   SavedRecipesQuery,
   SavedRecipesResponse,
   SavedRecipeFacetsResponse,
+  PublicProfile,
+  PublicRecipe,
   SaveRecipeRequest,
   SocialImport,
   SocialImportDraftResponse,
@@ -179,6 +181,24 @@ export function getRecipeFacets(
 
 export function getRecipe(recipeId: string): Promise<SavedRecipe> {
   return request.get(endpoints.recipe(recipeId));
+}
+
+export function getPublicRecipe(recipeId: string): Promise<PublicRecipe> {
+  return request.get(endpoints.publicRecipe(recipeId));
+}
+
+export function getPublicProfile(
+  userId: string,
+  params: { limit?: number; cursor?: string } = {},
+): Promise<PublicProfile> {
+  const query = new URLSearchParams();
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.cursor) query.set('cursor', params.cursor);
+  return request.get(endpoints.publicProfile(userId, query.toString()));
+}
+
+export function copyPublicRecipe(recipeId: string): Promise<SavedRecipe> {
+  return request.post(endpoints.copyPublicRecipe(recipeId), {});
 }
 
 export function getSavedRecipeByDraft(draftId: string): Promise<SavedRecipe> {

@@ -6,6 +6,7 @@ import type {
   RecipeFacetOption,
   PublicRecipe,
   PublicRecipeAuthor,
+  PublicProfile,
   PublicRecipeSummary,
   PublicRecipesResponse,
   SavedRecipe,
@@ -610,7 +611,7 @@ function illustrationMediaUrl(recipe: ISavedRecipe, thumbnail = false): string {
 function publicIllustrationMediaUrl(recipe: ISavedRecipe, thumbnail = false): string {
   const version = recipe.updatedAt?.getTime() ?? 0;
   const variant = thumbnail ? '&variant=thumbnail' : '';
-  return `/api/recipes/explore/${encodeURIComponent(idOf(recipe))}/illustration?v=${version}${variant}`;
+  return `/api/public/recipes/${encodeURIComponent(idOf(recipe))}/illustration?v=${version}${variant}`;
 }
 
 function hasIllustration(recipe: ISavedRecipe): boolean {
@@ -694,6 +695,7 @@ function serializeSavedRecipe(recipe: ISavedRecipe, thumbnail = false): SavedRec
     categorizationStatus: recipe.categorizationStatus,
     categorizationAttempts: recipe.categorizationAttempts ?? 0,
     categorizationVersion: recipe.categorizationVersion,
+    ...(recipe.lineage ? { lineage: recipe.lineage } : {}),
     createdAt: iso(recipe.createdAt),
     updatedAt: iso(recipe.updatedAt),
   };
@@ -899,6 +901,7 @@ function serializeSavedRecipeSummary(recipe: ISavedRecipe): SavedRecipeSummary {
     categorizationStatus: recipe.categorizationStatus,
     categorizationAttempts: recipe.categorizationAttempts ?? 0,
     categorizationVersion: recipe.categorizationVersion,
+    ...(recipe.lineage ? { lineage: recipe.lineage } : {}),
     ...(servings ? { servings } : {}),
     ...(recipeYield ? { yield: recipeYield } : {}),
     ...(totalMinutes ? { totalMinutes } : {}),
@@ -923,7 +926,10 @@ function serializePublicRecipeSummary(
     illustrationStatus: summary.illustrationStatus,
     ...(summary.categorization ? { categorization: summary.categorization } : {}),
     ...(summary.servings ? { servings: summary.servings } : {}),
+    ...(summary.totalMinutes ? { totalMinutes: summary.totalMinutes } : {}),
     ...(summary.yield ? { yield: summary.yield } : {}),
+    ...(summary.sourceUrl ? { sourceUrl: summary.sourceUrl } : {}),
+    ...(summary.lineage ? { lineage: summary.lineage } : {}),
     updatedAt: summary.updatedAt,
     author,
   };
@@ -942,11 +948,9 @@ function publicAuthor(
   };
 }
 
-async function findPublicAuthor(viewer: string, owner: string): Promise<PublicRecipeAuthor | null> {
-  if (viewer === owner) return null;
-  const user = await userModel()
-    .findOne({ _id: owner, publicProfile: true })
-    .select('_id name username avatar');
+async function findPublicAuthor(owner: string): Promise<PublicRecipeAuthor | null> {
+  if (!mongoose.Types.ObjectId.isValid(owner)) return null;
+  const user = await userModel().findById(owner).select('_id name username avatar');
   return user ? publicAuthor(user) : null;
 }
 
@@ -1492,20 +1496,10 @@ export async function getRecipeIllustration(
     : importedExternalIllustration.illustration;
 }
 
-export async function listPublicRecipes(
-  viewer: string,
-  requestedLimit = 8,
-): Promise<PublicRecipesResponse> {
+export async function listPublicRecipes(requestedLimit = 8): Promise<PublicRecipesResponse> {
   const limit = Math.min(Math.max(Number(requestedLimit) || 8, 1), 20);
-  const users = await userModel()
-    .find({ _id: { $ne: viewer }, publicProfile: true })
-    .select('_id name username avatar')
-    .limit(100);
-  const authors = new Map(users.map((user) => [String(user._id), publicAuthor(user)]));
-  if (!authors.size) return { recipes: [] };
-
   const recipes = await model()
-    .find({ user: { $in: [...authors.keys()] }, documentType: 'recipe' })
+    .find({ documentType: 'recipe' })
     .select(
       [
         'user',
@@ -1519,7 +1513,10 @@ export async function listPublicRecipes(
         'categorizationVersion',
         'recipe.title',
         'recipe.servings',
+        'recipe.timing.totalMinutes',
         'documentMarkdown',
+        'sourceUrl',
+        'lineage',
         'saveList',
         'createdAt',
         'updatedAt',
@@ -1527,6 +1524,12 @@ export async function listPublicRecipes(
     )
     .sort({ updatedAt: -1 })
     .limit(limit);
+
+  const ownerIds = [...new Set(recipes.map((recipe) => recipe.user))];
+  const users = await userModel()
+    .find({ _id: { $in: ownerIds } })
+    .select('_id name username avatar');
+  const authors = new Map(users.map((user) => [String(user._id), publicAuthor(user)]));
 
   return {
     recipes: recipes.flatMap((recipe) => {
@@ -1536,15 +1539,13 @@ export async function listPublicRecipes(
   };
 }
 
-export async function getPublicRecipe(
-  viewer: string,
-  recipeId: string,
-): Promise<PublicRecipe | null> {
+export async function getPublicRecipe(recipeId: string): Promise<PublicRecipe | null> {
+  if (!mongoose.Types.ObjectId.isValid(recipeId)) return null;
   const recipe = await model()
     .findById(recipeId)
     .select('-illustrationUrl -illustrationData -illustrationThumbnail');
   if (!recipe) return null;
-  const author = await findPublicAuthor(viewer, recipe.user);
+  const author = await findPublicAuthor(recipe.user);
   if (!author) return null;
   const summary = serializePublicRecipeSummary(recipe, author);
   const serialized = serializeSavedRecipe(recipe);
@@ -1556,13 +1557,124 @@ export async function getPublicRecipe(
 }
 
 export async function getPublicRecipeIllustration(
-  viewer: string,
   recipeId: string,
   thumbnail = false,
 ): Promise<IllustrationMedia | null> {
+  if (!mongoose.Types.ObjectId.isValid(recipeId)) return null;
   const recipe = await model().findById(recipeId).select('user');
-  if (!recipe || !(await findPublicAuthor(viewer, recipe.user))) return null;
+  if (!recipe || !(await findPublicAuthor(recipe.user))) return null;
   return getRecipeIllustration(recipe.user, recipeId, thumbnail);
+}
+
+export async function getPublicProfile(
+  ownerId: string,
+  requestedLimit = 24,
+  cursor?: string,
+): Promise<PublicProfile | null> {
+  const author = await findPublicAuthor(ownerId);
+  if (!author) return null;
+  const limit = Math.min(Math.max(Number(requestedLimit) || 24, 1), 50);
+  const offset = Number(cursor?.replace(/^offset:/, '')) || 0;
+  const filter = { user: ownerId, documentType: 'recipe' };
+  const [recipes, total] = await Promise.all([
+    model()
+      .find(filter)
+      .select(
+        [
+          'user',
+          'title',
+          'documentType',
+          'shortDescription',
+          'illustrationUrl',
+          'illustrationStatus',
+          'categorization',
+          'categorizationStatus',
+          'categorizationVersion',
+          'recipe.title',
+          'recipe.servings',
+          'recipe.timing.totalMinutes',
+          'documentMarkdown',
+          'sourceUrl',
+          'lineage',
+          'createdAt',
+          'updatedAt',
+        ].join(' '),
+      )
+      .sort({ updatedAt: -1, _id: -1 })
+      .skip(offset)
+      .limit(limit),
+    model().countDocuments(filter),
+  ]);
+  const nextOffset = offset + recipes.length;
+  return {
+    author,
+    recipes: recipes.map((recipe) => serializePublicRecipeSummary(recipe, author)),
+    total,
+    ...(nextOffset < total ? { nextCursor: `offset:${nextOffset}` } : {}),
+  };
+}
+
+export async function copyPublicRecipe(
+  user: string,
+  recipeId: string,
+): Promise<SavedRecipe | null> {
+  if (!mongoose.Types.ObjectId.isValid(recipeId)) return null;
+  const source = await model().findById(recipeId);
+  if (!source) return null;
+  if (source.user === user) return serializeSavedRecipe(source);
+
+  const existing = await model().findOne({ user, 'lineage.parentRecipeId': recipeId });
+  if (existing) return serializeSavedRecipe(existing);
+
+  const author = await findPublicAuthor(source.user);
+  if (!author) return null;
+  const copiedAt = new Date().toISOString();
+  try {
+    const copy = await model().create({
+      user,
+      title: source.title,
+      documentType: source.documentType ?? 'recipe',
+      shortDescription: source.shortDescription ?? '',
+      documentMarkdown: source.documentMarkdown,
+      saveList: 'want_to_cook',
+      collections: [],
+      favorite: false,
+      pinned: false,
+      personalNotes: '',
+      ...(source.recipe ? { recipe: source.recipe } : {}),
+      ...(source.sourceUrl ? { sourceUrl: source.sourceUrl } : {}),
+      ...(source.illustrationUrl ? { illustrationUrl: source.illustrationUrl } : {}),
+      ...(source.illustrationData ? { illustrationData: source.illustrationData } : {}),
+      ...(source.illustrationContentType
+        ? { illustrationContentType: source.illustrationContentType }
+        : {}),
+      ...(source.illustrationThumbnail
+        ? { illustrationThumbnail: source.illustrationThumbnail }
+        : {}),
+      illustrationStatus: source.illustrationStatus ?? 'pending',
+      ...(source.illustrationModel ? { illustrationModel: source.illustrationModel } : {}),
+      ...(source.illustrationSource ? { illustrationSource: source.illustrationSource } : {}),
+      ...(source.illustrationSourceVersion
+        ? { illustrationSourceVersion: source.illustrationSourceVersion }
+        : {}),
+      ...(source.categorization ? { categorization: source.categorization } : {}),
+      categorizationStatus: source.categorizationStatus,
+      categorizationAttempts: 0,
+      categorizationVersion: source.categorizationVersion,
+      lineage: {
+        parentRecipeId: recipeId,
+        rootRecipeId: source.lineage?.rootRecipeId ?? recipeId,
+        parentAuthor: author,
+        copiedAt,
+        sourceVersion: source.categorizationVersion,
+      },
+    });
+    return serializeSavedRecipe(copy);
+  } catch (error) {
+    if ((error as { code?: number }).code !== 11000) throw error;
+    const duplicate = await model().findOne({ user, 'lineage.parentRecipeId': recipeId });
+    return duplicate ? serializeSavedRecipe(duplicate) : null;
+  }
 }
 
 export async function listRecipes(

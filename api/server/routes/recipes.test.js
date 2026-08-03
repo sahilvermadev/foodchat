@@ -148,13 +148,9 @@ describe('recipes routes', () => {
       .expect('Content-Type', 'image/webp')
       .expect(200);
 
-    expect(recipesApi.listPublicRecipes).toHaveBeenCalledWith('auth-user', '6');
-    expect(recipesApi.getPublicRecipe).toHaveBeenCalledWith('auth-user', 'public-recipe-1');
-    expect(recipesApi.getPublicRecipeIllustration).toHaveBeenCalledWith(
-      'auth-user',
-      'public-recipe-1',
-      true,
-    );
+    expect(recipesApi.listPublicRecipes).toHaveBeenCalledWith('6');
+    expect(recipesApi.getPublicRecipe).toHaveBeenCalledWith('public-recipe-1');
+    expect(recipesApi.getPublicRecipeIllustration).toHaveBeenCalledWith('public-recipe-1', true);
   });
 
   test('accepts saved recipe list choices', async () => {

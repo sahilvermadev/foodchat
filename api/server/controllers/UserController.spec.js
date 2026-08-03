@@ -108,11 +108,7 @@ afterEach(async () => {
   }
 });
 
-const {
-  deleteUserController,
-  dismissTourController,
-  updatePublicProfileController,
-} = require('./UserController');
+const { deleteUserController, dismissTourController } = require('./UserController');
 const { Group } = require('~/db/models');
 const { deleteConvos } = require('~/models');
 
@@ -278,38 +274,5 @@ describe('dismissTourController', () => {
 
     expect(mockRes.status).toHaveBeenCalledWith(500);
     expect(mockRes.json).toHaveBeenCalledWith({ message: 'Error dismissing tour' });
-  });
-});
-
-describe('updatePublicProfileController', () => {
-  const mockRes = {
-    status: jest.fn().mockReturnThis(),
-    json: jest.fn().mockReturnThis(),
-  };
-
-  beforeEach(() => jest.clearAllMocks());
-
-  it('requires an explicit boolean and persists the privacy choice', async () => {
-    const { updateUser } = require('~/models');
-    updateUser.mockResolvedValue({ publicProfile: true });
-
-    await updatePublicProfileController(
-      { user: { id: 'profile-user' }, body: { publicProfile: true } },
-      mockRes,
-    );
-
-    expect(updateUser).toHaveBeenCalledWith('profile-user', { publicProfile: true });
-    expect(mockRes.status).toHaveBeenCalledWith(200);
-    expect(mockRes.json).toHaveBeenCalledWith({ publicProfile: true });
-  });
-
-  it('rejects ambiguous profile visibility values', async () => {
-    await updatePublicProfileController(
-      { user: { id: 'profile-user' }, body: { publicProfile: 'yes' } },
-      mockRes,
-    );
-
-    expect(mockRes.status).toHaveBeenCalledWith(400);
-    expect(require('~/models').updateUser).not.toHaveBeenCalled();
   });
 });

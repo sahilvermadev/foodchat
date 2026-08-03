@@ -35,7 +35,7 @@ import {
   useRecipesInfiniteQuery,
   useUpdateSavedRecipeMutation,
 } from '~/data-provider';
-import { useLocalize } from '~/hooks';
+import { useAuthContext, useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import { ProtectedImage } from '~/components/ui';
 import {
@@ -51,6 +51,8 @@ import {
   collectionSecondaryAction,
 } from './collection';
 import { isRecipeCategorizationActive } from './library';
+import ShareAction from './ShareAction';
+import { publicProfilePath } from './public';
 
 type FilterKey =
   | 'documentType'
@@ -245,6 +247,7 @@ function recipeSaveList(recipe: SavedRecipeSummary): SavedRecipeList {
 
 export default function RecipeLibrary() {
   const localize = useLocalize();
+  const { user } = useAuthContext();
   const { showToast } = useToastContext();
   const [query, setQuery] = useState('');
   const [saveListFilter, setSaveListFilter] = useState<SaveListFilter>('all');
@@ -353,22 +356,39 @@ export default function RecipeLibrary() {
         <span className="text-[1.05rem] font-medium tracking-[-0.04em] text-text-primary">
           {localize('com_recipes_library')}
         </span>
+        {user?.id ? (
+          <ShareAction
+            title={user.name || localize('com_public_my_profile')}
+            url={publicProfilePath(user)}
+            showLabel={false}
+            className="absolute bottom-1 right-2 inline-flex size-11 items-center justify-center rounded-control text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+          />
+        ) : null}
       </div>
 
       <div className={collectionPageScroll}>
         <div className={collectionPageContent}>
           <header className="pt-1">
-            <div className="flex min-w-0 items-baseline gap-3">
-              <h1 id="recipe-library-title" className={collectionPageTitle}>
-                {localize('com_recipes_library')}
-              </h1>
-              {recipesQuery.isLoading ? (
-                <SkeletonBlock className="hidden h-4 w-24 sm:block" />
-              ) : (
-                <span className="hidden text-sm font-normal text-text-secondary sm:block">
-                  {recipeCountLabel}
-                </span>
-              )}
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <div className="flex min-w-0 items-baseline gap-3">
+                <h1 id="recipe-library-title" className={collectionPageTitle}>
+                  {localize('com_recipes_library')}
+                </h1>
+                {recipesQuery.isLoading ? (
+                  <SkeletonBlock className="hidden h-4 w-24 sm:block" />
+                ) : (
+                  <span className="hidden text-sm font-normal text-text-secondary sm:block">
+                    {recipeCountLabel}
+                  </span>
+                )}
+              </div>
+              {user?.id ? (
+                <ShareAction
+                  title={user.name || localize('com_public_my_profile')}
+                  url={publicProfilePath(user)}
+                  className="hidden min-h-11 items-center gap-2 rounded-control border border-border-light px-3 text-sm font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary sm:inline-flex"
+                />
+              ) : null}
             </div>
             <p className="mt-2 hidden text-sm text-text-secondary sm:block">
               {localize('com_recipes_library_subtitle')}

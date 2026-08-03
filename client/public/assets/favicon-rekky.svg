@@ -1,0 +1,24 @@
+<!-- Hallmark · component: favicon · genre: playful · theme: Rekky locked system
+     states: light surface · dark surface · browser tab · installed app · maskable crop
+     contrast: pass · silhouette: pass at 16px -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>Rekky stirred r</title>
+  <rect width="512" height="512" rx="112" fill="#1d1421" />
+  <path
+    d="M176 370V181m0 49c18-74 64-112 138-92"
+    fill="none"
+    stroke="#f2f5f9"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="58"
+  />
+  <path
+    d="M216 333c45 61 135 75 200 9"
+    fill="none"
+    stroke="#cd6ca6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="42"
+  />
+  <circle cx="416" cy="342" r="21" fill="#f2f5f9" />
+</svg>

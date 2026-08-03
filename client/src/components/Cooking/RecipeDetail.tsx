@@ -21,6 +21,7 @@ import { useLocalize, useNewConvo } from '~/hooks';
 import RecipeMetrics from './Metrics';
 import RecipeDocument, { RecipeDetailsDisclosure } from './RecipeDocument';
 import RecipeHeaderAction from './RecipeHeaderAction';
+import ShareAction from './ShareAction';
 import RecipeInstructions, { hasDisplayableInstructions } from './RecipeInstructions';
 import StructuredIngredients, { hasDisplayableIngredients } from './StructuredIngredients';
 import {
@@ -249,6 +250,19 @@ export default function RecipeDetail() {
                         : 'com_recipes_save_list_want_to_cook',
                     )}
                   </span>
+                  {recipe.lineage ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <Link
+                        to={`/r/${recipe.lineage.parentRecipeId}`}
+                        className="hover:text-text-primary hover:underline"
+                      >
+                        {localize('com_public_adapted_from', {
+                          name: recipe.lineage.parentAuthor.name,
+                        })}
+                      </Link>
+                    </>
+                  ) : null}
                   {updatedAt ? (
                     <>
                       <span aria-hidden="true">·</span>
@@ -291,6 +305,12 @@ export default function RecipeDetail() {
                   >
                     {localize('com_recipes_favorites')}
                   </RecipeHeaderAction>
+                  <ShareAction
+                    title={recipe.title}
+                    url={`/r/${recipe._id}`}
+                    showLabel={false}
+                    className="inline-flex size-11 items-center justify-center rounded-control border border-border-light text-text-secondary transition-colors hover:border-border-medium hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"
+                  />
                   <details className="group/actions relative">
                     <summary
                       className="inline-flex size-11 list-none items-center justify-center rounded-control border border-border-light text-text-secondary transition-colors marker:content-none hover:border-border-medium hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px"

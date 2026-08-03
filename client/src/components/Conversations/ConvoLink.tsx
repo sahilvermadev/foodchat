@@ -24,9 +24,7 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
     <div
       className={cn(
         'flex grow items-center gap-2.5 overflow-hidden rounded-md px-2 text-[13px] leading-8',
-        isActiveConvo || isPopoverActive
-          ? 'text-[#c1121f] dark:text-[#e63946]'
-          : 'text-text-primary',
+        isActiveConvo || isPopoverActive ? 'text-surface-submit' : 'text-text-primary',
       )}
       title={title ?? undefined}
       aria-current={isActiveConvo ? 'page' : undefined}
@@ -36,7 +34,7 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
         className={cn(
           'flex shrink-0 items-center justify-center text-text-tertiary transition-colors',
           isActiveConvo || isPopoverActive
-            ? 'text-[#c1121f] dark:text-[#e63946]'
+            ? 'text-surface-submit'
             : 'group-hover:text-text-secondary',
         )}
       >
@@ -61,8 +59,8 @@ const ConvoLink: React.FC<ConvoLinkProps> = ({
         className={cn(
           'pointer-events-none absolute bottom-0.5 right-0.5 top-0.5 w-20 rounded-r-md bg-gradient-to-l',
           isActiveConvo || isPopoverActive
-            ? 'from-[#fff0f8] dark:from-[#24151f]'
-            : 'from-[#f7f4ed] from-0% to-transparent group-hover:from-[#f7f4ed] group-hover:from-40% dark:from-surface-primary-alt dark:group-hover:from-surface-active-alt',
+            ? 'from-surface-active'
+            : 'from-surface-primary-alt from-0% to-transparent group-hover:from-surface-hover group-hover:from-40%',
         )}
         aria-hidden="true"
       />

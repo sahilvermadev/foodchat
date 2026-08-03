@@ -5,7 +5,9 @@ import { createModels } from '@librechat/data-schemas';
 import type { StructuredRecipe } from 'librechat-data-provider';
 
 import {
+  copyPublicRecipe,
   deleteSavedRecipe,
+  getPublicProfile,
   getPublicRecipe,
   getRecipe,
   getRecipeFacets,
@@ -421,35 +423,22 @@ describe('saved recipe title integrity', () => {
 });
 
 describe('public recipe discovery', () => {
-  test('only exposes recipes from other users who explicitly publish their profile', async () => {
+  test('exposes safe public recipes and profiles without a profile visibility gate', async () => {
     const User = mongoose.models.User;
-    const [viewer, publicCook, privateCook] = await User.create([
-      {
-        email: 'viewer@example.com',
-        provider: 'local',
-        name: 'Viewer',
-        publicProfile: true,
-      },
+    const [publicCook, privateCook] = await User.create([
       {
         email: 'public@example.com',
         provider: 'local',
         name: 'Mina',
         username: 'mina-cooks',
-        publicProfile: true,
       },
       {
         email: 'private@example.com',
         provider: 'local',
         name: 'Private cook',
-        publicProfile: false,
       },
     ]);
 
-    const viewerRecipe = await saveRecipe(String(viewer._id), {
-      title: 'Viewer soup',
-      documentMarkdown: '# Viewer soup\n\n## Ingredients\n- Water\n\n## Instructions\n1. Cook.',
-      recipe: recipe('Viewer soup'),
-    });
     const publicRecipe = await saveRecipe(String(publicCook._id), {
       title: 'Mina tea',
       documentMarkdown: markdown,
@@ -461,17 +450,84 @@ describe('public recipe discovery', () => {
       recipe: recipe('Private tea'),
     });
 
-    const result = await listPublicRecipes(String(viewer._id), 8);
+    const result = await listPublicRecipes(8);
 
-    expect(result.recipes.map((item) => item._id)).toEqual([publicRecipe._id]);
-    expect(result.recipes[0]?.author).toMatchObject({ name: 'Mina', username: 'mina-cooks' });
-    expect(result.recipes.map((item) => item._id)).not.toContain(viewerRecipe._id);
-    expect(result.recipes.map((item) => item._id)).not.toContain(privateRecipe._id);
-    await expect(getPublicRecipe(String(viewer._id), publicRecipe._id)).resolves.toMatchObject({
+    expect(result.recipes.map((item) => item._id)).toEqual(
+      expect.arrayContaining([privateRecipe._id, publicRecipe._id]),
+    );
+    expect(result.recipes).toHaveLength(2);
+    await expect(getPublicRecipe(publicRecipe._id)).resolves.toMatchObject({
       _id: publicRecipe._id,
       author: { name: 'Mina' },
     });
-    await expect(getPublicRecipe(String(viewer._id), privateRecipe._id)).resolves.toBeNull();
+    await expect(getPublicRecipe(privateRecipe._id)).resolves.toMatchObject({
+      _id: privateRecipe._id,
+      author: { name: 'Private cook' },
+    });
+    await expect(getPublicProfile(String(publicCook._id))).resolves.toMatchObject({
+      author: { name: 'Mina' },
+      total: 1,
+      recipes: [{ _id: publicRecipe._id, servings: 2, totalMinutes: 15 }],
+    });
+  });
+
+  test('copies public content into an independently owned recipe and resets personal state', async () => {
+    const User = mongoose.models.User;
+    const [owner, recipient, nextRecipient] = await User.create([
+      { email: 'copy-owner@example.com', provider: 'local', name: 'Owner' },
+      { email: 'copy-recipient@example.com', provider: 'local', name: 'Recipient' },
+      { email: 'copy-next@example.com', provider: 'local', name: 'Next recipient' },
+    ]);
+    const original = await saveRecipe(String(owner._id), {
+      title: 'Shared tea',
+      documentMarkdown: markdown,
+      recipe: recipe('Shared tea'),
+    });
+    await updateSavedRecipe(String(owner._id), original._id, {
+      favorite: true,
+      pinned: true,
+      personalNotes: 'Private note',
+      collections: ['Private collection'],
+      workspaceState: {
+        servings: 4,
+        unitMode: 'metric',
+        checkedIngredientIds: ['ingredient-1'],
+        timers: [],
+      },
+    });
+
+    const copied = await copyPublicRecipe(String(recipient._id), original._id);
+    const repeated = await copyPublicRecipe(String(recipient._id), original._id);
+
+    expect(copied).toMatchObject({
+      user: String(recipient._id),
+      favorite: false,
+      pinned: false,
+      collections: [],
+      lineage: {
+        parentRecipeId: original._id,
+        rootRecipeId: original._id,
+        parentAuthor: { id: String(owner._id), name: 'Owner' },
+      },
+    });
+    expect(copied?.personalNotes).toBeUndefined();
+    expect(copied?.workspaceState).toBeUndefined();
+    expect(repeated?._id).toBe(copied?._id);
+
+    await expect(
+      updateSavedRecipe(String(recipient._id), original._id, { title: 'Unauthorized edit' }),
+    ).resolves.toBeNull();
+    await updateSavedRecipe(String(recipient._id), copied?._id ?? '', { title: 'My tea' });
+    await expect(getRecipe(String(owner._id), original._id)).resolves.toMatchObject({
+      title: 'Thai Iced Tea',
+    });
+
+    const nextCopy = await copyPublicRecipe(String(nextRecipient._id), copied?._id ?? '');
+    expect(nextCopy?.lineage).toMatchObject({
+      parentRecipeId: copied?._id,
+      rootRecipeId: original._id,
+      parentAuthor: { id: String(recipient._id), name: 'Recipient' },
+    });
   });
 });
 

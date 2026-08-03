@@ -91,8 +91,8 @@ export default defineConfig(({ command }) => ({
         name: 'Rekky',
         short_name: 'Rekky',
         display: 'standalone',
-        background_color: '#000000',
-        theme_color: '#171217',
+        background_color: '#1d1421',
+        theme_color: '#1d1421',
         share_target: {
           action: 'imports/share',
           method: 'GET',
@@ -103,6 +103,12 @@ export default defineConfig(({ command }) => ({
           },
         },
         icons: [
+          {
+            src: 'assets/favicon-rekky.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any',
+          },
           {
             src: 'assets/favicon-rekky-32x32.png',
             sizes: '32x32',

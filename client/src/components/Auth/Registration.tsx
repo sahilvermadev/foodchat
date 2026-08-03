@@ -2,13 +2,12 @@ import { useForm } from 'react-hook-form';
 import React, { useContext, useState } from 'react';
 import { Turnstile } from '@marsidev/react-turnstile';
 import { ThemeContext, Spinner, Button, isDark } from '@librechat/client';
-import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useRegisterUserMutation } from 'librechat-data-provider/react-query';
-import { loginPage } from 'librechat-data-provider';
 import type { TRegisterUser, TError } from 'librechat-data-provider';
-import type { TLoginLayoutContext } from '~/common';
 import type { TranslationKeys } from '~/hooks';
 import { useLocalize } from '~/hooks';
+import { resolveAuthSuccessRedirect } from '~/utils';
 import usePublicLogin from '~/hooks/usePublicLogin';
 import { ErrorMessage } from './ErrorMessage';
 import {
@@ -18,13 +17,14 @@ import {
   authPrimaryButtonClass,
 } from './styles';
 import PasswordField from './PasswordField';
+import { AuthModeLink, useAuthFlow } from './flow';
 
 const Registration: React.FC = () => {
   const navigate = useNavigate();
   const localize = useLocalize();
   const { login } = usePublicLogin();
   const { theme } = useContext(ThemeContext);
-  const { startupConfig, startupConfigError, isFetching } = useOutletContext<TLoginLayoutContext>();
+  const { startupConfig, startupConfigError, isFetching } = useAuthFlow();
 
   const {
     watch,
@@ -59,7 +59,9 @@ const Registration: React.FC = () => {
           setCountdown((prevCountdown) => {
             if (prevCountdown <= 1) {
               clearInterval(timer);
-              navigate('/cook', { replace: true });
+              navigate(resolveAuthSuccessRedirect(new URLSearchParams(window.location.search)), {
+                replace: true,
+              });
               return 0;
             } else {
               return prevCountdown - 1;
@@ -233,9 +235,13 @@ const Registration: React.FC = () => {
 
           <p className="my-4 text-center text-sm font-light text-[var(--rekky-umber)] dark:text-[var(--rekky-cream-muted)]">
             {localize('com_auth_already_have_account')}{' '}
-            <a href={loginPage()} aria-label="Login" className={authInlineLinkClass}>
+            <AuthModeLink
+              mode="login"
+              ariaLabel={localize('com_auth_login')}
+              className={authInlineLinkClass}
+            >
               {localize('com_auth_login')}
-            </a>
+            </AuthModeLink>
           </p>
         </>
       )}

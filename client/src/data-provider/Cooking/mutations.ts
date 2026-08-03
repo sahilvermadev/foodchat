@@ -173,6 +173,17 @@ export const useSaveRecipeMutation = (): UseMutationResult<
   });
 };
 
+export const useCopyPublicRecipeMutation = (): UseMutationResult<SavedRecipe, unknown, string> => {
+  const queryClient = useQueryClient();
+  return useMutation([MutationKeys.copyPublicRecipe], {
+    mutationFn: (recipeId: string) => dataService.copyPublicRecipe(recipeId),
+    onSuccess: (recipe) => {
+      queryClient.setQueryData([QueryKeys.recipe, recipe._id], recipe);
+      queryClient.invalidateQueries([QueryKeys.recipes]);
+    },
+  });
+};
+
 export const useUpdateSavedRecipeMutation = (): UseMutationResult<
   SavedRecipe,
   unknown,

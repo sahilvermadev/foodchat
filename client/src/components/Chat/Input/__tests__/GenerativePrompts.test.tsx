@@ -131,7 +131,10 @@ describe('GenerativePrompts', () => {
 
     const quickPrompt = screen.getByRole('button', { name: /Quick lunch/i });
     expect(quickPrompt).toHaveClass('rounded-full', 'min-h-11', 'whitespace-nowrap');
-    expect(screen.getByText('Quick lunch')).toHaveClass('min-[769px]:hidden');
+    expect(screen.getByText('Quick lunch')).toHaveClass(
+      'min-[769px]:text-sm',
+      'min-[769px]:font-semibold',
+    );
     expect(screen.getByText(/Cook a quick lunch with what is ready/i)).toHaveClass(
       'hidden',
       'min-[769px]:block',

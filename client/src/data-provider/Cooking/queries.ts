@@ -13,6 +13,8 @@ import type {
   SavedRecipesQuery,
   SavedRecipesResponse,
   SavedRecipeFacetsResponse,
+  PublicProfile,
+  PublicRecipe,
   SocialImportJobsResponse,
   SocialPlaylistSubscriptionsResponse,
   SocialImportsQuery,
@@ -152,6 +154,35 @@ export const useRecipeQuery = (
     },
   );
 };
+
+export const usePublicRecipeQuery = (
+  recipeId: string | undefined,
+): QueryObserverResult<PublicRecipe> =>
+  useQuery<PublicRecipe>(
+    [QueryKeys.publicRecipe, recipeId],
+    () => dataService.getPublicRecipe(recipeId as string),
+    {
+      enabled: Boolean(recipeId),
+      retry: false,
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
+    },
+  );
+
+export const usePublicProfileQuery = (userId: string | undefined) =>
+  useInfiniteQuery<PublicProfile>({
+    queryKey: [QueryKeys.publicProfile, userId],
+    queryFn: ({ pageParam }) =>
+      dataService.getPublicProfile(userId as string, {
+        limit: 24,
+        cursor: pageParam?.toString(),
+      }),
+    enabled: Boolean(userId),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
+  });
 
 export const useSocialImportsQuery = (
   params: SocialImportsQuery,

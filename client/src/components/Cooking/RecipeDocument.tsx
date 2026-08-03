@@ -12,6 +12,7 @@ export type RecipeDetailGroup = {
 type RecipeDocumentProps = {
   actions?: ReactNode;
   children: ReactNode;
+  compactHero?: boolean;
   imageUrl?: string;
   metadata?: ReactNode;
   sourceLabel?: string;
@@ -24,6 +25,7 @@ type RecipeDocumentProps = {
 export default function RecipeDocument({
   actions,
   children,
+  compactHero = false,
   imageUrl,
   metadata,
   sourceLabel,
@@ -35,7 +37,13 @@ export default function RecipeDocument({
   return (
     <article className="mx-auto w-full max-w-[68rem]" data-testid="recipe-document">
       {imageUrl ? (
-        <div className="aspect-[16/7] overflow-hidden bg-surface-hover sm:rounded-card">
+        <div
+          className={
+            compactHero
+              ? 'h-[clamp(14rem,32vw,24rem)] overflow-hidden bg-surface-hover sm:rounded-card'
+              : 'aspect-[16/7] overflow-hidden bg-surface-hover sm:rounded-card'
+          }
+        >
           <ProtectedImage
             src={imageUrl}
             alt=""
@@ -49,21 +57,21 @@ export default function RecipeDocument({
         <header className="border-b border-border-light pb-7">
           <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <div className="flex min-w-0 items-start gap-2">
+              <div className="min-w-0">
                 <h1 className="rekky-title min-w-0 text-text-primary [overflow-wrap:anywhere]">
-                  {title}
+                  {title}{' '}
+                  {sourceUrl ? (
+                    <a
+                      href={sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={sourceLabel}
+                      className="ml-1 inline-flex size-9 translate-y-0.5 items-center justify-center rounded-control align-middle text-text-secondary transition-colors hover:bg-surface-hover hover:text-surface-submit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-1"
+                    >
+                      <ExternalLink className="size-4" aria-hidden="true" />
+                    </a>
+                  ) : null}
                 </h1>
-                {sourceUrl ? (
-                  <a
-                    href={sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={sourceLabel}
-                    className="mt-1 inline-flex size-11 shrink-0 items-center justify-center rounded-control text-text-secondary transition-colors hover:bg-surface-hover hover:text-surface-submit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring-primary active:translate-y-px sm:size-9"
-                  >
-                    <ExternalLink className="size-4" aria-hidden="true" />
-                  </a>
-                ) : null}
               </div>
               {metadata ? (
                 <div className="rekky-meta mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-text-secondary">

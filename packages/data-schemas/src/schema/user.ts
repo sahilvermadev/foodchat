@@ -140,11 +140,6 @@ const userSchema = new Schema<IUser>(
       },
       default: {},
     },
-    publicProfile: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
     favorites: {
       type: [
         {

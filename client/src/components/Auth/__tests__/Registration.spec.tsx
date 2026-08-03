@@ -159,6 +159,25 @@ test('renders registration form', () => {
   );
 });
 
+test('keeps the auth card stable while startup configuration loads', () => {
+  render(
+    <AuthLayout
+      startupConfig={null}
+      isFetching={true}
+      error={null}
+      startupConfigError={null}
+      header="Welcome back"
+      pathname="login"
+    >
+      <div data-testid="loaded-auth-form" />
+    </AuthLayout>,
+  );
+
+  expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+  expect(screen.getByRole('status', { name: /Loading/i })).toBeVisible();
+  expect(screen.queryByTestId('loaded-auth-form')).not.toBeInTheDocument();
+});
+
 // test('calls registerUser.mutate on registration', async () => {
 //   const mutate = jest.fn();
 //   const { getByTestId, getByRole, history } = setup({

@@ -10,12 +10,20 @@ import {
 } from '~/components/Auth';
 import { OAuthSuccess, OAuthError } from '~/components/OAuth';
 import { AuthContextProvider } from '~/hooks/AuthContext';
+import PublicAuthHost from '~/components/Auth/PublicAuthHost';
 import RouteErrorBoundary from './RouteErrorBoundary';
 import StartupLayout from './Layouts/Startup';
 import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
 import Root from './Root';
-import { RecipeDetail, RecipeLibrary, ShoppingList, SocialImports } from '~/components/Cooking';
+import {
+  PublicProfile,
+  PublicRecipe,
+  RecipeDetail,
+  RecipeLibrary,
+  ShoppingList,
+  SocialImports,
+} from '~/components/Cooking';
 import { PreferencesWorkspace } from '~/components/Preferences';
 import LandingPage from '~/components/LandingPage';
 
@@ -95,8 +103,21 @@ export const router = createBrowserRouter(
       errorElement: <RouteErrorBoundary />,
       children: [
         {
-          index: true,
-          element: <LandingPage />,
+          element: <PublicAuthHost />,
+          children: [
+            {
+              path: 'r/:recipeId',
+              element: <PublicRecipe />,
+            },
+            {
+              path: 'cooks/:userId/:slug?',
+              element: <PublicProfile />,
+            },
+            {
+              index: true,
+              element: <LandingPage />,
+            },
+          ],
         },
         {
           path: 'chat',

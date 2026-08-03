@@ -54,6 +54,7 @@ export interface ISavedRecipe extends Document {
   categorizationStatus: RecipeCategorizationStatus;
   categorizationAttempts?: number;
   categorizationVersion: number;
+  lineage?: SavedRecipe['lineage'];
   tenantId?: string;
   createdAt?: Date;
   updatedAt?: Date;

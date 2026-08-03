@@ -7,9 +7,11 @@ import type { TResError } from '~/common';
 import { useLoginUserMutation } from '~/data-provider';
 import {
   buildLoginRetryRedirect,
+  buildContextualTwoFactorRedirect,
   buildTwoFactorRedirect,
   clearExplicitLogout,
-  resolvePostLoginRedirect,
+  getAuthMode,
+  resolveAuthSuccessRedirect,
 } from '~/utils';
 import store from '~/store';
 
@@ -26,7 +28,13 @@ export default function usePublicLogin({ setError }: UsePublicLoginOptions = {})
     onSuccess: (data: TLoginResponse) => {
       const { user, token, twoFAPending, tempToken } = data;
       if (twoFAPending) {
-        navigate(buildTwoFactorRedirect(tempToken), { replace: true });
+        const searchParams = new URLSearchParams(window.location.search);
+        navigate(
+          getAuthMode(searchParams)
+            ? { search: buildContextualTwoFactorRedirect(window.location.search, tempToken) }
+            : buildTwoFactorRedirect(tempToken),
+          { replace: true },
+        );
         return;
       }
 
@@ -35,16 +43,18 @@ export default function usePublicLogin({ setError }: UsePublicLoginOptions = {})
       setUser(user);
       setTokenHeader(token);
       setQueriesEnabled(true);
+      window.dispatchEvent(new CustomEvent('tokenUpdated', { detail: { token, user } }));
 
-      const redirect = resolvePostLoginRedirect(
-        new URLSearchParams(window.location.search),
-        '/cook',
-      );
-      navigate(redirect ?? '/cook', { replace: true });
+      navigate(resolveAuthSuccessRedirect(new URLSearchParams(window.location.search)), {
+        replace: true,
+      });
     },
     onError: (error: TResError | unknown) => {
       const resError = error as TResError;
       setError?.(resError.message);
+      if (getAuthMode(new URLSearchParams(window.location.search))) {
+        return;
+      }
       navigate(buildLoginRetryRedirect(new URLSearchParams(window.location.search)), {
         replace: true,
       });

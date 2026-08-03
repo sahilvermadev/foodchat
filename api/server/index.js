@@ -208,6 +208,7 @@ const startServer = async () => {
   app.use('/api/skills', routes.skills);
   app.use('/api/categories', routes.categories);
   app.use('/api/cooking', routes.cooking);
+  app.use('/api/public', routes.publicRoutes);
   app.use('/api/recipes', routes.recipes);
   app.use('/api/shopping-list', routes.shopping);
   app.use('/api/social-imports', routes.social);

@@ -234,7 +234,10 @@ export const recipe = (recipeId: string) => `${recipesRoot}/${encodeURIComponent
 export const offlineRecipes = (query = '') => `${recipesRoot}/offline${query ? `?${query}` : ''}`;
 export const publicRecipes = (query = '') => `${recipesRoot}/explore${query ? `?${query}` : ''}`;
 export const publicRecipe = (recipeId: string) =>
-  `${recipesRoot}/explore/${encodeURIComponent(recipeId)}`;
+  `${BASE_URL}/api/public/recipes/${encodeURIComponent(recipeId)}`;
+export const copyPublicRecipe = (recipeId: string) => `${publicRecipe(recipeId)}/copy`;
+export const publicProfile = (userId: string, query = '') =>
+  `${BASE_URL}/api/public/profiles/${encodeURIComponent(userId)}${query ? `?${query}` : ''}`;
 export const recipeByDraft = (draftId: string) =>
   `${recipesRoot}/by-draft/${encodeURIComponent(draftId)}`;
 export const shoppingList = () => shoppingListRoot;

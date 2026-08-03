@@ -52,7 +52,6 @@ export interface IUser extends Document {
   personalization?: {
     memories?: boolean;
   };
-  publicProfile?: boolean;
   favorites?: TUserFavorite[];
   /** Per-skill active/inactive overrides. Key = skillId, value = active state. */
   skillStates?: Record<string, boolean>;
@@ -98,7 +97,6 @@ export interface UpdateUserRequest {
   personalization?: {
     memories?: boolean;
   };
-  publicProfile?: boolean;
   skillStates?: Record<string, boolean>;
 }
 

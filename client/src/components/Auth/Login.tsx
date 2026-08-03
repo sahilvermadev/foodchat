@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
-import { ErrorTypes, registerPage } from 'librechat-data-provider';
+import { ErrorTypes } from 'librechat-data-provider';
 import { OpenIDIcon, useToastContext } from '@librechat/client';
-import { useOutletContext, useSearchParams, useLocation } from 'react-router-dom';
-import type { TLoginLayoutContext } from '~/common';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import { clearExplicitLogout, getLoginError, persistRedirectToSession } from '~/utils';
 import { ErrorMessage } from '~/components/Auth/ErrorMessage';
 import SocialButton from '~/components/Auth/SocialButton';
 import { useLocalize } from '~/hooks';
 import usePublicLogin from '~/hooks/usePublicLogin';
 import LoginForm from './LoginForm';
+import { AuthModeLink, useAuthFlow } from './flow';
 import { authInlineLinkClass } from './styles';
 
 interface LoginLocationState {
@@ -19,7 +19,7 @@ function Login() {
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const [error, setError] = useState<string | undefined>(undefined);
-  const { startupConfig } = useOutletContext<TLoginLayoutContext>();
+  const { startupConfig } = useAuthFlow();
   const { login } = usePublicLogin({ setError });
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -116,9 +116,9 @@ function Login() {
         <p className="my-4 text-center text-sm text-text-secondary">
           {' '}
           {localize('com_auth_no_account')}{' '}
-          <a href={registerPage()} className={authInlineLinkClass}>
+          <AuthModeLink mode="register" className={authInlineLinkClass}>
             {localize('com_auth_sign_up')}
-          </a>
+          </AuthModeLink>
         </p>
       )}
     </>
