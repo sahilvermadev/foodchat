@@ -732,9 +732,12 @@ router.post('/voice/session', authenticatedCookingChatLimiter, (req, res) => {
   }
   try {
     const grant = createVoiceSessionGrant({
-      endpoint: process.env.REKKY_VOICE_URL,
-      secret: process.env.REKKY_VOICE_TOKEN_SECRET,
-      ttlSeconds: Number(process.env.REKKY_VOICE_SESSION_TTL_SECONDS) || 180,
+      audience: process.env.REKKY_VOICE_JWT_AUDIENCE,
+      connectUrl: process.env.REKKY_VOICE_CONNECT_URL,
+      issuer: process.env.REKKY_VOICE_JWT_ISSUER,
+      keyId: process.env.REKKY_VOICE_JWT_KEY_ID,
+      secret: process.env.REKKY_VOICE_JWT_SECRET,
+      ttlSeconds: Number(process.env.REKKY_VOICE_SESSION_TTL_SECONDS) || 60,
       userId: userId(req),
     });
     res.setHeader('Cache-Control', 'no-store');

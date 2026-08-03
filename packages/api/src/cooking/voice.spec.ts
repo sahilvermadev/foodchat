@@ -1,27 +1,52 @@
-import { createHash, createHmac } from 'crypto';
+import { createHmac } from 'crypto';
 import { createVoiceSessionGrant, getVoiceSessionConfiguration } from './voice';
+
+const configuredEnvironment = {
+  REKKY_VOICE_CONNECT_URL: 'wss://voice.rekky.ai/v1/realtime',
+  REKKY_VOICE_JWT_AUDIENCE: 'rekky-voice',
+  REKKY_VOICE_JWT_ISSUER: 'rekky-api',
+  REKKY_VOICE_JWT_KEY_ID: 'rekky-voice-2026-08',
+  REKKY_VOICE_JWT_SECRET: 'private-secret-that-is-at-least-32-characters',
+};
+
+const grantOptions = {
+  audience: 'rekky-voice',
+  connectUrl: 'wss://voice.rekky.ai/v1/realtime',
+  issuer: 'rekky-api',
+  keyId: 'rekky-voice-2026-08',
+  secret: 'test-secret-that-is-at-least-32-characters',
+  userId: 'user-123',
+};
 
 describe('cooking voice sessions', () => {
   test('stays disabled unless the private endpoint and signing secret are configured', () => {
-    expect(getVoiceSessionConfiguration({ REKKY_VOICE_URL: 'https://voice.example' })).toEqual({
-      enabled: false,
-      shareRecipeContext: false,
-    });
+    expect(
+      getVoiceSessionConfiguration({
+        REKKY_VOICE_CONNECT_URL: 'wss://voice.rekky.ai/v1/realtime',
+      }),
+    ).toEqual({ enabled: false, shareRecipeContext: false });
+  });
+
+  test('does not activate the retired Modal configuration', () => {
+    expect(
+      getVoiceSessionConfiguration({
+        REKKY_VOICE_TOKEN_SECRET: 'private-secret-that-is-at-least-32-characters',
+        REKKY_VOICE_URL: 'https://example--rekky-voice.modal.run',
+      }),
+    ).toEqual({ enabled: false, shareRecipeContext: false });
   });
 
   test('fails closed for weak secrets and insecure production endpoints', () => {
     expect(
       getVoiceSessionConfiguration({
-        NODE_ENV: 'production',
-        REKKY_VOICE_TOKEN_SECRET: 'private-secret-that-is-at-least-32-characters',
-        REKKY_VOICE_URL: 'http://voice.example',
+        ...configuredEnvironment,
+        REKKY_VOICE_CONNECT_URL: 'ws://voice.rekky.ai/v1/realtime',
       }),
     ).toEqual({ enabled: false, shareRecipeContext: false });
     expect(
       getVoiceSessionConfiguration({
-        NODE_ENV: 'production',
-        REKKY_VOICE_TOKEN_SECRET: 'too-short',
-        REKKY_VOICE_URL: 'https://voice.example',
+        ...configuredEnvironment,
+        REKKY_VOICE_JWT_SECRET: 'too-short',
       }),
     ).toEqual({ enabled: false, shareRecipeContext: false });
   });
@@ -29,9 +54,8 @@ describe('cooking voice sessions', () => {
   test('exposes only the authenticated Rekky session route to clients', () => {
     expect(
       getVoiceSessionConfiguration({
+        ...configuredEnvironment,
         REKKY_VOICE_SHARE_RECIPE_CONTEXT: 'true',
-        REKKY_VOICE_TOKEN_SECRET: 'private-secret-that-is-at-least-32-characters',
-        REKKY_VOICE_URL: 'https://voice.example',
       }),
     ).toEqual({
       enabled: true,
@@ -42,14 +66,13 @@ describe('cooking voice sessions', () => {
 
   test('creates a short-lived signed websocket grant for the authenticated user', () => {
     const grant = createVoiceSessionGrant({
-      endpoint: 'https://voice.example',
+      ...grantOptions,
       now: new Date('2026-07-22T10:00:00.000Z'),
-      secret: 'test-secret-that-is-at-least-32-characters',
       ttlSeconds: 60,
-      userId: 'user-123',
     });
     const url = new URL(grant.connect_url);
     const token = grant.token;
+    expect(grant.connect_url).toBe('wss://voice.rekky.ai/v1/realtime');
     expect(url.protocol).toBe('wss:');
     expect(url.pathname).toBe('/v1/realtime');
     expect(url.search).toBe('');
@@ -57,10 +80,7 @@ describe('cooking voice sessions', () => {
     const [header, payload, signature] = token.split('.');
     expect(JSON.parse(Buffer.from(header, 'base64url').toString())).toEqual({
       alg: 'HS256',
-      kid: createHash('sha256')
-        .update('test-secret-that-is-at-least-32-characters')
-        .digest('hex')
-        .slice(0, 12),
+      kid: 'rekky-voice-2026-08',
       typ: 'JWT',
     });
     expect(signature).toBe(
@@ -78,5 +98,22 @@ describe('cooking voice sessions', () => {
       }),
     );
     expect(grant.expires_at).toBe('2026-07-22T10:01:00.000Z');
+  });
+
+  test('creates a unique one-time grant identifier for every connection', () => {
+    const options = {
+      ...grantOptions,
+      now: new Date('2026-07-22T10:00:00.000Z'),
+    };
+    const first = createVoiceSessionGrant(options);
+    const second = createVoiceSessionGrant(options);
+    const firstPayload = JSON.parse(Buffer.from(first.token.split('.')[1], 'base64url').toString());
+    const secondPayload = JSON.parse(
+      Buffer.from(second.token.split('.')[1], 'base64url').toString(),
+    );
+
+    expect(firstPayload.jti).toEqual(expect.any(String));
+    expect(secondPayload.jti).toEqual(expect.any(String));
+    expect(firstPayload.jti).not.toBe(secondPayload.jti);
   });
 });

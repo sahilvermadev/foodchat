@@ -9,11 +9,24 @@ import { mainTextareaId } from '~/common';
 interface VoiceAssistantWidgetProps {
   conversationId: string;
   recipeMarkdown?: string;
+  workspaceContext?: string;
   index?: number;
 }
 
 const DEFAULT_INSTRUCTIONS =
   'You are a real-time cooking assistant. Help the user cook. Keep answers short, conversational, and direct because they are spoken out loud. Follow the recipe context closely. You are listening in a noisy kitchen. If the transcribed user speech is gibberish, incomplete background chatter, or completely unrelated to cooking, recipes, or kitchen tasks, do not respond. Remain silent and output exactly "<silent/>" and absolutely nothing else.';
+
+function cookingInstructions(
+  shareContext: boolean,
+  recipeMarkdown: string,
+  workspaceContext: string,
+) {
+  if (!shareContext || !recipeMarkdown.trim()) return DEFAULT_INSTRUCTIONS;
+  const snapshot = workspaceContext.trim()
+    ? `\n\nCurrent workspace:\n${workspaceContext.trim()}`
+    : '';
+  return `${DEFAULT_INSTRUCTIONS}\n\nCurrent recipe:\n${recipeMarkdown.trim()}${snapshot}`;
+}
 
 function isSilentResponse(text: string): boolean {
   const clean = text.trim().toLowerCase();
@@ -33,6 +46,7 @@ function isSilentResponse(text: string): boolean {
 export default function VoiceAssistantWidget({
   conversationId,
   recipeMarkdown = '',
+  workspaceContext = '',
   index = 0,
 }: VoiceAssistantWidgetProps) {
   const [isActive, setIsActive] = useRecoilState(store.voiceAssistantActive);
@@ -55,6 +69,9 @@ export default function VoiceAssistantWidget({
   // Use refs for values that change over time to avoid triggering handleStart recreation
   const recipeMarkdownRef = useRef(recipeMarkdown);
   recipeMarkdownRef.current = recipeMarkdown;
+
+  const workspaceContextRef = useRef(workspaceContext);
+  workspaceContextRef.current = workspaceContext;
 
   const selectedVoiceNameRef = useRef(selectedVoiceName);
   selectedVoiceNameRef.current = selectedVoiceName;
@@ -135,10 +152,11 @@ export default function VoiceAssistantWidget({
       return stream;
     };
 
-    const instructions =
-      config.shareRecipeContext && recipeMarkdownRef.current
-        ? `${DEFAULT_INSTRUCTIONS}\nHere is the recipe the user is currently cooking:\n${recipeMarkdownRef.current}`
-        : DEFAULT_INSTRUCTIONS;
+    const instructions = cookingInstructions(
+      config.shareRecipeContext,
+      recipeMarkdownRef.current,
+      workspaceContextRef.current,
+    );
 
     const SUPPORTED_VOICES = [
       'Aiden',
@@ -240,9 +258,9 @@ export default function VoiceAssistantWidget({
     });
 
     client.addEventListener('response-finished', (e: any) => {
-      const { responseId, transcript } = e.detail;
+      const { responseId, status, transcript } = e.detail;
       if (responseId) {
-        const isSilent = isSilentResponse(transcript || '');
+        const isSilent = status !== 'completed' || isSilentResponse(transcript || '');
 
         if (isSilent) {
           // If the turn was already flushed but ends up silent, clean it up
@@ -321,6 +339,7 @@ export default function VoiceAssistantWidget({
 
     client.addEventListener('error', (e: any) => {
       console.error('Voice assistant client error:', e.detail.error);
+      setIsActive(false);
     });
 
     try {
@@ -348,6 +367,16 @@ export default function VoiceAssistantWidget({
       cleanSession();
     };
   }, [isActive, voiceConfig.isLoading, handleStart, cleanSession]);
+
+  useEffect(() => {
+    if (!isActive || !voiceConfig.data?.shareRecipeContext) return;
+    const timeout = window.setTimeout(() => {
+      clientRef.current?.updateSession({
+        instructions: cookingInstructions(true, recipeMarkdown, workspaceContext),
+      });
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [isActive, recipeMarkdown, voiceConfig.data?.shareRecipeContext, workspaceContext]);
 
   return null;
 }

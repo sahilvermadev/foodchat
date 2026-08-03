@@ -1,17 +1,14 @@
-import {
-  base64FromArrayBuffer,
-  base64ToBytes,
-  extractResponseTranscript,
-  trimTrailingSlash,
-} from './codec';
+import type { CookingVoiceSessionGrant } from 'librechat-data-provider';
+
+import { base64FromArrayBuffer, base64ToBytes, extractResponseTranscript } from './codec';
 import { OrbVisualiser, VIS_FFT_SIZE } from './orb-visualizer';
 
 export type WsStatus =
   | 'idle'
   | 'creating-session'
-  | 'queued'
-  | 'your-turn'
   | 'connecting'
+  | 'authenticating'
+  | 'configuring-session'
   | 'connected'
   | 'user-speaking'
   | 'processing'
@@ -19,16 +16,8 @@ export type WsStatus =
   | 'closed'
   | 'error';
 
-export interface WsSessionInfo {
-  sessionId: string;
+export interface WsSessionInfo extends CookingVoiceSessionGrant {
   connectUrl: string;
-  websocketUrl: string;
-  sessionToken: string;
-  pendingTimeoutS: number;
-  tier?: 'anon' | 'free' | 'pro';
-  limited?: boolean;
-  heartbeatSec?: number;
-  remainingSec?: number;
 }
 
 export interface ToolDef {
@@ -45,8 +34,6 @@ export interface NoiseGate {
 
 export interface WsClientOptions {
   sessionUrl?: string;
-  loadBalancerUrl?: string;
-  directUrl?: string;
   voice: string;
   instructions: string;
   micStream?: MediaStream;
@@ -63,22 +50,17 @@ function _codedError(message: string, code: string, extra?: object) {
   return err;
 }
 
+// The AWS realtime service emits PCM16 at its 16 kHz pipeline rate when no
+// explicit OpenAI audio format is negotiated.
 const OUTPUT_SAMPLE_RATE = 16000;
 const MIC_CHUNK_MS = 40;
 
 export class S2sWsRealtimeClient extends EventTarget {
   public options: WsClientOptions;
   private _tools: ToolDef[];
-  private _directUrl: string;
   private _sessionUrl: string;
   private _acquireMic: (() => Promise<MediaStream>) | null;
   private _closed = false;
-  private _queueId = '';
-  private _queueWake: (() => void) | null = null;
-  private _queueTimer: any = 0;
-  private _joinResolve: (() => void) | null = null;
-  private _joinReject: ((err: Error) => void) | null = null;
-  private _joinTimer: any = 0;
   private _noiseGate: NoiseGate;
   private _ws: WebSocket | null = null;
   private _ctx: AudioContext | null = null;
@@ -91,6 +73,8 @@ export class S2sWsRealtimeClient extends EventTarget {
   private _status: WsStatus = 'idle';
   private _aiSpeaking = false;
   private _audibleResponses = new Set<string>();
+  private _activeResponseIds = new Set<string>();
+  private _cancelledResponseIds = new Set<string>();
   private _asstTranscriptByResp = new Map<string, string>();
   private _asstFullByResp = new Map<string, string>();
   private _muted = false;
@@ -104,11 +88,7 @@ export class S2sWsRealtimeClient extends EventTarget {
     super();
     this.options = options;
     this._tools = options.tools ?? [];
-    this._directUrl = options.directUrl ?? '';
     this._sessionUrl = options.sessionUrl ?? '';
-    if (!this._sessionUrl && options.loadBalancerUrl) {
-      this._sessionUrl = `${trimTrailingSlash(options.loadBalancerUrl)}/session`;
-    }
     this._acquireMic = options.acquireMic ?? null;
     this._noiseGate = options.noiseGate ?? { enabled: false, thresholdDb: -45 };
     try {
@@ -148,208 +128,48 @@ export class S2sWsRealtimeClient extends EventTarget {
   async connect() {
     if (this._ws) throw new Error('Already connected');
 
-    let connectUrl: string;
-    if (this._directUrl) {
-      connectUrl = this._directUrl;
-      this._setStatus('connecting');
-    } else {
-      if (!this._sessionUrl) {
-        throw new Error('No session endpoint or direct URL configured');
-      }
-      let grant: WsSessionInfo | undefined;
-      let waited = false;
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          this._setStatus('creating-session');
-          const res = await this._createSessionOrQueue();
-          grant = res.grant;
-          waited = res.waited;
-          break;
-        } catch (err: any) {
-          if (this._closed) throw err;
-          if (err?.code === 'queue-expired' && retries > 1) {
-            console.warn(
-              'Queue ticket expired/404, retrying session creation. Retries left:',
-              retries - 1,
-              err,
-            );
-            retries--;
-            continue;
-          }
-          throw err;
-        }
-      }
-
-      if (!grant) {
-        throw new Error('Failed to obtain a valid session grant');
-      }
-
-      if (this._closed) throw _codedError('connect aborted', 'aborted');
-
-      if (waited) {
-        await this._awaitJoin(grant);
-        if (this._closed) throw _codedError('connect aborted', 'aborted');
-      }
-      this.dispatchEvent(new CustomEvent('session', { detail: { info: grant } }));
-      connectUrl = grant.connectUrl;
-      this._setStatus('connecting');
+    if (!this._sessionUrl) {
+      throw new Error('No voice session endpoint configured');
     }
+    this._setStatus('creating-session');
+    const grant = await this._postSession();
+    if (this._closed) throw _codedError('connect aborted', 'aborted');
+    this.dispatchEvent(new CustomEvent('session', { detail: { info: grant } }));
+    this._setStatus('connecting');
 
     if (!this.options.micStream && this._acquireMic) {
       this.options.micStream = await this._acquireMic();
     }
 
     const audioReady = this._setupAudio();
-    const wsReady = this._openWebSocket(connectUrl);
+    const wsReady = this._openWebSocket(grant.connectUrl, grant.token);
     await Promise.all([audioReady, wsReady]);
   }
 
-  async _createSessionOrQueue() {
-    const first = await this._postSession();
-    if (first.state === 'queued') {
-      this._setStatus('queued');
-      const grant = await this._pollQueue(first);
-      return { grant, waited: true };
-    }
-    return { grant: first.grant, waited: false };
-  }
-
-  _awaitJoin(grant: WsSessionInfo): Promise<void> {
-    const windowS = Math.max(3, (grant.pendingTimeoutS || 60) - 3);
-    this._setStatus('your-turn');
-    this.dispatchEvent(
-      new CustomEvent('ready-to-join', { detail: { info: grant, expiresSec: windowS } }),
-    );
-    return new Promise((resolve, reject) => {
-      this._joinResolve = resolve;
-      this._joinReject = reject;
-      this._joinTimer = setTimeout(() => {
-        this._joinResolve = null;
-        this._joinReject = null;
-        reject(_codedError('Your spot expired', 'join-expired'));
-      }, windowS * 1000);
-    });
-  }
-
-  join() {
-    if (this._joinTimer) {
-      clearTimeout(this._joinTimer);
-      this._joinTimer = 0;
-    }
-    try {
-      void this.options.audioContext?.resume();
-    } catch {
-      // ignore
-    }
-    const resolve = this._joinResolve;
-    this._joinResolve = null;
-    this._joinReject = null;
-    resolve?.();
-  }
-
-  async _postSession(): Promise<
-    | { state: 'granted'; grant: WsSessionInfo }
-    | { state: 'queued'; queueId: string; position: number; pollIntervalS: number }
-  > {
+  async _postSession(): Promise<WsSessionInfo> {
     const url = this._sessionUrl;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
     });
-    if (response.status === 402) {
-      const body = await response.json().catch(() => ({}));
-      throw _codedError('Daily conversation limit reached', 'limit', { tier: body?.tier });
-    }
     if (response.status === 503) {
-      const body = await response.json().catch(() => ({}));
-      if (body?.state === 'at_capacity') {
-        throw _codedError('The queue is full — try again shortly.', 'queue-full');
-      }
-      throw new Error('/session failed (503)');
+      throw _codedError('Voice service is temporarily unavailable', 'unavailable');
     }
     if (!response.ok) {
       const text = await response.text().catch(() => '');
       throw new Error(`/session failed (${response.status}): ${text}`);
     }
-    const json = await response.json();
-    if (json.state === 'queued') {
-      return {
-        state: 'queued',
-        queueId: json.queue_id,
-        position: json.position,
-        pollIntervalS: json.poll_interval_s,
-      };
+    return this._parseGrant(await response.json());
+  }
+
+  _parseGrant(json: CookingVoiceSessionGrant): WsSessionInfo {
+    if (!json.connect_url || !json.token || !json.expires_at) {
+      throw _codedError('Voice service returned an invalid session grant', 'invalid-grant');
     }
-    return { state: 'granted', grant: this._parseGrant(json) };
-  }
-
-  async _pollQueue(ticket: { queueId: string; position: number; pollIntervalS: number }) {
-    const intervalMs = Math.max(1, ticket.pollIntervalS || 2) * 1000;
-    this._queueId = ticket.queueId;
-    this._emitQueue(ticket.position);
-
-    while (true) {
-      await this._queueSleep(intervalMs);
-      if (this._closed) throw _codedError('queue wait aborted', 'aborted');
-
-      let response;
-      try {
-        const origin = this._sessionUrl.replace(/\/session\/?$/, '');
-        const queueUrl = `${origin}/api/queue/${encodeURIComponent(this._queueId)}`;
-        response = await fetch(queueUrl, {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } catch {
-        continue;
-      }
-
-      if (response.status === 402) {
-        const body = await response.json().catch(() => ({}));
-        throw _codedError('Daily conversation limit reached', 'limit', { tier: body?.tier });
-      }
-      if (response.status === 404) {
-        throw _codedError('Queue timed out', 'queue-expired');
-      }
-      if (!response.ok) continue;
-
-      const json = await response.json().catch(() => null);
-      if (!json) continue;
-      if (json.state === 'queued') {
-        this._emitQueue(json.position);
-        continue;
-      }
-      this._queueId = '';
-      return this._parseGrant(json);
-    }
-  }
-
-  _emitQueue(position: number) {
-    this.dispatchEvent(new CustomEvent('queue', { detail: { position, queueId: this._queueId } }));
-  }
-
-  _queueSleep(ms: number) {
-    return new Promise<void>((resolve) => {
-      this._queueWake = resolve;
-      this._queueTimer = setTimeout(() => {
-        this._queueWake = null;
-        resolve();
-      }, ms);
-    });
-  }
-
-  _parseGrant(json: any): WsSessionInfo {
     return {
-      sessionId: json.session_id,
+      ...json,
       connectUrl: json.connect_url,
-      websocketUrl: json.websocket_url,
-      sessionToken: json.session_token,
-      pendingTimeoutS: json.pending_timeout_s,
-      tier: json.tier,
-      limited: json.limited,
-      heartbeatSec: json.heartbeatSec,
-      remainingSec: json.remainingSec,
     };
   }
 
@@ -419,7 +239,7 @@ export class S2sWsRealtimeClient extends EventTarget {
     }
   }
 
-  _openWebSocket(connectUrl: string): Promise<void> {
+  _openWebSocket(connectUrl: string, token: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(connectUrl);
       ws.binaryType = 'arraybuffer';
@@ -428,6 +248,8 @@ export class S2sWsRealtimeClient extends EventTarget {
       const onceOpen = () => {
         ws.removeEventListener('open', onceOpen);
         ws.removeEventListener('error', onceErr);
+        this._setStatus('authenticating');
+        ws.send(JSON.stringify({ type: 'rekky.authenticate', token }));
         resolve();
       };
       const onceErr = (e: any) => {
@@ -492,16 +314,23 @@ export class S2sWsRealtimeClient extends EventTarget {
 
     switch (type) {
       case 'session.created':
+        this._setStatus('configuring-session');
         this._sendSessionUpdate();
-        this._sessionConfigured = true;
-        if (this._status === 'connecting') this._setStatus('connected');
         break;
 
       case 'session.updated':
+        this._sessionConfigured = true;
+        this._setStatus('connected');
         break;
 
       case 'input_audio_buffer.speech_started':
         this._playbackNode?.port.postMessage({ kind: 'clear' });
+        if (this._responseActive()) {
+          for (const responseId of this._activeResponseIds) {
+            this._cancelledResponseIds.add(responseId);
+          }
+          this._send({ type: 'response.cancel' });
+        }
         this._aiSpeaking = false;
         this._setStatus('user-speaking');
         break;
@@ -513,6 +342,9 @@ export class S2sWsRealtimeClient extends EventTarget {
       case 'response.created':
         this._openResponses++;
         this._createInFlight = false;
+        if (typeof event.response?.id === 'string') {
+          this._activeResponseIds.add(event.response.id);
+        }
         if (this._status === 'connected' || this._status === 'user-speaking') {
           this._setStatus('processing');
         }
@@ -526,8 +358,9 @@ export class S2sWsRealtimeClient extends EventTarget {
 
       case 'response.audio.delta':
       case 'response.output_audio.delta': {
-        this._pushAudioDelta(event.delta);
         const rid = event.response_id ?? event.response?.id;
+        if (rid && this._cancelledResponseIds.has(rid)) break;
+        this._pushAudioDelta(event.delta);
         if (rid) this._audibleResponses.add(rid);
         if (!this._aiSpeaking) {
           this._aiSpeaking = true;
@@ -552,6 +385,9 @@ export class S2sWsRealtimeClient extends EventTarget {
         }
         const status = event.response?.status ?? 'completed';
         const responseId = event.response?.id ?? '';
+        const cancelled = status === 'cancelled' || this._cancelledResponseIds.has(responseId);
+        this._activeResponseIds.delete(responseId);
+        this._cancelledResponseIds.delete(responseId);
         const audible = responseId ? this._audibleResponses.has(responseId) : false;
         this._audibleResponses.delete(responseId);
         const transcript =
@@ -560,7 +396,7 @@ export class S2sWsRealtimeClient extends EventTarget {
         this._asstFullByResp.delete(responseId);
         this.dispatchEvent(
           new CustomEvent('response-finished', {
-            detail: { responseId, status, audible, transcript },
+            detail: { responseId, status, audible, transcript: cancelled ? '' : transcript },
           }),
         );
         this._flushQueuedCreate();
@@ -617,8 +453,9 @@ export class S2sWsRealtimeClient extends EventTarget {
 
       case 'response.audio_transcript.delta':
       case 'response.output_audio_transcript.delta': {
-        this._markAudible();
         const rid = typeof event.response_id === 'string' ? event.response_id : '';
+        if (rid && this._cancelledResponseIds.has(rid)) break;
+        this._markAudible();
         const delta = typeof event.delta === 'string' ? event.delta : '';
         if (delta) {
           this._asstTranscriptByResp.set(rid, (this._asstTranscriptByResp.get(rid) || '') + delta);
@@ -639,6 +476,7 @@ export class S2sWsRealtimeClient extends EventTarget {
       case 'response.audio_transcript.done':
       case 'response.output_audio_transcript.done': {
         const rid = typeof event.response_id === 'string' ? event.response_id : '';
+        if (rid && this._cancelledResponseIds.has(rid)) break;
         const segment =
           (typeof event.transcript === 'string' && event.transcript) ||
           this._asstTranscriptByResp.get(rid) ||
@@ -715,6 +553,9 @@ export class S2sWsRealtimeClient extends EventTarget {
       type: 'realtime',
       instructions: this.options.instructions,
       audio: {
+        input: {
+          turn_detection: { type: 'server_vad', interrupt_response: true },
+        },
         output: { voice: this.options.voice },
       },
     };
@@ -804,22 +645,6 @@ export class S2sWsRealtimeClient extends EventTarget {
 
   async close() {
     this._closed = true;
-    if (this._queueWake) {
-      clearTimeout(this._queueTimer);
-      const wake = this._queueWake;
-      this._queueWake = null;
-      wake();
-    }
-    if (this._joinTimer) {
-      clearTimeout(this._joinTimer);
-      this._joinTimer = 0;
-    }
-    if (this._joinReject) {
-      const reject = this._joinReject;
-      this._joinResolve = null;
-      this._joinReject = null;
-      reject(_codedError('join aborted', 'aborted'));
-    }
     this._visualiser?.stop();
     this._visualiser = null;
     try {

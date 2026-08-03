@@ -325,6 +325,20 @@ export default function RecipeCanvas({
     return draft ? recipeToMarkdown(draft.recipe) : '';
   }, [draft, markdown]);
 
+  const voiceWorkspaceContext = useMemo(() => {
+    if (!draft) return '';
+    const checkedIds = new Set(workspaceState?.checkedIngredientIds ?? []);
+    const checkedIngredients = draft.recipe.ingredients
+      .filter((ingredient) => checkedIds.has(ingredient.id))
+      .map((ingredient) => ingredient.item);
+    return [
+      `Recipe revision: ${workspaceState?.updatedAt ?? draft.updatedAt}`,
+      `Servings: ${workspaceState?.servings ?? draft.recipe.servings}`,
+      `Unit mode: ${workspaceState?.unitMode ?? 'original'}`,
+      `Checked ingredients: ${checkedIngredients.length ? checkedIngredients.join(', ') : 'none'}`,
+    ].join('\n');
+  }, [draft, workspaceState]);
+
   const documentParts = useMemo(
     () => recipeMarkdownDisplay(documentMarkdown, draft?.recipe.title),
     [documentMarkdown, draft?.recipe.title],
@@ -664,7 +678,11 @@ export default function RecipeCanvas({
         )}
       </div>
       {conversationId && (
-        <VoiceAssistantWidget conversationId={conversationId} recipeMarkdown={documentMarkdown} />
+        <VoiceAssistantWidget
+          conversationId={conversationId}
+          recipeMarkdown={documentMarkdown}
+          workspaceContext={voiceWorkspaceContext}
+        />
       )}
     </section>
   );

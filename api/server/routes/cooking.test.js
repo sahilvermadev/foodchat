@@ -96,19 +96,25 @@ jest.mock('@librechat/api', () => {
     removePorts: (req) => req['ip'],
     getVoiceSessionConfiguration: jest.fn(() => ({
       enabled: Boolean(
-        process.env.REKKY_VOICE_URL &&
-          process.env.REKKY_VOICE_TOKEN_SECRET &&
-          process.env.REKKY_VOICE_TOKEN_SECRET.length >= 32,
+        process.env.REKKY_VOICE_CONNECT_URL &&
+          process.env.REKKY_VOICE_JWT_SECRET &&
+          process.env.REKKY_VOICE_JWT_SECRET.length >= 32 &&
+          process.env.REKKY_VOICE_JWT_ISSUER &&
+          process.env.REKKY_VOICE_JWT_AUDIENCE &&
+          process.env.REKKY_VOICE_JWT_KEY_ID,
       ),
-      ...(process.env.REKKY_VOICE_URL &&
-      process.env.REKKY_VOICE_TOKEN_SECRET &&
-      process.env.REKKY_VOICE_TOKEN_SECRET.length >= 32
+      ...(process.env.REKKY_VOICE_CONNECT_URL &&
+      process.env.REKKY_VOICE_JWT_SECRET &&
+      process.env.REKKY_VOICE_JWT_SECRET.length >= 32 &&
+      process.env.REKKY_VOICE_JWT_ISSUER &&
+      process.env.REKKY_VOICE_JWT_AUDIENCE &&
+      process.env.REKKY_VOICE_JWT_KEY_ID
         ? { sessionUrl: '/api/cooking/voice/session' }
         : {}),
       shareRecipeContext: process.env.REKKY_VOICE_SHARE_RECIPE_CONTEXT === 'true',
     })),
     createVoiceSessionGrant: jest.fn(() => ({
-      connect_url: 'wss://voice.example/v1/realtime',
+      connect_url: 'wss://voice.rekky.ai/v1/realtime',
       expires_at: '2026-07-22T10:01:00.000Z',
       token: 'signed-token',
     })),
@@ -639,51 +645,55 @@ describe('cooking routes', () => {
   });
 
   test('voice is disabled until a session endpoint is configured', async () => {
-    const originalUrl = process.env.REKKY_VOICE_URL;
-    const originalSecret = process.env.REKKY_VOICE_TOKEN_SECRET;
-    delete process.env.REKKY_VOICE_URL;
-    delete process.env.REKKY_VOICE_TOKEN_SECRET;
+    const originalUrl = process.env.REKKY_VOICE_CONNECT_URL;
+    delete process.env.REKKY_VOICE_CONNECT_URL;
     try {
       const response = await request(app).get('/api/cooking/voice/config').expect(200);
       expect(response.body).toEqual({ enabled: false, shareRecipeContext: false });
     } finally {
       if (originalUrl == null) {
-        delete process.env.REKKY_VOICE_URL;
+        delete process.env.REKKY_VOICE_CONNECT_URL;
       } else {
-        process.env.REKKY_VOICE_URL = originalUrl;
-      }
-      if (originalSecret == null) {
-        delete process.env.REKKY_VOICE_TOKEN_SECRET;
-      } else {
-        process.env.REKKY_VOICE_TOKEN_SECRET = originalSecret;
+        process.env.REKKY_VOICE_CONNECT_URL = originalUrl;
       }
     }
   });
 
   test('creates an authenticated short-lived voice session grant', async () => {
-    const originalUrl = process.env.REKKY_VOICE_URL;
-    const originalSecret = process.env.REKKY_VOICE_TOKEN_SECRET;
-    process.env.REKKY_VOICE_URL = 'https://voice.example';
-    process.env.REKKY_VOICE_TOKEN_SECRET = 'test-secret-that-is-at-least-32-characters';
+    const voiceEnvironment = {
+      REKKY_VOICE_CONNECT_URL: 'wss://voice.rekky.ai/v1/realtime',
+      REKKY_VOICE_JWT_AUDIENCE: 'rekky-voice',
+      REKKY_VOICE_JWT_ISSUER: 'rekky-api',
+      REKKY_VOICE_JWT_KEY_ID: 'rekky-voice-2026-08',
+      REKKY_VOICE_JWT_SECRET: 'test-secret-that-is-at-least-32-characters',
+    };
+    const previousEnvironment = Object.fromEntries(
+      Object.keys(voiceEnvironment).map((key) => [key, process.env[key]]),
+    );
+    Object.assign(process.env, voiceEnvironment);
     try {
       const response = await request(app).post('/api/cooking/voice/session').send({}).expect(200);
       expect(response.body).toEqual({
-        connect_url: 'wss://voice.example/v1/realtime',
+        connect_url: 'wss://voice.rekky.ai/v1/realtime',
         expires_at: '2026-07-22T10:01:00.000Z',
         token: 'signed-token',
       });
       expect(cookingApi.createVoiceSessionGrant).toHaveBeenCalledWith(
         expect.objectContaining({
-          endpoint: 'https://voice.example',
+          audience: 'rekky-voice',
+          connectUrl: 'wss://voice.rekky.ai/v1/realtime',
+          issuer: 'rekky-api',
+          keyId: 'rekky-voice-2026-08',
           secret: 'test-secret-that-is-at-least-32-characters',
+          ttlSeconds: 60,
           userId: 'auth-user',
         }),
       );
     } finally {
-      if (originalUrl == null) delete process.env.REKKY_VOICE_URL;
-      else process.env.REKKY_VOICE_URL = originalUrl;
-      if (originalSecret == null) delete process.env.REKKY_VOICE_TOKEN_SECRET;
-      else process.env.REKKY_VOICE_TOKEN_SECRET = originalSecret;
+      for (const [key, value] of Object.entries(previousEnvironment)) {
+        if (value == null) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
   });
 

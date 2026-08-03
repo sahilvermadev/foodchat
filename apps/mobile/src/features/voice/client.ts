@@ -12,6 +12,8 @@ import type { VoiceClientError } from './errors';
 import { audioLevel, extractResponseTranscript, float32ToPcm16Base64 } from './codec';
 import { socketCloseError, voiceError } from './errors';
 
+// The AWS realtime service emits PCM16 at its 16 kHz pipeline rate when no
+// explicit OpenAI audio format is negotiated.
 const SAMPLE_RATE = 16000;
 const CHUNK_FRAMES = 640;
 const CONNECTION_TIMEOUT_MS = 120_000;
@@ -19,7 +21,6 @@ const PLAYBACK_ECHO_TAIL_MS = 300;
 
 export type VoiceStatus =
   | 'connecting'
-  | 'queued'
   | 'listening'
   | 'user-speaking'
   | 'thinking'
@@ -45,7 +46,7 @@ export interface VoiceClientCallbacks {
   onError(error: Error): void;
   onInputLevel(level: number): void;
   onResponseFinished(responseId: string, transcript: string): void;
-  onStatus(status: VoiceStatus, queuePosition?: number): void;
+  onStatus(status: VoiceStatus): void;
   onTranscript(role: 'user' | 'assistant', text: string): void;
 }
 
@@ -71,11 +72,13 @@ export class RecipeVoiceClient {
   private outputAudioDone = false;
   private pendingAudioDecodes = 0;
   private playbackActive = false;
+  private responseActive = false;
+  private activeResponseId = '';
+  private cancelledResponseIds = new Set<string>();
   private playbackBufferIds = new Set<string>();
   private playbackGeneration = 0;
   private playbackChain: Promise<void> = Promise.resolve();
   private playbackTailTimer?: ReturnType<typeof setTimeout>;
-  private suppressedMicChunks = 0;
   private readonly logId = Date.now().toString(36).slice(-6);
   private assistantText = new Map<string, string>();
 
@@ -119,7 +122,7 @@ export class RecipeVoiceClient {
     this.closed = true;
     this.configured = false;
     if (this.playbackTailTimer) clearTimeout(this.playbackTailTimer);
-    this.log('close', { suppressedMicChunks: this.suppressedMicChunks });
+    this.log('close');
     try {
       await this.recorder?.stop();
     } catch {
@@ -163,15 +166,9 @@ export class RecipeVoiceClient {
       ({ buffer }) => {
         const samples = buffer.getChannelData(0);
         if (this.closed || this.muted || !this.configured) return;
-        if (this.playbackActive) {
-          this.suppressedMicChunks += 1;
-          if (this.suppressedMicChunks % 25 === 1) {
-            this.log('mic_suppressed_during_playback', {
-              chunks: this.suppressedMicChunks,
-            });
-          }
-          return;
-        }
+        // Keep sending microphone audio during playback. The native voice-chat
+        // audio session handles echo cancellation, while server VAD needs these
+        // frames to detect barge-in and cancel the active response.
         this.callbacks.onInputLevel(audioLevel(samples));
         this.send({ type: 'input_audio_buffer.append', audio: float32ToPcm16Base64(samples) });
       },
@@ -219,7 +216,7 @@ export class RecipeVoiceClient {
           return;
         }
         this.handleEvent(event);
-        if (event.type !== 'session.created') return;
+        if (event.type !== 'session.updated') return;
         ready = true;
         settle();
       };
@@ -250,11 +247,20 @@ export class RecipeVoiceClient {
       this.send({
         type: 'session.update',
         session: {
-          audio: { output: { voice: this.voice } },
+          audio: {
+            input: {
+              turn_detection: { interrupt_response: true, type: 'server_vad' },
+            },
+            output: { voice: this.voice },
+          },
           instructions: this.instructions,
           type: 'realtime',
         },
       });
+      return;
+    }
+    if (event.type === 'session.updated') {
+      this.log('session_updated');
       this.configured = true;
       this.callbacks.onStatus('listening');
       return;
@@ -262,6 +268,10 @@ export class RecipeVoiceClient {
     if (event.type === 'input_audio_buffer.speech_started') {
       this.log('speech_started', { playbackActive: this.playbackActive });
       this.cancelPlayback('speech_started');
+      if (this.responseActive) {
+        if (this.activeResponseId) this.cancelledResponseIds.add(this.activeResponseId);
+        this.send({ type: 'response.cancel' });
+      }
       this.callbacks.onStatus('user-speaking');
       return;
     }
@@ -270,7 +280,14 @@ export class RecipeVoiceClient {
       this.callbacks.onStatus('thinking');
       return;
     }
+    if (event.type === 'response.created') {
+      this.responseActive = true;
+      this.activeResponseId = event.response?.id ?? event.response_id ?? '';
+      return;
+    }
     if (event.type === 'response.audio.delta' || event.type === 'response.output_audio.delta') {
+      const responseId = event.response_id ?? event.response?.id ?? '';
+      if (responseId && this.cancelledResponseIds.has(responseId)) return;
       if (event.delta) {
         if (!this.playbackActive) {
           this.playbackActive = true;
@@ -300,23 +317,29 @@ export class RecipeVoiceClient {
       event.type === 'response.output_audio_transcript.delta'
     ) {
       const responseId = event.response_id ?? '';
+      if (responseId && this.cancelledResponseIds.has(responseId)) return;
       const text = `${this.assistantText.get(responseId) ?? ''}${event.delta ?? ''}`;
       this.assistantText.set(responseId, text);
       this.callbacks.onTranscript('assistant', text);
       return;
     }
     if (event.type === 'response.done') {
+      this.responseActive = false;
       const responseId = event.response?.id ?? event.response_id ?? '';
+      const cancelled =
+        event.response?.status === 'cancelled' || this.cancelledResponseIds.has(responseId);
       const transcript =
         extractResponseTranscript(event.response) || this.assistantText.get(responseId) || '';
       this.assistantText.delete(responseId);
+      this.cancelledResponseIds.delete(responseId);
+      this.activeResponseId = '';
       this.log('response_done', {
         playbackActive: this.playbackActive,
         status: event.response?.status,
         transcriptChars: transcript.length,
       });
-      if (event.response?.status === 'cancelled') this.cancelPlayback('response_cancelled');
-      this.callbacks.onResponseFinished(responseId, transcript.trim());
+      if (cancelled) this.cancelPlayback('response_cancelled');
+      if (!cancelled) this.callbacks.onResponseFinished(responseId, transcript.trim());
       if (!this.playbackActive) this.callbacks.onStatus('listening');
       return;
     }

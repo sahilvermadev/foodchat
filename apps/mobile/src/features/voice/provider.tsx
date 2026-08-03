@@ -65,7 +65,6 @@ export function RecipeVoiceProvider({ children }: PropsWithChildren) {
   const styles = useStyles();
   const [session, setSession] = useState<RecipeVoiceSession>();
   const [status, setStatus] = useState<VoiceStatus>('connecting');
-  const [queuePosition, setQueuePosition] = useState<number>();
   const [muted, setMuted] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string>();
@@ -101,7 +100,6 @@ export function RecipeVoiceProvider({ children }: PropsWithChildren) {
     let active = true;
     const connect = async () => {
       setStatus('connecting');
-      setQueuePosition(undefined);
       setMuted(false);
       setTranscript('');
       setError(undefined);
@@ -148,10 +146,9 @@ export function RecipeVoiceProvider({ children }: PropsWithChildren) {
               };
               void apiFetch(cookingVoiceTurns(), { body, method: 'POST' }).catch(() => undefined);
             },
-            onStatus: (next, position) => {
+            onStatus: (next) => {
               if (!active) return;
               setStatus(next);
-              setQueuePosition(position);
             },
             onTranscript: (role, text) => {
               if (!active || !text.trim()) return;
@@ -206,7 +203,6 @@ export function RecipeVoiceProvider({ children }: PropsWithChildren) {
   };
 
   let statusText = t(statusKey(status));
-  if (status === 'queued') statusText = t('voice.queued', { position: queuePosition ?? 1 });
   if (muted) statusText = t('voice.muted');
 
   return (

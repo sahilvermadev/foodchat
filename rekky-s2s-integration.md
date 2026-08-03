@@ -1,5 +1,7 @@
 # Rekky Cooking Voice Mode → speech-to-speech integration
 
+> Superseded by [rekky-aws-s2s-migration.md](./rekky-aws-s2s-migration.md). The Modal architecture below is retained only as historical context and is not an active deployment path.
+
 This handoff covers Rekky's full-duplex Cooking Voice Mode only. It does not
 apply to ordinary chat microphone or read-aloud features.
 

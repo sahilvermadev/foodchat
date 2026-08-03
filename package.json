@@ -41,6 +41,7 @@
     "delete-banner": "node config/delete-banner.js",
     "backend": "cross-env NODE_ENV=production node api/server/index.js",
     "backend:inspect": "cross-env NODE_ENV=production node --inspect --expose-gc api/server/index.js",
+    "prebackend:dev": "npm run build:api",
     "backend:dev": "cross-env NODE_ENV=development npx nodemon api/server/index.js",
     "dev:app": "bash scripts/dev.sh",
     "backend:experimental": "cross-env NODE_ENV=production node api/server/experimental.js",

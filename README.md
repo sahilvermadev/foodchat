@@ -31,7 +31,7 @@ This repository began as a product-specific fork of LibreChat. It now includes R
 - **Personal context:** remember relevant taste, kitchen, household, location, cultural, and safety preferences.
 - **Optional web research:** use Tavily when current or source-backed information is needed.
 - **Native mobile app:** an Expo and React Native client for Android and iOS.
-- **Real-time voice:** streamed speech recognition, response generation, and speech synthesis through an authenticated Modal worker.
+- **Real-time voice:** streamed speech recognition, response generation, and speech synthesis through Rekky's AWS GPU service.
 - **Multi-user foundation:** authentication, persistence, and conversation infrastructure inherited from LibreChat.
 
 ## Architecture
@@ -43,7 +43,7 @@ This repository began as a product-specific fork of LibreChat. It now includes R
 | API server | `api/` | Express routes, auth, and service boundary |
 | Cooking runtime | `packages/api/` | Agent orchestration, tools, and recipe behavior |
 | Shared contracts | `packages/data-provider/` | Shared types and client services |
-| Voice worker | `services/voice/` | Authenticated speech-to-speech gateway on Modal |
+| Voice service | AWS deployment | Authenticated speech-to-speech inference, maintained separately |
 | Persistence | MongoDB | Users, conversations, recipes, and app state |
 
 ```text
@@ -53,11 +53,12 @@ Web / Mobile
 Express API ──► Cooking runtime ──► OpenRouter
       │                 ├─────────► Tavily
       │                 └─────────► Epicure MCP
-      ├────────► MongoDB
-      └────────► Modal voice worker
+      └────────► MongoDB
+
+Web / Mobile ── authenticated WSS ──► AWS speech-to-speech ──► OpenRouter
 ```
 
-The default cooking model is `google/gemini-3.1-flash-lite` through OpenRouter. The voice worker uses Hugging Face `speech-to-speech` with Parakeet TDT, Silero VAD, Qwen3-TTS, and the configured OpenRouter model.
+The default cooking model is `google/gemini-3.1-flash-lite` through OpenRouter. Cooking Voice Mode connects directly to the separately maintained AWS speech-to-speech service after obtaining a short-lived grant from the Rekky API.
 
 ## Prerequisites
 
@@ -66,7 +67,6 @@ The default cooking model is `google/gemini-3.1-flash-lite` through OpenRouter. 
 - Docker, for the simplest local MongoDB setup
 - An OpenRouter API key
 - Android Studio and ADB for Android development, or Xcode for iOS development
-- A Modal account only if you are deploying the voice worker
 - A Tavily API key only if you want web search and scraping
 
 ## Local setup
@@ -103,8 +103,11 @@ At minimum, configure MongoDB and OpenRouter in the root `.env` file.
 | `JWT_SECRET` | Access-token signing secret |
 | `JWT_REFRESH_SECRET` | Refresh-token signing secret |
 | `CREDS_KEY` / `CREDS_IV` | Encryption material for stored credentials |
-| `REKKY_VOICE_URL` | Deployed Modal voice endpoint |
-| `REKKY_VOICE_TOKEN_SECRET` | Shared signing secret for short-lived voice grants |
+| `REKKY_VOICE_CONNECT_URL` | AWS speech-to-speech WSS endpoint |
+| `REKKY_VOICE_JWT_SECRET` | Shared HS256 signing secret for short-lived voice grants |
+| `REKKY_VOICE_JWT_ISSUER` | JWT issuer matching the AWS service |
+| `REKKY_VOICE_JWT_AUDIENCE` | JWT audience matching the AWS service |
+| `REKKY_VOICE_JWT_KEY_ID` | JWT signing-key identifier matching the AWS service |
 | `REKKY_VOICE_SESSION_TTL_SECONDS` | Voice-grant lifetime |
 | `REKKY_VOICE_SHARE_RECIPE_CONTEXT` | Whether recipe context is sent into voice sessions |
 
@@ -124,6 +127,9 @@ Run the backend and web client separately when you need independent logs:
 npm run backend:dev
 npm run frontend:dev
 ```
+
+`backend:dev` rebuilds the shared API package before starting, so server-side source changes
+cannot be hidden by a stale `packages/api/dist` bundle.
 
 Start the mobile bundler and create a native development build:
 
@@ -151,32 +157,13 @@ Voice and other native features require a development build; they do not run ful
 The voice path is hosted rather than fully on-device:
 
 ```text
-Mobile ── short-lived grant ──► Rekky API
-Mobile ── authenticated WebSocket ──► Modal GPU worker
+Browser/mobile ── short-lived grant ──► Rekky API
+Browser/mobile ── authenticated WSS ──► AWS speech-to-speech GPU service
+AWS speech-to-speech ── text reasoning ──► OpenRouter
+Browser/mobile ── completed transcripts ──► Rekky API ──► MongoDB
 ```
 
-The API signs a short-lived session grant. The mobile app uses it to open a WebSocket without receiving a reusable Modal or OpenRouter credential.
-
-Deploy the worker from the repository root:
-
-```bash
-python -m pip install modal
-modal setup
-openssl rand -hex 32
-
-modal secret create rekky-voice-auth \
-  VOICE_TOKEN_SECRET='<shared secret>'
-
-modal secret create rekky-voice-provider \
-  OPENROUTER_API_KEY='<OpenRouter key>' \
-  VOICE_LLM_MODEL='google/gemini-3.1-flash-lite'
-
-modal deploy services/voice/modal_app.py
-```
-
-Then set `REKKY_VOICE_URL` and the matching `REKKY_VOICE_TOKEN_SECRET` on the Rekky API. The current worker scales from zero to two L4 GPU containers and keeps a container warm for ten minutes.
-
-For security, health checks, cold-start behavior, and scaling controls, read [the voice service guide](services/voice/README.md).
+The API signs a 60-second JWT. Clients authenticate it as the first WebSocket message, configure the recipe-aware realtime session, and only then begin streaming audio. The signing secret, issuer, audience, and key ID must exactly match the AWS service. The AWS deployment and speech-to-speech package are maintained outside this repository.
 
 ## Testing
 
@@ -207,7 +194,7 @@ End-to-end browser tests are available through `npm run e2e` after the local app
 
 ## Deployment
 
-The production topology uses Vercel for the web client, Railway for the API and MongoDB, and Modal for GPU-backed voice inference.
+The production topology uses Vercel for the web client, Railway for the API and MongoDB, and AWS for GPU-backed voice inference.
 
 The public app is [rekky.ai](https://rekky.ai), and the API health endpoint is [rekky.ai/health](https://rekky.ai/health).
 
