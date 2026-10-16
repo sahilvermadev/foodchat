@@ -2,18 +2,24 @@
   <img src="apps/mobile/assets/images/rekky-icon.png" width="128" alt="Rekky logo">
 </p>
 
-<h1 align="center">Rekky</h1>
+<h1 align="center">Foodchat — cooking assistant</h1>
 
 <p align="center">
   <strong>An AI cooking assistant for practical answers, durable recipes, and hands-free kitchen guidance.</strong>
 </p>
 
 <p align="center">
-  <a href="https://rekky.ai">Web app</a> ·
+  <a href="docs/PORTFOLIO_TOUR.md">Engineering tour</a> ·
   <a href="DEPLOYMENT.md">Deployment</a> ·
-  <a href="services/voice/README.md">Voice service</a> ·
+  <a href="rekky-aws-s2s-migration.md">Voice protocol</a> ·
   <a href="DESIGN.md">Product design</a>
 </p>
+
+## Repository identity and attribution
+
+**Foodchat** is this repository's name. Its source and older documentation call the cooking product **Rekky** (previously Mise) and its assistant **Samwise**. This is a LibreChat-derived cooking application with an Expo/React Native client; it is separate from the newer standalone Flutter/Rust recommendation product using the Rekky name.
+
+LibreChat supplies substantial authentication, conversation, persistence and shared UI infrastructure. The custom work to inspect here is the cooking/recipe runtime, imports and shopping flows, native mobile/offline features and realtime voice integration. Start with the [engineering tour](docs/PORTFOLIO_TOUR.md), which links implementation to tests. No live deployment, store release, production scale or test pass is asserted by this documentation update. Historical hosted-domain references are configuration notes, not a verified demo.
 
 ## Overview
 
@@ -141,7 +147,7 @@ npm run mobile:android
 npm run mobile:ios
 ```
 
-The mobile app targets `https://rekky.ai` by default. To use the local API, set `EXPO_PUBLIC_API_URL=http://127.0.0.1:3080` in `apps/mobile/.env.local`.
+The checked-in mobile default targets the historical hosted domain `https://rekky.ai`. For local review, set `EXPO_PUBLIC_API_URL=http://127.0.0.1:3080` in `apps/mobile/.env.local`.
 
 For a USB-connected Android device, expose the local API and Metro through ADB:
 
@@ -184,7 +190,7 @@ npm test --workspace=@rekky/mobile
 npx expo-doctor@latest apps/mobile
 ```
 
-Run the voice gateway tests:
+The retained legacy Modal worker has separate reference tests (these do not validate the current AWS voice path):
 
 ```bash
 python -m unittest discover -s services/voice -p 'test_*.py'
@@ -196,7 +202,7 @@ End-to-end browser tests are available through `npm run e2e` after the local app
 
 The production topology uses Vercel for the web client, Railway for the API and MongoDB, and AWS for GPU-backed voice inference.
 
-The public app is [rekky.ai](https://rekky.ai), and the API health endpoint is [rekky.ai/health](https://rekky.ai/health).
+Existing deployment notes reference `rekky.ai` and `/health`; they have not been verified for this portfolio update. Use a local API for review rather than assuming the current domain serves this repository.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for environment variables, service configuration, CORS rules, domains, and deployment checks.
 
@@ -207,7 +213,8 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for environment variables, service configurat
 - [Cooking-assistant runtime design](docs/cooking-assistant-runtime-design.md)
 - [Mobile architecture](docs/mobile/ARCHITECTURE.md)
 - [Mobile backend readiness](docs/mobile/BACKEND_READINESS.md)
-- [Voice service operations](services/voice/README.md)
+- [Current voice protocol and migration](rekky-aws-s2s-migration.md)
+- [Legacy Modal worker reference](services/voice/README.md)
 - [Repository development guide](CLAUDE.md)
 
 ## LibreChat attribution and license
