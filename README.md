@@ -1,179 +1,116 @@
-<p align="center">
-  <img src="apps/mobile/assets/images/rekky-icon.png" width="128" alt="Rekky logo">
-</p>
+# Foodchat
 
-<h1 align="center">Foodchat — cooking assistant</h1>
+**An AI cooking assistant for planning meals, saving recipes, and cooking hands-free.**
 
-<p align="center">
-  <strong>An AI cooking assistant for practical answers, durable recipes, and hands-free kitchen guidance.</strong>
-</p>
+Foodchat brings conversation and a recipe workspace together on the web and in a native iOS/Android app. Ask what to cook with the ingredients you have, adapt a recipe to your needs, save it to your collection, and work through it by voice in the kitchen.
 
-<p align="center">
-  <a href="docs/PORTFOLIO_TOUR.md">Engineering tour</a> ·
-  <a href="DEPLOYMENT.md">Deployment</a> ·
-  <a href="rekky-aws-s2s-migration.md">Voice protocol</a> ·
-  <a href="DESIGN.md">Product design</a>
-</p>
+Built on [LibreChat](https://github.com/LibreChat-AI/LibreChat), with custom cooking agents, recipe tools, shopping lists, mobile features, and speech-to-speech integration.
 
-## Repository identity and attribution
+[Engineering tour](docs/PORTFOLIO_TOUR.md) · [Product design](DESIGN.md) · [Mobile architecture](docs/mobile/ARCHITECTURE.md) · [Deployment guide](DEPLOYMENT.md)
 
-**Foodchat** is this repository's name. Its source and older documentation call the cooking product **Rekky** (previously Mise) and its assistant **Samwise**. This is a LibreChat-derived cooking application with an Expo/React Native client; it is separate from the newer standalone Flutter/Rust recommendation product using the Rekky name.
+## What it does
 
-LibreChat supplies substantial authentication, conversation, persistence and shared UI infrastructure. The custom work to inspect here is the cooking/recipe runtime, imports and shopping flows, native mobile/offline features and realtime voice integration. Start with the [engineering tour](docs/PORTFOLIO_TOUR.md), which links implementation to tests. No live deployment, store release, production scale or test pass is asserted by this documentation update. Historical hosted-domain references are configuration notes, not a verified demo.
+- **Cooking conversations:** get suggestions and adapt recipes around ingredients, equipment, dietary needs, and household preferences.
+- **Recipe workspace:** create, refine, and save structured recipes and preparation plans alongside the conversation.
+- **Recipe imports:** bring in recipes from URLs and images while retaining their sources.
+- **Shopping lists:** carry ingredients from recipe planning into a shared shopping workflow.
+- **Native mobile:** browse recipes, manage shopping lists, and reconcile locally saved changes with the server.
+- **Hands-free voice:** stream speech to a separate voice service with recipe context and authenticated sessions.
 
-## Overview
+## How it is built
 
-Rekky helps people decide what to cook, adapt recipes to real constraints, plan preparation, and stay guided while their hands are busy.
-
-Rekky is the product. Samwise is the cooking assistant users meet inside conversations.
-
-This repository began as a product-specific fork of LibreChat. It now includes Rekky's cooking runtime, native mobile app, recipe workspace, and real-time voice service.
-
-## Features
-
-- **Cooking-first conversations:** answers shaped around ingredients, equipment, skill level, dietary needs, and household preferences.
-- **Recipe workspace:** structured recipes, guides, and prep plans that can be refined in chat and saved for later.
-- **Source-aware import:** turn recipe URLs and images into usable cooking documents while preserving provenance.
-- **Personal context:** remember relevant taste, kitchen, household, location, cultural, and safety preferences.
-- **Optional web research:** use Tavily when current or source-backed information is needed.
-- **Native mobile app:** an Expo and React Native client for Android and iOS.
-- **Real-time voice:** streamed speech recognition, response generation, and speech synthesis through Rekky's AWS GPU service.
-- **Multi-user foundation:** authentication, persistence, and conversation infrastructure inherited from LibreChat.
-
-## Architecture
-
-| Area | Location | Responsibility |
-| --- | --- | --- |
-| Web client | `client/` | React browser experience |
-| Mobile client | `apps/mobile/` | Expo and React Native app |
-| API server | `api/` | Express routes, auth, and service boundary |
-| Cooking runtime | `packages/api/` | Agent orchestration, tools, and recipe behavior |
-| Shared contracts | `packages/data-provider/` | Shared types and client services |
-| Voice service | AWS deployment | Authenticated speech-to-speech inference, maintained separately |
-| Persistence | MongoDB | Users, conversations, recipes, and app state |
+The React web client and Expo/React Native app share domain types and API contracts. An Express API handles accounts and persistence, while TypeScript services implement cooking orchestration, recipe operations, imports, and shopping. MongoDB stores server data; SQLite supports local mobile state.
 
 ```text
-Web / Mobile
-      │
-      ▼
-Express API ──► Cooking runtime ──► OpenRouter
-      │                 ├─────────► Tavily
-      │                 └─────────► Epicure MCP
-      └────────► MongoDB
+React web / React Native mobile
+              │
+              ▼
+         Express API ─────► MongoDB
+              │
+              ▼
+      Cooking orchestration
+         ├── OpenRouter: model responses
+         ├── Tavily: optional web research
+         └── Epicure MCP: cooking tools
 
-Web / Mobile ── authenticated WSS ──► AWS speech-to-speech ──► OpenRouter
+Web / mobile ── authenticated WebSocket ──► AWS voice service
 ```
 
-The default cooking model is `google/gemini-3.1-flash-lite` through OpenRouter. Cooking Voice Mode connects directly to the separately maintained AWS speech-to-speech service after obtaining a short-lived grant from the Rekky API.
+LibreChat supplies the underlying multi-user chat, authentication, conversation storage, and shared UI foundation. The [engineering tour](docs/PORTFOLIO_TOUR.md) maps the custom features to their implementation and tests.
 
-## Prerequisites
-
-- Node.js `20.19+`, `22.12+`, or `23+`
-- npm
-- Docker, for the simplest local MongoDB setup
-- An OpenRouter API key
-- Android Studio and ADB for Android development, or Xcode for iOS development
-- A Tavily API key only if you want web search and scraping
+| Area | Location |
+| --- | --- |
+| Web interface | [`client/`](client/) |
+| Native mobile app | [`apps/mobile/`](apps/mobile/) |
+| Express API and routes | [`api/`](api/) |
+| Cooking and backend services | [`packages/api/`](packages/api/) |
+| Shared types and API client | [`packages/data-provider/`](packages/data-provider/) |
+| Database models | [`packages/data-schemas/`](packages/data-schemas/) |
 
 ## Local setup
+
+You need Node.js `20.19+`, `22.12+`, or `23+`, npm, MongoDB, and an OpenRouter API key. Docker is optional for running MongoDB locally.
 
 ```bash
 git clone https://github.com/sahilvermadev/foodchat.git
 cd foodchat
 cp .env.example .env
 npm ci
-docker compose up -d mongodb
 ```
 
-Set the required variables described below in `.env`, then start the application:
+If you do not already have MongoDB running, create a local instance:
+
+```bash
+docker run -d --name foodchat-mongo \
+  -p 127.0.0.1:27017:27017 \
+  -v foodchat-mongo-data:/data/db \
+  mongo:8.0.20
+```
+
+In `.env`, set `MONGO_URI` to your database and add `OPENROUTER_KEY`. The example database URI, `mongodb://127.0.0.1:27017/rekky`, works with the container above. Replace the example values for `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CREDS_KEY`, and `CREDS_IV` with your own values, following the lengths in `.env.example`. Keep `.env` out of Git.
+
+Then build the shared packages and start both development servers:
 
 ```bash
 npm run dev:app -- --build
 ```
 
-The development launcher builds shared packages, then starts the API at `http://localhost:3080` and the web client at `http://localhost:3090`.
+Open the web app at **http://localhost:3090**. The API runs at **http://localhost:3080**. On subsequent runs, use `npm run dev:app`; restart the database with `docker start foodchat-mongo` if needed.
 
-On later runs, use `npm run dev:app` to skip the package build.
-
-## Configuration
-
-At minimum, configure MongoDB and OpenRouter in the root `.env` file.
+Optional configuration:
 
 | Variable | Purpose |
 | --- | --- |
-| `MONGO_URI` | MongoDB connection string |
-| `OPENROUTER_KEY` | Main cooking-agent provider credential |
-| `COOKING_AGENT_BASE_URL` | OpenAI-compatible provider endpoint |
-| `COOKING_AGENT_MODEL` | Main cooking model |
-| `TAVILY_API_KEY` | Optional search and scraping |
-| `JWT_SECRET` | Access-token signing secret |
-| `JWT_REFRESH_SECRET` | Refresh-token signing secret |
-| `CREDS_KEY` / `CREDS_IV` | Encryption material for stored credentials |
-| `REKKY_VOICE_CONNECT_URL` | AWS speech-to-speech WSS endpoint |
-| `REKKY_VOICE_JWT_SECRET` | Shared HS256 signing secret for short-lived voice grants |
-| `REKKY_VOICE_JWT_ISSUER` | JWT issuer matching the AWS service |
-| `REKKY_VOICE_JWT_AUDIENCE` | JWT audience matching the AWS service |
-| `REKKY_VOICE_JWT_KEY_ID` | JWT signing-key identifier matching the AWS service |
-| `REKKY_VOICE_SESSION_TTL_SECONDS` | Voice-grant lifetime |
-| `REKKY_VOICE_SHARE_RECIPE_CONTEXT` | Whether recipe context is sent into voice sessions |
+| `COOKING_AGENT_MODEL` | Override the cooking model |
+| `COOKING_AGENT_BASE_URL` | Override the model provider endpoint |
+| `TAVILY_API_KEY` | Enable web search and scraping |
 
-Generate strong secrets before using a shared or production environment:
+### Mobile app
 
-```bash
-openssl rand -hex 32
-```
-
-The values in `.env.example` are development placeholders. Replace them, keep `.env` out of version control, and never expose provider keys in a client application.
-
-## Running the apps
-
-Run the backend and web client separately when you need independent logs:
-
-```bash
-npm run backend:dev
-npm run frontend:dev
-```
-
-`backend:dev` rebuilds the shared API package before starting, so server-side source changes
-cannot be hidden by a stale `packages/api/dist` bundle.
-
-Start the mobile bundler and create a native development build:
+From the repository root:
 
 ```bash
 cp apps/mobile/.env.example apps/mobile/.env.local
-npm run mobile
-npm run mobile:android
-# or
-npm run mobile:ios
 ```
 
-The checked-in mobile default targets the historical hosted domain `https://rekky.ai`. For local review, set `EXPO_PUBLIC_API_URL=http://127.0.0.1:3080` in `apps/mobile/.env.local`.
-
-For a USB-connected Android device, expose the local API and Metro through ADB:
+Set `EXPO_PUBLIC_API_URL` in that file to a backend your device can reach. For a USB-connected Android device, use `http://127.0.0.1:3080` with:
 
 ```bash
 adb reverse tcp:3080 tcp:3080
 adb reverse tcp:8081 tcp:8081
 ```
 
-Voice and other native features require a development build; they do not run fully in Expo Go. See [the mobile guide](apps/mobile/README.md) and [mobile architecture](docs/mobile/ARCHITECTURE.md).
+For an iOS simulator, use the local backend address; a physical device needs a reachable address on your network. The checked-in mobile default points to an older hosted domain, so configure this explicitly for local development.
 
-## Voice mode
+Start Metro with `npm run mobile`. In another terminal, run `npm run mobile:android` or `npm run mobile:ios` to create a native development build. Android builds need Android Studio; iOS builds need macOS and Xcode. Voice and other native features require a development build rather than Expo Go.
 
-The voice path is hosted rather than fully on-device:
+### Voice service
 
-```text
-Browser/mobile ── short-lived grant ──► Rekky API
-Browser/mobile ── authenticated WSS ──► AWS speech-to-speech GPU service
-AWS speech-to-speech ── text reasoning ──► OpenRouter
-Browser/mobile ── completed transcripts ──► Rekky API ──► MongoDB
-```
+Voice requires a separately deployed AWS speech-to-speech service. The API issues a short-lived grant, the client authenticates its WebSocket connection, and audio streaming begins after session configuration is acknowledged. Provider credentials and the voice signing secret stay on the server.
 
-The API signs a 60-second JWT. Clients authenticate it as the first WebSocket message, configure the recipe-aware realtime session, and only then begin streaming audio. The signing secret, issuer, audience, and key ID must exactly match the AWS service. The AWS deployment and speech-to-speech package are maintained outside this repository.
+Configure `REKKY_VOICE_CONNECT_URL`, `REKKY_VOICE_JWT_SECRET`, `REKKY_VOICE_JWT_ISSUER`, `REKKY_VOICE_JWT_AUDIENCE`, and `REKKY_VOICE_JWT_KEY_ID` to match that service. See the [voice integration specification](rekky-aws-s2s-migration.md) for the protocol, token settings, and connection sequence. The files under `services/voice/` describe the earlier Modal implementation.
 
-## Testing
-
-Run the main repository checks:
+## Development checks
 
 ```bash
 npm run lint
@@ -181,44 +118,20 @@ npm run test:all
 npm run build:safe
 ```
 
-Run the mobile checks:
+Mobile checks run separately:
 
 ```bash
 npm run typecheck --workspace=@rekky/mobile
 npm run lint --workspace=@rekky/mobile
 npm test --workspace=@rekky/mobile
-npx expo-doctor@latest apps/mobile
 ```
 
-The retained legacy Modal worker has separate reference tests (these do not validate the current AWS voice path):
+Run `npm run e2e` with the local application running for browser tests. See the [development guide](CLAUDE.md) for workspace boundaries and per-package test commands.
 
-```bash
-python -m unittest discover -s services/voice -p 'test_*.py'
-```
+## Names in the codebase
 
-End-to-end browser tests are available through `npm run e2e` after the local application is running.
+Earlier versions of this cooking project used the names **Rekky** and **Mise**, and the assistant is called **Samwise**. Those names remain in package identifiers, environment variables, assets, and older documentation. Commands such as `--workspace=@rekky/mobile` use the existing package names. This repository is separate from the Flutter/Rust recommendation app also named Rekky.
 
-## Deployment
+## License
 
-The production topology uses Vercel for the web client, Railway for the API and MongoDB, and AWS for GPU-backed voice inference.
-
-Existing deployment notes reference `rekky.ai` and `/health`; they have not been verified for this portfolio update. Use a local API for review rather than assuming the current domain serves this repository.
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for environment variables, service configuration, CORS rules, domains, and deployment checks.
-
-## Project documentation
-
-- [Product and interaction design](DESIGN.md)
-- [Deployment guide](DEPLOYMENT.md)
-- [Cooking-assistant runtime design](docs/cooking-assistant-runtime-design.md)
-- [Mobile architecture](docs/mobile/ARCHITECTURE.md)
-- [Mobile backend readiness](docs/mobile/BACKEND_READINESS.md)
-- [Current voice protocol and migration](rekky-aws-s2s-migration.md)
-- [Legacy Modal worker reference](services/voice/README.md)
-- [Repository development guide](CLAUDE.md)
-
-## LibreChat attribution and license
-
-Rekky is derived from [LibreChat](https://github.com/danny-avila/LibreChat) and retains substantial upstream infrastructure. We are grateful to LibreChat's maintainers and contributors.
-
-This repository is distributed under the [MIT License](LICENSE). Existing copyright and license notices are preserved.
+Foodchat is a fork of LibreChat and retains its copyright and license notices. See [LICENSE](LICENSE) for the MIT license.
